@@ -1,5 +1,6 @@
 import React from "react";
 import { BsCalendarEventFill, BsShop } from "react-icons/bs";
+import heroImage from "../../../assets/images/hero_image.png";
 
 const Hero = () => {
   return (
@@ -35,7 +36,7 @@ const Hero = () => {
           className="mt-10 rounded-2xl p-1"
         >
           <img
-            src="src/assets/images/hero_image.png"
+            src={heroImage}
             alt="event_image"
             className="shadow-gray-400 shadow-2xl w-100 md:w-250 rounded-2xl bg-white"
           />
