@@ -14,11 +14,18 @@
     --color-primary: #0b2d49;
     --color-gold: #d7a444;
     --color-gold-muted: #d0a862;
+    --color-gold-light: #d0a862;
     --color-bg-light: #e9eff1;
     --color-text-secondary: #5a5b44;
     --color-highlight: #f3ddb1;
     --color-blue-muted: #708aa0;
+    --color-dark-blue: #0b2d49;
+     --color-beige: #f3ddb1;
+     --color-olive: #5a5b44;
+    --color-grey-blue: #708aa0;
 }
+
+
 
 html,
 body,
