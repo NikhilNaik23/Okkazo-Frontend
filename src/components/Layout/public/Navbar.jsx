@@ -25,7 +25,7 @@ const Navbar = () => {
             <ul className="flex justify-around items-center gap-5 text-md text-gray-400 font-semibold">
               {menus.map((menu, index) => (
                 <Link to={menu.path} key={index}>
-                  <li className="cursor-pointer hover:text-[#233f58]">
+                  <li className="cursor-pointer hover:text-[#d7a444]">
                     {menu.name}
                   </li>
                 </Link>
@@ -33,18 +33,22 @@ const Navbar = () => {
             </ul>
           </div>
           <div className="flex justify-between items-center gap-10 px-10">
-            <button
-              type="button"
-              className="text-md font-semibold text-gray-400 hover:text-[#233f58]"
-            >
-              Login
-            </button>
-            <button
-              type="button"
-              className="bg-[#233f58] text-white py-2 px-6 rounded-lg text-md font-semibold hover:text-[#8595a2]"
-            >
-              Get Started
-            </button>
+            <Link to="/login">
+              <button
+                type="button"
+                className="text-md font-semibold text-gray-400 hover:text-[#d7a444]"
+              >
+                Login
+              </button>
+            </Link>
+            <Link to="/register">
+              <button
+                type="button"
+                className="bg-[#0b2d49] text-white py-2 px-6 rounded-lg text-md font-semibold hover:bg-[#d7a444] transition-colors"
+              >
+                Get Started
+              </button>
+            </Link>
           </div>
         </div>
         <div className="md:hidden flex justify-between items-center p-5">
@@ -66,25 +70,29 @@ const Navbar = () => {
               <ul className="flex flex-col gap-5 p-5">
                 {menus.map((menu, index) => (
                   <Link to={menu.path} key={index} onClick={handleHamburger}>
-                    <li className="cursor-pointer text-gray-400 font-semibold hover:text-[#233f58]">
+                    <li className="cursor-pointer text-gray-400 font-semibold hover:text-[#d7a444]">
                       {menu.name}
                     </li>
                   </Link>
                 ))}
               </ul>
               <div className="flex flex-col gap-3 p-5 border-t">
-                <button
-                  type="button"
-                  className="text-md font-semibold text-gray-400 hover:text-[#233f58] py-2"
-                >
-                  Login
-                </button>
-                <button
-                  type="button"
-                  className="bg-[#233f58] text-white py-2 px-6 rounded-lg text-md font-semibold hover:text-[#8595a2]"
-                >
-                  Get Started
-                </button>
+                <Link to="/login" onClick={handleHamburger}>
+                  <button
+                    type="button"
+                    className="text-md font-semibold text-gray-400 hover:text-[#d7a444] py-2 w-full text-left"
+                  >
+                    Login
+                  </button>
+                </Link>
+                <Link to="/register" onClick={handleHamburger}>
+                  <button
+                    type="button"
+                    className="bg-[#0b2d49] text-white py-2 px-6 rounded-lg text-md font-semibold hover:bg-[#d7a444] transition-colors w-full"
+                  >
+                    Get Started
+                  </button>
+                </Link>
               </div>
             </div>
           )}
