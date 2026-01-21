@@ -1,11 +1,20 @@
 @import "tailwindcss";
 
+:root {
+    --color-primary: #0b2d49;
+    --color-gold: #d7a444;
+    --color-gold-muted: #d0a862;
+    --color-bg-light: #e9eff1;
+    --color-text-secondary: #5a5b44;
+    --color-highlight: #f3ddb1;
+    --color-blue-muted: #708aa0;
+}
+
 html,
 body,
 #root {
     min-height: 100vh;
     margin: 0;
-    background-color: #e9eff1;
-    /* Palette Light Blue/Grey */
+    background-color: var(--color-bg-light);
     overscroll-behavior-y: none;
 }
