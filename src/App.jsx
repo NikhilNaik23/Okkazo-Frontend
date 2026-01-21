@@ -4,6 +4,7 @@ import Dashboard from "./pages/Home/public/Dashboard";
 import Login from "./pages/Home/public/Login";
 import Register from "./pages/Home/public/Register";
 import AdminLayout from "./components/Layout/admin/AdminLayout";
+import UserDashboard from "./pages/user/Dashboard";
 
 const App = () => {
   return (
@@ -12,6 +13,7 @@ const App = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/admin/*" element={<AdminLayout />} />
+      <Route path="/user/dashboard" element={<UserDashboard />} />
     </Routes>
     
   );
