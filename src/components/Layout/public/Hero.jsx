@@ -4,7 +4,7 @@ import heroImage from "../../../assets/images/hero_image.png";
 
 const Hero = () => {
   return (
-    <section className="flex min-h-full w-full items-center justify-center bg-linear-to-r from-[#e9eff1] via-[#f3ddb1] to-[#e9eff1] mt-20">
+    <section className="flex min-h-full w-full items-center justify-center bg-linear-to-r from-[#e9eff1] via-[#f3ddb1] to-[#e9eff1] pt-16">
       <div className="flex flex-col mb-20 items-center justify-center mt-20 ">
         <p className="text-md text-[#0b2d49] font-semibold px-6 py-2 bg-[#d7a444]/50 rounded-2xl">
           ALL-IN-ONE EVENT MANAGEMENT
