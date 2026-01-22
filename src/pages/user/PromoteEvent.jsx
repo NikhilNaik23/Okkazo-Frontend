@@ -63,7 +63,8 @@ const PromoteEvent = () => {
             formData.endDate &&
             Number(formData.totalTickets) > 0 &&
             formData.address &&
-            formData.tickets.length > 0
+            formData.tickets.length > 0 &&
+            formData.banner !== null
         );
     };
 
@@ -151,7 +152,7 @@ const PromoteEvent = () => {
                                 </div>
                             </div>
 
-                            <BannerUpload />
+                            <BannerUpload formData={formData} setFormData={setFormData} />
 
                             <RevenueCard 
                                 projectedRevenue={projectedRevenue}

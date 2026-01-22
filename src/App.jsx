@@ -7,7 +7,6 @@ import AdminLayout from "./components/Layout/admin/AdminLayout";
 import UserDashboard from "./pages/user/Dashboard";
 import PlanningWizard from "./pages/user/PlanningWizard";
 import PromoteEvent from "./pages/user/PromoteEvent";
-import AdminLayout from "./components/Layout/admin/AdminLayout";
 
 const App = () => {
   return (
