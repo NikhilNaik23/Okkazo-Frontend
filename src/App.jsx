@@ -32,6 +32,16 @@ import UserProfile from "./pages/user/Profile/UserProfile";
 import Notifications from "./pages/user/Dashboard/Notifications";
 import EditProfile from "./pages/user/Profile/EditProfile";
 import AccountSettings from "./pages/user/Profile/AccountSettings";
+import VendorRegistration from "./pages/vendor/VendorRegistration";
+import VendorDashboard from "./pages/vendor/VendorDashboard";
+import VendorLayout from "./components/Layout/vendor/VendorLayout";
+import BookedEvents from "./pages/vendor/BookedEvents";
+import ServiceManagement from "./pages/vendor/ServiceManagement";
+import ManagerChat from "./pages/vendor/ManagerChat";
+import BusinessProfile from "./pages/vendor/BusinessProfile";
+import VendorEventDetails from "./pages/vendor/EventDetails";
+import AccountSettingsPage from "./pages/vendor/AccountSettings";
+import { Toaster } from "react-hot-toast";
 
 const App = () => {
   const location = useLocation();
@@ -235,9 +245,32 @@ const App = () => {
             </ProtectedRoute>
           } 
         />
+        <Route 
+          path="/user/notifications" 
+          element={
+            <ProtectedRoute allowedRoles={['USER']}>
+              <Notifications />
+            </ProtectedRoute>
+          } 
+        />
+
+      <Route path="/vendor/register" element={<VendorRegistration />} />
+        <Route path="/vendor" element={<VendorLayout />}>
+          <Route path="dashboard" element={<VendorDashboard />} />
+          <Route path="booked-events" element={<BookedEvents />} />
+          <Route path="service-management" element={<ServiceManagement />} />
+          <Route path="messages" element={<ManagerChat />} />
+          <Route path="profile" element={<BusinessProfile />} />
+          <Route path="event/:id" element={<VendorEventDetails />} />
+          <Route path="settings" element={<AccountSettingsPage />} />
+        </Route>
       </Routes>
     </AnimatePresence>
+
+
+    <Toaster position="top-right" />
     </>
+    
   );
 };
 
