@@ -1,11 +1,13 @@
 import React, { useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { BsBell, BsPersonCircle } from "react-icons/bs";
 import { GiHamburgerMenu } from "react-icons/gi";
 import { RiCloseLargeFill } from "react-icons/ri";
 
 const Navbar = () => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const location = useLocation();
+  const isActive = (path) => location.pathname === path;
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0b2d49] shadow-md border-b border-[#071d30]">
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
@@ -19,19 +21,31 @@ const Navbar = () => {
         <div className="hidden md:flex items-center gap-8">
           <Link
             to="/user/dashboard"
-            className="text-sm font-bold text-[#0b2d49] px-4 py-2 bg-[#d7a444] rounded-lg shadow-sm"
+            className={`text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all ${
+                isActive('/user/dashboard') 
+                ? 'bg-[#d7a444] text-[#0b2d49]' 
+                : 'text-gray-300 hover:text-[#d7a444] bg-transparent shadow-none'
+            }`}
           >
             Dashboard
           </Link>
           <Link
-            to="#"
-            className="text-sm font-semibold text-gray-300 hover:text-[#d7a444] transition-colors"
+            to="/user/planning-wizard"
+            className={`text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all ${
+                isActive('/user/planning-wizard') 
+                ? 'bg-[#d7a444] text-[#0b2d49]' 
+                : 'text-gray-300 hover:text-[#d7a444] bg-transparent shadow-none'
+            }`}
           >
             Planning Wizard
           </Link>
           <Link
-            to="#"
-            className="text-sm font-semibold text-gray-300 hover:text-[#d7a444] transition-colors"
+            to="/user/promote"
+            className={`text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all ${
+                isActive('/user/promote') 
+                ? 'bg-[#d7a444] text-[#0b2d49]' 
+                : 'text-gray-300 hover:text-[#d7a444] bg-transparent shadow-none'
+            }`}
           >
             Promote
           </Link>
@@ -86,21 +100,33 @@ const Navbar = () => {
             <Link
               to="/user/dashboard"
               onClick={() => setIsMobileOpen(false)}
-              className="text-sm font-bold text-[#0b2d49] px-4 py-3 bg-[#d7a444] rounded-lg shadow-sm text-center"
+              className={`text-sm font-bold px-4 py-3 rounded-lg shadow-sm text-center transition-all ${
+                  isActive('/user/dashboard') 
+                  ? 'bg-[#d7a444] text-[#0b2d49]' 
+                  : 'text-gray-300 hover:text-[#d7a444] bg-transparent'
+              }`}
             >
               Dashboard
             </Link>
             <Link
-              to="#"
+              to="/user/planning-wizard"
               onClick={() => setIsMobileOpen(false)}
-              className="text-sm font-semibold text-gray-300 hover:text-[#d7a444] transition-colors px-4 py-2 border-l-2 border-transparent hover:border-[#d7a444]"
+              className={`text-sm font-bold px-4 py-3 rounded-lg shadow-sm text-center transition-all ${
+                  isActive('/user/planning-wizard') 
+                  ? 'bg-[#d7a444] text-[#0b2d49]' 
+                  : 'text-gray-300 hover:text-[#d7a444] bg-transparent'
+              }`}
             >
               Planning Wizard
             </Link>
             <Link
-              to="#"
+              to="/user/promote"
               onClick={() => setIsMobileOpen(false)}
-              className="text-sm font-semibold text-gray-300 hover:text-[#d7a444] transition-colors px-4 py-2 border-l-2 border-transparent hover:border-[#d7a444]"
+              className={`text-sm font-bold px-4 py-3 rounded-lg shadow-sm text-center transition-all ${
+                  isActive('/user/promote') 
+                  ? 'bg-[#d7a444] text-[#0b2d49]' 
+                  : 'text-gray-300 hover:text-[#d7a444] bg-transparent shadow-none'
+              }`}
             >
               Promote
             </Link>
