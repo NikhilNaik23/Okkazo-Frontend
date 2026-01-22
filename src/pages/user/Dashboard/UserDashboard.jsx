@@ -1,9 +1,9 @@
 import React from "react";
 import { Link, useNavigate } from "react-router";
-import Navbar from "../../components/Layout/user/Navbar";
+import Navbar from "../../../components/Layout/user/Navbar";
 import { BsSearch, BsFilter, BsArrowRight, BsArrowLeft, BsHeart, BsHeartFill, BsGeoAlt } from "react-icons/bs";
-import Footer from "../../components/Layout/user/Footer";
-import { popularEvents, allEvents } from "../../data/eventsData";
+import Footer from "../../../components/Layout/user/Footer";
+import { popularEvents, allEvents } from "../../../data/eventsData";
 
 const UserDashboard = () => {
     // State for pagination

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import Navbar from "../../components/Layout/user/Navbar";
-import Footer from "../../components/Layout/user/Footer";
+import Navbar from "../../../components/Layout/user/Navbar";
+import Footer from "../../../components/Layout/user/Footer";
 import { BsArrowLeft, BsGeoAlt, BsCalendarEvent, BsPeople, BsClock, BsBuilding, BsCheckCircleFill  } from "react-icons/bs";
-import { allEvents, popularEvents } from "../../data/eventsData";
+import { allEvents, popularEvents } from "../../../data/eventsData";
 import { toast, Toaster } from "react-hot-toast";
 
 const EventDetails = () => {

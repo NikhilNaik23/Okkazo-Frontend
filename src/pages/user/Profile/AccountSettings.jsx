@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import Navbar from "../../components/Layout/user/Navbar";
-import Footer from "../../components/Layout/user/Footer";
+import Navbar from "../../../components/Layout/user/Navbar";
+import Footer from "../../../components/Layout/user/Footer";
 import { BsShieldLock, BsBell, BsEye, BsLink45Deg } from "react-icons/bs";
 import { FaGoogle, FaFacebookF } from "react-icons/fa";
 import { toast, Toaster } from "react-hot-toast";

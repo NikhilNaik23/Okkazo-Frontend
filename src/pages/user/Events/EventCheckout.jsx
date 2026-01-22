@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
-import Navbar from "../../components/Layout/user/Navbar";
-import Footer from "../../components/Layout/user/Footer";
+import Navbar from "../../../components/Layout/user/Navbar";
+import Footer from "../../../components/Layout/user/Footer";
 import { BsArrowLeft, BsCheckCircleFill, BsQrCode, BsCalendarEvent  } from "react-icons/bs";
 import { toast, Toaster } from "react-hot-toast";
-import PaymentMethod from "../../components/Forms/Checkout/PaymentMethod";
-import CheckoutOrderSummary from "../../components/Forms/Checkout/CheckoutOrderSummary";
-import { allEvents, popularEvents } from "../../data/eventsData";
+import PaymentMethod from "../../../components/Forms/Checkout/PaymentMethod";
+import CheckoutOrderSummary from "../../../components/Forms/Checkout/CheckoutOrderSummary";
+import { allEvents, popularEvents } from "../../../data/eventsData";
 
 const EventCheckout = () => {
     const { eventId } = useParams();

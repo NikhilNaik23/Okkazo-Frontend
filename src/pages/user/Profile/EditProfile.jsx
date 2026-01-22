@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import Navbar from "../../components/Layout/user/Navbar";
-import Footer from "../../components/Layout/user/Footer";
+import Navbar from "../../../components/Layout/user/Navbar";
+import Footer from "../../../components/Layout/user/Footer";
+import { userProfileData } from "../../../data/userData";
+import { locations as locationsData } from "../../../data/commonData";
 import { BsPencil, BsX } from "react-icons/bs";
 import { toast, Toaster } from "react-hot-toast";
 
@@ -27,14 +29,7 @@ const EditProfile = () => {
                 await new Promise(resolve => setTimeout(resolve, 800));
                 
                 // Mock backend response
-                const response = {
-                    fullName: "Alex Morgan",
-                    email: "alex.morgan@example.com",
-                    phone: "+1 (555) 012-3456",
-                    location: "San Francisco, CA",
-                    bio: "Tech enthusiast and art lover. I enjoy attending community-driven events and networking with professionals across industries.",
-                    interests: ["Music", "Arts", "Tech", "Sustainability", "Workshops"]
-                };
+                const response = userProfileData;
                 
                 setFormData(response);
             } catch (error) {
@@ -47,7 +42,7 @@ const EditProfile = () => {
         fetchUserData();
     }, []);
 
-    const locations = ["San Francisco, CA", "New York, NY", "London, UK", "Tokyo, JP", "Berlin, DE"];
+    const locations = locationsData;
 
     const handleSave = async (e) => {
         e.preventDefault();

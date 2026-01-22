@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import Navbar from "../../components/Layout/user/Navbar";
-import Footer from "../../components/Layout/user/Footer";
-import { BsPencil, BsGear, BsEnvelope, BsTelephone, BsGeoAlt, BsTicketPerforated, BsStar, BsShare, BsPersonPlus } from "react-icons/bs";
+import Navbar from "../../../components/Layout/user/Navbar";
+import Footer from "../../../components/Layout/user/Footer";
+import { BsPencil, BsGear, BsEnvelope, BsTelephone, BsGeoAlt } from "react-icons/bs";
 import { toast, Toaster } from "react-hot-toast";
+import { userProfileData, userActivitiesData } from "../../../data/userData";
 
 const UserProfile = () => {
     const navigate = useNavigate();
@@ -20,55 +21,10 @@ const UserProfile = () => {
                 await new Promise(resolve => setTimeout(resolve, 800));
                 
                 // Mock user response
-                const userResponse = {
-                    name: "Alex Morgan",
-                    memberSince: "January 2023",
-                    email: "alex.morgan@example.com",
-                    phone: "+1 (555) 012-3456",
-                    location: "San Francisco, CA",
-                    avatar: "https://ui-avatars.com/api/?name=Alex+Morgan&background=d7a444&color=0b2d49&size=200",
-                    interests: ["Music", "Arts", "Tech", "Sustainability", "Workshops", "Networking"]
-                };
+                const userResponse = userProfileData;
 
                 // Mock activities response
-                const activitiesResponse = [
-                    {
-                        id: 1,
-                        type: "purchase",
-                        title: "Purchased tickets for Neon Lights Concert",
-                        description: "Alex bought 2 General Admission tickets for the event on Oct 28.",
-                        time: "2 hours ago",
-                        icon: <BsTicketPerforated className="text-emerald-500" />,
-                        bgColor: "bg-emerald-50"
-                    },
-                    {
-                        id: 2,
-                        type: "review",
-                        title: "Left a review for Tech Future Summit",
-                        description: '"Amazing organization and insightful panels. Highly recommend!"',
-                        time: "1 day ago",
-                        icon: <BsStar className="text-amber-500" />,
-                        bgColor: "bg-amber-50"
-                    },
-                    {
-                        id: 3,
-                        type: "share",
-                        title: 'Shared "AI for Good" Hackathon',
-                        description: "Event shared to Facebook and LinkedIn networks.",
-                        time: "3 days ago",
-                        icon: <BsShare className="text-blue-500" />,
-                        bgColor: "bg-blue-50"
-                    },
-                    {
-                        id: 4,
-                        type: "follow",
-                        title: 'Followed "Green Earth Collective"',
-                        description: "Now receiving updates for new sustainability events from this organizer.",
-                        time: "1 week ago",
-                        icon: <BsPersonPlus className="text-teal-500" />,
-                        bgColor: "bg-teal-50"
-                    }
-                ];
+                const activitiesResponse = userActivitiesData;
 
                 setUser(userResponse);
                 setActivities(activitiesResponse);

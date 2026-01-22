@@ -4,16 +4,16 @@ import Dashboard from "./pages/Home/public/Dashboard";
 import Login from "./pages/Home/public/Login";
 import Register from "./pages/Home/public/Register";
 import AdminLayout from "./components/Layout/admin/AdminLayout";
-import UserDashboard from "./pages/user/UserDashboard";
-import PlanningWizard from "./pages/user/PlanningWizard";
-import PromoteEvent from "./pages/user/PromoteEvent";
-import EventDetails from "./pages/user/EventDetails";
-import EventCheckout from "./pages/user/EventCheckout";
-import MyEvents from "./pages/user/MyEvents";
-import UserProfile from "./pages/user/UserProfile";
-import Notifications from "./pages/user/Notifications";
-import EditProfile from "./pages/user/EditProfile";
-import AccountSettings from "./pages/user/AccountSettings";
+import UserDashboard from "./pages/user/Dashboard/UserDashboard";
+import PlanningWizard from "./pages/user/Events/PlanningWizard";
+import PromoteEvent from "./pages/user/Events/PromoteEvent";
+import EventDetails from "./pages/user/Events/EventDetails";
+import EventCheckout from "./pages/user/Events/EventCheckout";
+import MyEvents from "./pages/user/Dashboard/MyEvents";
+import UserProfile from "./pages/user/Profile/UserProfile";
+import Notifications from "./pages/user/Dashboard/Notifications";
+import EditProfile from "./pages/user/Profile/EditProfile";
+import AccountSettings from "./pages/user/Profile/AccountSettings";
 
 const App = () => {
   return (

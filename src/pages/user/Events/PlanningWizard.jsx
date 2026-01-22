@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import Navbar from "../../components/Layout/user/Navbar";
-import Footer from "../../components/Layout/user/Footer";
+import Navbar from "../../../components/Layout/user/Navbar";
+import Footer from "../../../components/Layout/user/Footer";
 import { BsArrowRight } from "react-icons/bs";
-import SidebarProgress from "../../components/Forms/EventWizard/SidebarProgress";
-import StepEventDetails from "../../components/Forms/EventWizard/StepEventDetails";
-import StepVendorSelection from "../../components/Forms/EventWizard/StepVendorSelection";
-import StepReview from "../../components/Forms/EventWizard/StepReview";
-import StepConfirmation from "../../components/Forms/EventWizard/StepConfirmation";
+import SidebarProgress from "../../../components/Forms/EventWizard/SidebarProgress";
+import StepEventDetails from "../../../components/Forms/EventWizard/StepEventDetails";
+import StepVendorSelection from "../../../components/Forms/EventWizard/StepVendorSelection";
+import StepReview from "../../../components/Forms/EventWizard/StepReview";
+import StepConfirmation from "../../../components/Forms/EventWizard/StepConfirmation";
 
 const PlanningWizard = () => {
   const [currentStep, setCurrentStep] = useState(1);

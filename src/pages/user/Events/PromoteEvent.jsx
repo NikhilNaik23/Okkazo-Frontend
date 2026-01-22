@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
-import Navbar from "../../components/Layout/user/Navbar";
-import Footer from "../../components/Layout/user/Footer";
+import Navbar from "../../../components/Layout/user/Navbar";
+import Footer from "../../../components/Layout/user/Footer";
 import { BsCheck2, BsArrowRight } from "react-icons/bs";
 import { toast, Toaster } from "react-hot-toast";
-import EventDetailsForm from "../../components/Forms/PromoteEvent/EventDetailsForm";
-import VenueLocation from "../../components/Forms/PromoteEvent/VenueLocation";
-import TicketCategories from "../../components/Forms/PromoteEvent/TicketCategories";
-import BannerUpload from "../../components/Forms/PromoteEvent/BannerUpload";
-import RevenueCard from "../../components/Forms/PromoteEvent/RevenueCard";
+import EventDetailsForm from "../../../components/Forms/PromoteEvent/EventDetailsForm";
+import VenueLocation from "../../../components/Forms/PromoteEvent/VenueLocation";
+import TicketCategories from "../../../components/Forms/PromoteEvent/TicketCategories";
+import BannerUpload from "../../../components/Forms/PromoteEvent/BannerUpload";
+import RevenueCard from "../../../components/Forms/PromoteEvent/RevenueCard";
 
 const PromoteEvent = () => {
     const [currentStep, setCurrentStep] = useState(1);
