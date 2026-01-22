@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router";
 import Navbar from "../../components/Layout/user/Navbar";
 import { BsSearch, BsFilter, BsArrowRight, BsArrowLeft, BsHeart, BsHeartFill, BsGeoAlt } from "react-icons/bs";
 import Footer from "../../components/Layout/user/Footer";
@@ -88,6 +89,10 @@ const Dashboard = () => {
                     />
                     <BsSearch className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-hover:text-[#d7a444] transition-colors" />
                 </div>
+                <Link to="/user/planning-wizard" className="w-full sm:w-auto flex justify-center items-center gap-2 px-6 py-3.5 bg-[#0b2d49] text-white rounded-full hover:bg-[#071d30] font-bold shadow-sm cursor-pointer transition-all active:scale-95 text-sm md:text-base border border-transparent shadow-[#0b2d49]/20 hover:shadow-lg">
+                    <span className="text-xl">+</span>
+                    Plan Event
+                </Link>
                 <button className="w-full sm:w-auto flex justify-center items-center gap-2 px-6 py-3.5 bg-white border border-gray-200 rounded-full hover:bg-gray-50 hover:border-[#d7a444] text-[#0b2d49] font-bold shadow-sm cursor-pointer transition-all active:scale-95 text-sm md:text-base">
                     <BsFilter size={20} />
                     Filter
