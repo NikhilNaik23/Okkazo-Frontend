@@ -1,13 +1,14 @@
 import React from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import Navbar from "../../components/Layout/user/Navbar";
 import { BsSearch, BsFilter, BsArrowRight, BsArrowLeft, BsHeart, BsHeartFill, BsGeoAlt } from "react-icons/bs";
 import Footer from "../../components/Layout/user/Footer";
 import { popularEvents, allEvents } from "../../data/eventsData";
 
-const Dashboard = () => {
+const UserDashboard = () => {
     // State for pagination
     const [currentPage, setCurrentPage] = React.useState(1);
+    const navigate = useNavigate();
     const eventsPerPage = 8;
 
     // Pagination Logic
@@ -65,7 +66,11 @@ const Dashboard = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {popularEvents.map(event => (
-                    <div key={event.id} className="group relative h-[420px] rounded-[2rem] overflow-hidden cursor-pointer shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
+                    <div 
+                        key={event.id} 
+                        onClick={() => navigate(`/user/event/${event.id}`)}
+                        className="group relative h-[420px] rounded-[2rem] overflow-hidden cursor-pointer shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-1"
+                    >
                         <img src={event.image} alt={event.title} className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
                         <div className="absolute inset-0 bg-gradient-to-t from-[#0b2d49]/90 via-[#0b2d49]/20 to-transparent"></div>
                         
@@ -104,7 +109,11 @@ const Dashboard = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
                  {currentItems.map(event => (
-                    <div key={event.id} className="bg-white rounded-3xl p-4 hover:shadow-xl transition-all duration-300 border border-gray-100 cursor-pointer group hover:-translate-y-1">
+                    <div 
+                        key={event.id} 
+                        onClick={() => navigate(`/user/event/${event.id}`)}
+                        className="bg-white rounded-3xl p-4 hover:shadow-xl transition-all duration-300 border border-gray-100 cursor-pointer group hover:-translate-y-1"
+                    >
                         <div className="relative h-48 rounded-2xl overflow-hidden mb-5">
                             <img src={event.image} alt={event.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                             <div className="absolute top-3 right-3 w-9 h-9 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-sm cursor-pointer text-gray-400 hover:text-red-500 hover:bg-white transition-all">
@@ -167,4 +176,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard;
+export default UserDashboard;

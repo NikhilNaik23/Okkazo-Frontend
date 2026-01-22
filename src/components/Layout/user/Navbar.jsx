@@ -50,8 +50,12 @@ const Navbar = () => {
             Promote
           </Link>
           <Link
-            to="#"
-            className="text-sm font-semibold text-gray-300 hover:text-[#d7a444] transition-colors"
+            to="/user/my-events"
+            className={`text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all ${
+                isActive('/user/my-events') 
+                ? 'bg-[#d7a444] text-[#0b2d49]' 
+                : 'text-gray-300 hover:text-[#d7a444] bg-transparent shadow-none'
+            }`}
           >
             My Events
           </Link>
@@ -59,19 +63,19 @@ const Navbar = () => {
 
         {/* Right Actions */}
         <div className="flex items-center gap-4 md:gap-6">
-          <button className="relative text-gray-300 hover:text-[#d7a444] transition-colors cursor-pointer">
+          <Link to="/user/notifications" className="relative text-gray-300 hover:text-[#d7a444] transition-colors cursor-pointer">
             <BsBell size={20} />
             <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border-2 border-[#0b2d49] translate-x-1/3 -translate-y-1/3"></span>
-          </button>
+          </Link>
 
           <div className="flex items-center gap-3 pl-4 md:pl-6 border-l border-[#1c3f5e]">
             <div className="text-right hidden sm:block">
               <p className="text-sm font-bold text-white">Alex Morgan</p>
               <p className="text-xs text-gray-400">Attendee</p>
             </div>
-            <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#1c3f5e] flex items-center justify-center text-gray-400 overflow-hidden border-2 border-[#d7a444] shadow-sm cursor-pointer hover:opacity-90 transition-opacity">
+            <Link to="/user/profile" className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#1c3f5e] flex items-center justify-center text-gray-400 overflow-hidden border-2 border-[#d7a444] shadow-sm cursor-pointer hover:opacity-90 transition-opacity">
                 <img src="https://ui-avatars.com/api/?name=Alex+Morgan&background=d7a444&color=0b2d49" alt="User" />
-            </div>
+            </Link>
           </div>
 
           {/* Mobile Menu Toggle */}
@@ -131,9 +135,13 @@ const Navbar = () => {
               Promote
             </Link>
             <Link
-              to="#"
+              to="/user/my-events"
               onClick={() => setIsMobileOpen(false)}
-              className="text-sm font-semibold text-gray-300 hover:text-[#d7a444] transition-colors px-4 py-2 border-l-2 border-transparent hover:border-[#d7a444]"
+              className={`text-sm font-bold px-4 py-3 rounded-lg shadow-sm text-center transition-all ${
+                  isActive('/user/my-events') 
+                  ? 'bg-[#d7a444] text-[#0b2d49]' 
+                  : 'text-gray-300 hover:text-[#d7a444] bg-transparent'
+              }`}
             >
               My Events
             </Link>

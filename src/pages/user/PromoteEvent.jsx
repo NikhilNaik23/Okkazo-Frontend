@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Navbar from "../../components/Layout/user/Navbar";
 import Footer from "../../components/Layout/user/Footer";
 import { BsCheck2, BsArrowRight } from "react-icons/bs";
@@ -24,6 +24,34 @@ const PromoteEvent = () => {
         tickets: [],
         banner: null
     });
+
+    // Load Draft
+    useEffect(() => {
+        const savedDraft = localStorage.getItem('promoteEventDraft');
+        if (savedDraft) {
+            try {
+                const parsedDraft = JSON.parse(savedDraft);
+                setFormData(parsedDraft);
+                toast.success("Draft restored from previous session", { id: 'draft-restored' });
+            } catch (error) {
+                console.error("Failed to parse draft", error);
+            }
+        }
+    }, []);
+
+    const handleSaveDraft = () => {
+        try {
+            localStorage.setItem('promoteEventDraft', JSON.stringify(formData));
+            toast.success("Event details saved as draft!");
+        } catch (error) {
+            console.error(error);
+            if (error.name === 'QuotaExceededError') {
+                 toast.error("Draft too large to save (Limit your banner image size)");
+            } else {
+                 toast.error("Failed to save draft");
+            }
+        }
+    };
 
     // Calculations
     const totalTicketValue = formData.tickets.reduce((acc, t) => acc + (t.price * t.quantity), 0);
@@ -104,19 +132,26 @@ const PromoteEvent = () => {
         setCurrentStep(prev => prev + 1);
     };
 
+    const handlePaymentSuccess = () => {
+        // In a real app, this would be a callback from a payment gateway
+        localStorage.removeItem('promoteEventDraft');
+        toast.success("Payment Successful! Event Promoted.");
+        setCurrentStep(3);
+    };
+
     return (
         <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
-            <Navbar />
-            <Toaster position="top-center" />
-            
-            <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-32 pb-20">
-                {/* Page Header */}
-                <div className="mb-8">
-                    <h1 className="text-3xl font-extrabold mb-2">Public Event Promotion Form</h1>
-                    <p className="text-gray-500 text-sm">Configure your event details, tickets, and publishing options.</p>
-                </div>
-
-                {currentStep === 1 && (
+             <Navbar />
+             <Toaster position="top-center" />
+             
+             <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-32 pb-20">
+                 {/* Page Header */}
+                 <div className="mb-8">
+                     <h1 className="text-3xl font-extrabold mb-2">Public Event Promotion Form</h1>
+                     <p className="text-gray-500 text-sm">Configure your event details, tickets, and publishing options.</p>
+                 </div>
+ 
+                 {currentStep === 1 && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         {/* Left Content (Form) */}
                         <div className="lg:col-span-2 space-y-8">
@@ -174,12 +209,61 @@ const PromoteEvent = () => {
                                 >
                                     Pay Platform Fee Only (${platformFee}) <BsArrowRight />
                                 </button>
-                                <button className="w-full py-4 bg-white text-[#0b2d49] font-bold rounded-2xl border border-gray-200 hover:border-[#d7a444] transition-all">
+                                <button 
+                                    onClick={handleSaveDraft}
+                                    className="w-full py-4 bg-white text-[#0b2d49] font-bold rounded-2xl border border-gray-200 hover:border-[#d7a444] transition-all hover:bg-gray-50 active:scale-[0.98]"
+                                >
                                     Save as Draft
                                 </button>
                                 <p className="text-center text-[10px] text-gray-400">Need help? <a href="#" className="underline font-bold text-gray-600">Contact Support</a></p>
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {currentStep === 2 && (
+                    <div className="max-w-2xl mx-auto bg-white rounded-3xl p-10 shadow-sm text-center animate-in fade-in zoom-in duration-300">
+                        <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6 text-[#0b2d49]">
+                             <span className="text-4xl">💳</span>
+                        </div>
+                        <h2 className="text-3xl font-extrabold mb-4 text-[#0b2d49]">Confirm Payment</h2>
+                        <p className="text-gray-500 mb-8 text-lg">
+                            You are about to pay <b className="text-[#0b2d49]">${platformFee}</b> to publish your event <br/>
+                            <span className="italic">"{formData.eventName}"</span>
+                        </p>
+                        
+                        <div className="space-y-4">
+                            <button 
+                                onClick={handlePaymentSuccess}
+                                className="w-full py-4 bg-[#0b2d49] text-white font-bold rounded-2xl shadow-xl hover:bg-[#d7a444] hover:-translate-y-1 transition-all"
+                            >
+                                Pay & Publish
+                            </button>
+                            <button 
+                                onClick={() => setCurrentStep(1)}
+                                className="text-gray-400 hover:text-[#0b2d49] font-bold text-sm"
+                            >
+                                Back to Edit
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {currentStep === 3 && (
+                    <div className="max-w-2xl mx-auto bg-white rounded-3xl p-10 shadow-sm text-center animate-in fade-in zoom-in duration-500">
+                        <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6 text-green-500">
+                             <BsCheck2 size={48} />
+                        </div>
+                        <h2 className="text-3xl font-extrabold mb-4 text-[#0b2d49]">Event Published!</h2>
+                        <p className="text-gray-500 mb-8">
+                            Your event is now live and tickets are available for purchase.
+                        </p>
+                        <button 
+                            onClick={() => window.location.reload()}
+                            className="bg-[#0b2d49] text-white px-8 py-3 rounded-xl font-bold hover:shadow-lg transition-all"
+                        >
+                            Back to Dashboard
+                        </button>
                     </div>
                 )}
             </main>
