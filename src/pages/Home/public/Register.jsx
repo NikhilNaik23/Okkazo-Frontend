@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import { BsEye, BsEyeSlash, BsShop } from "react-icons/bs";
 import { RiCloseLine } from "react-icons/ri";
 

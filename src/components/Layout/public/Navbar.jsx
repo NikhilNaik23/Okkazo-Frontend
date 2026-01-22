@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { GiHamburgerMenu } from "react-icons/gi";
 import { RiCloseLargeFill } from "react-icons/ri";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 const menus = [
   { name: "ExploreEvents", path: "/explore" },

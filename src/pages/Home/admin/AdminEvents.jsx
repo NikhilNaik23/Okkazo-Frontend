@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import InternalEventCard from "../../../components/Global/cards/InternalEventCard";
 import { 
@@ -57,19 +58,22 @@ const MOCK_EVENTS = [
 
 const ManualEntryCard = () => {
     return (
-        <div className="h-full min-h-[460px] w-full max-w-[420px] rounded-3xl border-2 border-dashed border-emerald-200 bg-emerald-50/30 hover:bg-emerald-50/60 hover:border-emerald-300 transition-all duration-300 flex flex-col items-center justify-center gap-4 cursor-pointer group">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300">
+        <div className="h-full min-h-[460px] w-full max-w-[420px] rounded-3xl border-2 border-dashed border-[#d7a444]/40 bg-[#f3ddb1]/20 hover:bg-[#f3ddb1]/40 hover:border-[#d7a444] transition-all duration-300 flex flex-col items-center justify-center gap-4 cursor-pointer group">
+            <div className="w-16 h-16 rounded-full bg-[#f3ddb1] text-[#0b2d49] flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300">
                 <Plus size={32} />
             </div>
             <div className="text-center">
-                <h3 className="text-lg font-bold text-gray-900">Manual Entry</h3>
-                <p className="text-sm text-gray-500 mt-1">Add internal verified event</p>
+                <h3 className="text-lg font-bold text-[#0b2d49]">Manual Entry</h3>
+                <p className="text-sm text-[#5a5b44] mt-1">Add internal verified event</p>
             </div>
         </div>
     );
 };
 
+
+
 const AdminEvents = () => {
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("Pending");
 
     return (
@@ -78,7 +82,7 @@ const AdminEvents = () => {
              <div className="px-6 py-6 pb-2 shrink-0">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
                     <div>
-                        <h2 className="text-2xl font-bold text-gray-600 tracking-tight">
+                        <h2 className="text-2xl font-bold text-[#0b2d49] tracking-tight">
                             Event Verification
                         </h2>
                     </div>
@@ -89,15 +93,15 @@ const AdminEvents = () => {
                 {/* Header Section */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                     <div>
-                        <h2 className="text-3xl font-bold text-gray-900 tracking-tight mb-2">Pending Requests</h2>
-                        <p className="text-gray-500">Review and verify events before they go live on the platform.</p>
+                        <h2 className="text-3xl font-bold text-[#0b2d49] tracking-tight mb-2">Pending Requests</h2>
+                        <p className="text-[#5a5b44]">Review and verify events before they go live on the platform.</p>
                     </div>
                     <div className="flex gap-3">
-                        <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 font-medium rounded-xl hover:bg-gray-50 transition-colors shadow-sm">
+                        <button className="flex items-center gap-2 px-4 py-2 bg-white border border-[#e9eff1] text-[#5a5b44] font-medium rounded-xl hover:bg-[#e9eff1] transition-colors shadow-sm">
                             <Filter size={18} />
                             Filter
                         </button>
-                        <button className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white font-medium rounded-xl hover:bg-emerald-700 transition-colors shadow-sm shadow-emerald-200">
+                        <button className="flex items-center gap-2 px-4 py-2 bg-[#0b2d49] text-white font-medium rounded-xl hover:bg-[#0b2d49]/90 transition-colors shadow-sm shadow-[#0b2d49]/20">
                             <RotateCcw size={18} />
                             Refresh List
                         </button>
@@ -105,18 +109,18 @@ const AdminEvents = () => {
                 </div>
 
                 {/* Tabs & Search Bar */}
-                <div className="bg-white p-2 rounded-2xl shadow-sm border border-gray-100 mb-8">
+                <div className="bg-white p-2 rounded-2xl shadow-sm border border-[#e9eff1] mb-8">
                     <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
                         {/* Tabs */}
-                        <div className="flex p-1 bg-gray-100/50 rounded-xl w-full md:w-auto">
+                        <div className="flex p-1 bg-[#e9eff1] rounded-xl w-full md:w-auto">
                             {["Pending (12)", "Verified", "Rejected"].map((tab) => (
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab)}
                                     className={`flex-1 md:flex-none px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
                                         activeTab === tab 
-                                        ? "bg-white text-emerald-600 shadow-sm" 
-                                        : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"
+                                        ? "bg-white text-[#0b2d49] shadow-sm" 
+                                        : "text-[#5a5b44] hover:text-[#0b2d49] hover:bg-white/50"
                                     }`}
                                 >
                                     {tab}
@@ -126,11 +130,11 @@ const AdminEvents = () => {
 
                         {/* Search */}
                         <div className="relative w-full md:w-[400px]">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#708aa0]" size={20} />
                             <input 
                                 type="text"
                                 placeholder="Search event, vendor or ID..."
-                                className="w-full pl-11 pr-4 py-3 bg-gray-50 hover:bg-gray-100 border-transparent focus:bg-white border focus:border-emerald-500 rounded-xl text-sm transition-all outline-none"
+                                className="w-full pl-11 pr-4 py-3 bg-[#f8fafc] hover:bg-white border-transparent focus:bg-white border focus:border-[#d7a444] rounded-xl text-sm transition-all outline-none text-[#0b2d49]"
                             />
                         </div>
                     </div>
@@ -149,7 +153,7 @@ const AdminEvents = () => {
                             submittedDate={event.submitted}
                             status={event.status}
                             onVerify={() => console.log("Verify", event.id)}
-                            onDetails={() => console.log("Details", event.id)}
+                            onDetails={() => navigate(`${event.id}`)}
                         />
                     ))}
                     <ManualEntryCard />

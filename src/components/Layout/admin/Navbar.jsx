@@ -1,8 +1,8 @@
 import React from "react";
-import { Link, useLocation } from "react-router";
-import { MdDashboard, MdEvent, MdStorefront, MdBarChart, MdAccountBalanceWallet, MdSecurity, MdSettings, MdPerson, MdLogout } from "react-icons/md";
+import { Link, useLocation } from "react-router-dom";
+import { MdDashboard, MdEvent, MdStorefront, MdBarChart, MdAccountBalanceWallet, MdSecurity, MdSettings, MdPerson, MdLogout, MdClose } from "react-icons/md";
 
-const Navbar = () => {
+const Navbar = ({ isOpen, onClose }) => {
   const location = useLocation();
 
   const menuSections = [
@@ -39,79 +39,106 @@ const Navbar = () => {
     console.log("Logging out...");
   };
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => location.pathname.startsWith(path);
 
   return (
-    <aside className="w-64 h-screen bg-white border-r border-gray-200 flex flex-col">
-      {/* Logo Section */}
-      <div className="py-4 flex justify-center mt-2">
-        <img 
-          src="../public/internal_logo.png" 
-          alt="Logo" 
-          className="w-32 h-auto"
+    <>
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm"
+          onClick={onClose}
         />
-      </div>
+      )}
 
-      {/* Navigation Menu */}
-      <nav className="flex-1 px-4 py-3 space-y-6 overflow-y-auto">
-        {menuSections.map((section, index) => (
-          <div key={index}>
-            <h3 className="px-3 mb-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              {section.title}
-            </h3>
-            <div className="space-y-3">
-              {section.items.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <Link 
-                    key={item.path}
-                    to={item.path} 
-                    className={`flex items-center justify-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-                      isActive(item.path)
-                        ? "bg-blue-100 text-blue-700"
-                        : "text-gray-700 hover:bg-gray-100"
-                    }`}
-                  >
-                    <Icon className="text-[22px]" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </div>
+      {/* Sidebar */}
+      <aside className={`
+        fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-[#e9eff1] flex flex-col transition-transform duration-300 ease-in-out md:relative md:translate-x-0 shadow-xl md:shadow-none
+        ${isOpen ? "translate-x-0" : "-translate-x-full"}
+      `}>
+        {/* Logo Section */}
+        <div className="py-6 flex justify-between items-center px-6 mt-2 relative">
+          <div className="flex justify-center w-full md:w-auto">
+             <img 
+               src="/internal_logo.png" 
+               alt="Logo" 
+               className="w-32 h-auto"
+             />
           </div>
-        ))}
-      </nav>
-
-      {/* Bottom Section */}
-      <div className="pt-0.5 pb-3 border-t border-gray-200 space-y-1">
-        <div className="space-y-3">
-          {bottomItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link 
-                key={item.path}
-                to={item.path} 
-                className={`flex items-center justify-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-                  isActive(item.path)
-                    ? "bg-blue-100 text-blue-700"
-                    : "text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                <Icon className="text-[22px]" />
-                {item.label}
-              </Link>
-            );
-          })}
+          {/* Close Button (Mobile Only) */}
           <button 
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
+            onClick={onClose}
+            className="md:hidden text-[#0b2d49] hover:text-[#d7a444] transition-colors absolute right-4 top-6"
           >
-            <MdLogout className="text-[22px]" />
-            Logout
+            <MdClose size={24} />
           </button>
         </div>
-      </div>
-    </aside>
+
+        {/* Navigation Menu */}
+        <nav className="flex-1 px-4 py-3 space-y-6 overflow-y-auto custom-scrollbar">
+          {menuSections.map((section, index) => (
+            <div key={index}>
+              <h3 className="px-3 mb-3 text-xs font-bold text-[#708aa0] uppercase tracking-wider">
+                {section.title}
+              </h3>
+              <div className="space-y-1">
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = isActive(item.path);
+                  return (
+                    <Link 
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => onClose && window.innerWidth < 768 && onClose()}
+                      className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 group ${
+                        active
+                          ? "bg-[#0b2d49] text-[#d7a444] shadow-md shadow-[#0b2d49]/10"
+                          : "text-[#5a5b44] hover:bg-[#e9eff1] hover:text-[#0b2d49]"
+                      }`}
+                    >
+                      <Icon className={`text-[22px] ${active ? "text-[#d7a444]" : "text-[#708aa0] group-hover:text-[#0b2d49]"}`} />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
+
+        {/* Bottom Section */}
+        <div className="p-4 border-t border-[#e9eff1] space-y-1 bg-[#f8fafc]">
+          <div className="space-y-1">
+            {bottomItems.map((item) => {
+              const Icon = item.icon;
+              const active = isActive(item.path);
+              return (
+                <Link 
+                  key={item.path}
+                  to={item.path} 
+                  onClick={() => onClose && window.innerWidth < 768 && onClose()}
+                  className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
+                    active
+                      ? "bg-[#0b2d49] text-[#d7a444]"
+                      : "text-[#5a5b44] hover:bg-[#e9eff1] hover:text-[#0b2d49]"
+                  }`}
+                >
+                  <Icon className={`text-[22px] ${active ? "text-[#d7a444]" : "text-[#708aa0]"}`} />
+                  {item.label}
+                </Link>
+              );
+            })}
+            <button 
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-[#5a5b44] rounded-xl hover:bg-red-50 hover:text-red-600 transition-colors"
+            >
+              <MdLogout className="text-[22px]" />
+              Logout
+            </button>
+          </div>
+        </div>
+      </aside>
+    </>
   );
 };
 
