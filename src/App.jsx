@@ -9,6 +9,8 @@ import PlanningWizard from "./pages/user/PlanningWizard";
 import PromoteEvent from "./pages/user/PromoteEvent";
 import AdminLayout from "./components/Layout/admin/AdminLayout";
 import UserDashboard from "./pages/user/Dashboard";
+import PlanningWizard from "./pages/user/PlanningWizard";
+import PromoteEvent from "./pages/user/PromoteEvent";
 
 const App = () => {
   return (
@@ -22,6 +24,8 @@ const App = () => {
       <Route path="/user/promote" element={<PromoteEvent />} />
       <Route path="/admin/*" element={<AdminLayout />} />
       <Route path="/user/dashboard" element={<UserDashboard />} />
+      <Route path="/user/planning-wizard" element={<PlanningWizard />} />
+      <Route path="/user/promote" element={<PromoteEvent />} />
     </Routes>
     
   );
