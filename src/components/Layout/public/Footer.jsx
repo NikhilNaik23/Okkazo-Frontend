@@ -4,9 +4,9 @@ import { Link } from "react-router-dom";
 
 const Footer = () => {
   return (
-    <footer className="bg-[#0b2d49] text-white py-16">
+    <footer className="bg-[#0b2d49] text-white py-10">
       <div className="container mx-auto px-6 md:px-12 lg:px-20">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           {/* Brand/About */}
           <div className="md:col-span-1">
             <div className="flex items-center gap-2 mb-6">
@@ -35,8 +35,8 @@ const Footer = () => {
 
           {/* Links Columns */}
           <div>
-            <h4 className="font-bold mb-6">Platform</h4>
-            <ul className="flex flex-col gap-4 text-gray-400 text-sm">
+            <h4 className="font-bold mb-4">Platform</h4>
+            <ul className="flex flex-col gap-2 text-gray-400 text-sm">
               <li><Link to="#" className="hover:text-white">Start Planning</Link></li>
               <li><Link to="#" className="hover:text-white">Register</Link></li>
               <li><Link to="#" className="hover:text-white">Ticket Support</Link></li>
@@ -45,8 +45,8 @@ const Footer = () => {
           </div>
 
           <div>
-            <h4 className="font-bold mb-6">For Business</h4>
-            <ul className="flex flex-col gap-4 text-gray-400 text-sm">
+            <h4 className="font-bold mb-4">For Business</h4>
+            <ul className="flex flex-col gap-2 text-gray-400 text-sm">
               <li><Link to="#" className="hover:text-white">Vendor Portal</Link></li>
               <li><Link to="#" className="hover:text-white">Event Services</Link></li>
               <li><Link to="#" className="hover:text-white">Partnerships</Link></li>
@@ -55,8 +55,8 @@ const Footer = () => {
           </div>
 
           <div>
-            <h4 className="font-bold mb-6">Company</h4>
-            <ul className="flex flex-col gap-4 text-gray-400 text-sm">
+            <h4 className="font-bold mb-4">Company</h4>
+            <ul className="flex flex-col gap-2 text-gray-400 text-sm">
               <li><Link to="#" className="hover:text-white">About Us</Link></li>
               <li><Link to="#" className="hover:text-white">Careers</Link></li>
               <li><Link to="#" className="hover:text-white">Press</Link></li>
