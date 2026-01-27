@@ -6,6 +6,7 @@ import { RiCloseLine } from "react-icons/ri";
 import { motion } from "framer-motion";
 import { toast } from "react-hot-toast";
 import { registerUser, clearError, clearRegisterSuccess, selectIsLoading, selectError, selectRegisterSuccess, selectRegisterMessage } from "../../../store/slices/authSlice";
+import toast from "react-hot-toast";
 
 const Modal = ({ isOpen, onClose, title, content }) => {
   if (!isOpen) return null;
@@ -110,6 +111,105 @@ const Register = () => {
             password: formData.password,
         }));
     };
+    const [showPassword, setShowPassword] = React.useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = React.useState(false);
+    const [formData, setFormData] = React.useState({
+        fullName: "",
+        email: "",
+        password: "",
+        confirmPassword: "",
+        agreedToTerms: false
+    });
+    const [activeModal, setActiveModal] = React.useState(null);
+    const emailToastIdRef = React.useRef(null);
+
+    const handleInputChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        const newValue = type === 'checkbox' ? checked : value;
+        
+        setFormData(prev => ({
+            ...prev,
+            [name]: newValue
+        }));
+
+        // Real-time email validation
+        if (name === 'email') {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            
+            // Only validate if user has typed something
+            if (newValue && !emailRegex.test(newValue)) {
+                // Dismiss previous email toast before showing new one
+                if (emailToastIdRef.current) {
+                    toast.dismiss(emailToastIdRef.current);
+                }
+                emailToastIdRef.current = toast.error("Please enter a valid email address", {
+                    id: 'email-invalid',
+                    duration: 2000
+                });
+            } else if (newValue && emailRegex.test(newValue)) {
+                // Dismiss error toast when email is valid
+                if (emailToastIdRef.current) {
+                    toast.dismiss(emailToastIdRef.current);
+                    emailToastIdRef.current = null;
+                }
+            }
+        }
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+
+        // Dismiss any existing toasts
+        toast.dismiss();
+
+        // Validate all fields
+        if (!formData.fullName.trim()) {
+            toast.error("Please enter your full name", { duration: 3000 });
+            return;
+        }
+
+        if (!formData.email.trim()) {
+            toast.error("Please enter your email address", { duration: 3000 });
+            return;
+        }
+
+        // Basic email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(formData.email)) {
+            toast.error("Please enter a valid email address", { duration: 3000 });
+            return;
+        }
+
+        if (!formData.password) {
+            toast.error("Please enter a password", { duration: 3000 });
+            return;
+        }
+
+        if (formData.password.length < 8) {
+            toast.error("Password must be at least 8 characters long", { duration: 3000 });
+            return;
+        }
+
+        if (!formData.confirmPassword) {
+            toast.error("Please confirm your password", { duration: 3000 });
+            return;
+        }
+
+        if (formData.password !== formData.confirmPassword) {
+            toast.error("Passwords do not match", { duration: 3000 });
+            return;
+        }
+
+        if (!formData.agreedToTerms) {
+            toast.error("Please agree to the Terms & Conditions", { duration: 3000 });
+            return;
+        }
+
+        // If all validations pass
+        toast.success("Account created successfully!", { duration: 4000 });
+        // Handle form submission here
+        console.log("Form submitted:", formData);
+    };
 
     const termsContent = (
         <div className="space-y-4">
@@ -174,6 +274,26 @@ const Register = () => {
                         </div>
                     </div>
                 </div>
+         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+            <div>
+                <label className="block text-sm font-semibold text-[#0b2d49] mb-1">Full Name</label>
+                <div className="relative">
+                    <input 
+                        type="text" 
+                        name="fullName"
+                        value={formData.fullName}
+                        onChange={handleInputChange}
+                        placeholder="e.g. Alex Rivera" 
+                        required
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-[#d7a444] focus:ring-1 focus:ring-[#d7a444] outline-none transition-all pl-10" 
+                    />
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
 
                 <div>
                     <label className="block text-sm font-semibold text-[#0b2d49] mb-1">Email Address</label>
@@ -194,6 +314,25 @@ const Register = () => {
                         </div>
                     </div>
                 </div>
+            <div>
+                <label className="block text-sm font-semibold text-[#0b2d49] mb-1">Email Address</label>
+                <div className="relative">
+                    <input 
+                        type="email" 
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        placeholder="name@company.com" 
+                        required
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-[#d7a444] focus:ring-1 focus:ring-[#d7a444] outline-none transition-all pl-10" 
+                    />
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
 
                 <div>
                     <label className="block text-sm font-semibold text-[#0b2d49] mb-1">Password</label>
@@ -241,7 +380,73 @@ const Register = () => {
                         </div>
                     </div>
                 </div>
+            <div>
+                <label className="block text-sm font-semibold text-[#0b2d49] mb-1">Password</label>
+                <div className="relative">
+                    <input 
+                        type={showPassword ? "text" : "password"} 
+                        name="password"
+                        value={formData.password}
+                        onChange={handleInputChange}
+                        placeholder="Min. 8 characters"
+                        required
+                        minLength={8}
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-[#d7a444] focus:ring-1 focus:ring-[#d7a444] outline-none transition-all pl-10" 
+                    />
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                         </svg>
+                    </div>
+                     <button 
+                         type="button" 
+                         onClick={() => setShowPassword(!showPassword)}
+                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                     >
+                       {showPassword ? <BsEyeSlash /> : <BsEye />}
+                     </button>
+                </div>
+            </div>
+            
+            <div>
+                <label className="block text-sm font-semibold text-[#0b2d49] mb-1">Confirm Password</label>
+                <div className="relative">
+                    <input 
+                        type={showConfirmPassword ? "text" : "password"} 
+                        name="confirmPassword"
+                        value={formData.confirmPassword}
+                        onChange={handleInputChange}
+                        placeholder="Re-enter your password"
+                        required
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-[#d7a444] focus:ring-1 focus:ring-[#d7a444] outline-none transition-all pl-10"
+                    />
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                         </svg>
+                    </div>
+                    <button 
+                        type="button" 
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                    >
+                        {showConfirmPassword ? <BsEyeSlash /> : <BsEye />}
+                    </button>
+                </div>
+            </div>
 
+            <div className="flex items-start gap-2 mt-2">
+                <input 
+                    type="checkbox" 
+                    id="terms" 
+                    name="agreedToTerms"
+                    checked={formData.agreedToTerms}
+                    onChange={handleInputChange}
+                    required
+                    className="mt-1 rounded border-gray-300 text-[#d7a444] focus:ring-[#d7a444]" 
+                />
+                <label htmlFor="terms" className="text-sm text-gray-500">I agree to the <button type="button" onClick={() => setActiveModal('terms')} className="font-semibold text-[#d7a444] hover:underline cursor-pointer">Terms & Conditions</button> and <button type="button" onClick={() => setActiveModal('privacy')} className="font-semibold text-[#d7a444] hover:underline cursor-pointer">Privacy Policy</button>.</label>
+            </div>
                 <div className="flex items-start gap-2 mt-2">
                     <input 
                         type="checkbox" 

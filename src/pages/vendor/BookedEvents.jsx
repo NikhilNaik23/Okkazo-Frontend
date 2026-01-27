@@ -14,6 +14,7 @@ import {
 } from "react-icons/bs";
 import { RiCloseLine } from "react-icons/ri";
 import { toast } from "react-hot-toast";
+import { initialBookedEvents } from "../../data/bookedEventsData";
 
 const RejectionModal = ({ isOpen, onClose, onSend, eventTitle }) => {
   const [reason, setReason] = useState("");
@@ -74,41 +75,7 @@ const BookedEvents = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [rejectionModalData, setRejectionModalData] = useState({ isOpen: false, event: null });
 
-  const [bookedEventsData, setBookedEventsData] = useState([
-    {
-      id: 1,
-      title: "The Grand Wedding Gala",
-      status: "PENDING",
-      date: "28",
-      month: "OCT",
-      category: "Wedding",
-      location: "Central Park Plaza, NY",
-      service: "Catering - Veg Menu (200 pax)",
-      pax: 200
-    },
-    {
-      id: 2,
-      title: "Tech Frontier Summit 2024",
-      status: "CONFIRMED",
-      date: "04",
-      month: "NOV",
-      category: "Conference",
-      location: "Brooklyn Expo Center",
-      service: "Beverage Package - Gold",
-      pax: 500
-    },
-    {
-      id: 3,
-      title: "Corporate Anniversary Dinner",
-      status: "PENDING",
-      date: "12",
-      month: "NOV",
-      category: "Corporate",
-      location: "Manhattan Skylounge",
-      service: "Full Course Premium Buffet",
-      pax: 150
-    }
-  ]);
+  const [bookedEventsData, setBookedEventsData] = useState(initialBookedEvents);
 
   const stats = {
     pending: bookedEventsData.filter(e => e.status === "PENDING").length,

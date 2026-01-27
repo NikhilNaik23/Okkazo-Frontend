@@ -1,38 +1,8 @@
 import React from "react";
 import { MdPlace } from "react-icons/md";
+import { trendingEvents } from "../../../data/publicData.jsx";
 
-const events = [
-  {
-    id: 1,
-    image: "https://images.unsplash.com/photo-1459749411177-0473ef71607b?q=80&w=2670&auto=format&fit=crop", // Concert
-    date: { month: "NOV", day: "18" },
-    tag: "CONCERT",
-    title: "Groove Music Festival",
-    location: "Central Park, NY",
-    price: "$45.00",
-    tagColor: "text-[#d7a444]",
-  },
-  {
-    id: 2,
-    image: "https://images.unsplash.com/photo-1544531586-fde5298cdd40?q=80&w=2670&auto=format&fit=crop", // Conference
-    date: { month: "DEC", day: "05" },
-    tag: "CONFERENCE",
-    title: "Future Tech Summit 2024",
-    location: "Convention Center, NV",
-    price: "$120.00",
-    tagColor: "text-[#0b2d49]",
-  },
-  {
-    id: 3,
-    image: "https://images.unsplash.com/photo-1545989253-02cc26577f8d?q=80&w=2670&auto=format&fit=crop", // Workshop/Art
-    date: { month: "JAN", day: "12" },
-    tag: "WORKSHOP",
-    title: "Modern Art Showcase",
-    location: "The Glass Gallery",
-    price: "Free",
-    tagColor: "text-[#5a5b44]",
-  },
-];
+const events = trendingEvents;
 
 const TrendingEvents = () => {
   return (

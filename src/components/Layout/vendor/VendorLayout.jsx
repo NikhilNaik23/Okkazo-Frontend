@@ -1,31 +1,13 @@
 import React from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { 
-  BsGrid, 
-  BsBriefcase, 
-  BsCalendarCheck, 
-  BsChatDots, 
-  BsGear, 
-  BsSearch, 
-  BsBell,
-  BsPersonBadge
-} from "react-icons/bs";
+import { BsSearch, BsBell, BsGear } from "react-icons/bs";
+import { vendorSidebarMenus, vendorLayoutData } from "../../../data/vendorLayoutData.jsx";
 
 const VendorLayout = () => {
   const location = useLocation();
 
-  const sidebarMenus = [
-    { name: "Dashboard", icon: <BsGrid />, path: "/vendor/dashboard" },
-    { name: "My Services", icon: <BsBriefcase />, path: "/vendor/service-management" },
-    { name: "Booked Events", icon: <BsCalendarCheck />, path: "/vendor/booked-events" },
-    { name: "Messages", icon: <BsChatDots />, path: "/vendor/messages" },
-    { name: "Business Profile", icon: <BsPersonBadge />, path: "/vendor/profile" },
-  ];
-
-  const vendorData = {
-    name: "Gourmet Catering",
-    role: "Service Provider"
-  };
+  const sidebarMenus = vendorSidebarMenus;
+  const vendorData = vendorLayoutData;
 
   return (
     <div className="flex min-h-screen bg-[#e9eff1] font-sans text-[#0b2d49]">

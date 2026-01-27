@@ -5,35 +5,20 @@ import {
   BsStarFill, 
   BsGeoAlt, 
   BsPlus, 
-  BsClock, 
-  BsPeople, 
-  BsCalendarCheck, 
-  BsAward,
   BsGlobe,
   BsPlusLg,
-  BsCheckCircleFill
+  BsCheckCircleFill,
+  BsFileEarmarkText,
+  BsDownload,
+  BsEye,
+  BsShieldCheck
 } from "react-icons/bs";
 import { toast } from "react-hot-toast";
+import { vendorProfileData } from "../../data/vendorProfileData.jsx";
 
 const BusinessProfile = () => {
   const [isEditingAbout, setIsEditingAbout] = useState(false);
-  const [profileData, setProfileData] = useState({
-    name: "Gourmet Catering Co.",
-    rating: "4.9",
-    reviews: "124",
-    location: "New York, NY",
-    about: "With over 15 years of experience in the luxury event industry, Gourmet Catering Co. specializes in creating bespoke culinary experiences that resonate. From intimate garden weddings to large-scale corporate galas, our team of world-class chefs and event professionals work tirelessly to ensure every plate tells a story of quality, freshness, and artistry.",
-    stats: [
-      { label: "Years Active", value: "15+", icon: <BsAward /> },
-      { label: "Events Served", value: "1,200+", icon: <BsCalendarCheck /> },
-      { label: "Team Size", value: "45 Pros", icon: <BsPeople /> },
-      { label: "Response Time", value: "< 2 hours", icon: <BsClock /> }
-    ],
-    services: [
-      { id: 1, name: "Premium Wedding Package", description: "Full-service 3-course plated dinner with appetizers.", price: "120" },
-      { id: 2, name: "Corporate Buffet Experience", description: "International cuisine with live cooking stations.", price: "85" }
-    ]
-  });
+  const [profileData, setProfileData] = useState(vendorProfileData);
 
   const [tempAbout, setTempAbout] = useState(profileData.about);
 
@@ -209,6 +194,142 @@ const BusinessProfile = () => {
                             </div>
                         </div>
                     ))}
+                </div>
+            </div>
+
+            {/* Verification Documents */}
+            <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-[#708aa0]/5">
+                <div className="flex justify-between items-center mb-8">
+                    <h3 className="text-xl font-black flex items-center gap-3">
+                        <div className="w-10 h-10 bg-[#10b981]/10 text-[#10b981] rounded-xl flex items-center justify-center">
+                            <BsShieldCheck size={20} />
+                        </div>
+                        Verification Documents
+                    </h3>
+                    <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-xl border border-green-100">
+                        <BsCheckCircleFill size={14} />
+                        <span className="text-xs font-black uppercase tracking-wider">All Verified</span>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    {/* Business License */}
+                    <div className="p-6 bg-gradient-to-r from-[#e9eff1]/70 to-[#f3ddb1]/20 rounded-[2rem] border border-[#d7a444]/20 hover:shadow-lg transition-all">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-gradient-to-br from-[#f3ddb1] to-[#d0a862]/50 rounded-xl flex items-center justify-center text-[#d7a444] shadow-sm">
+                                    <BsFileEarmarkText size={20} />
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-black text-[#0b2d49] mb-1">Business License</h4>
+                                    <p className="text-xs text-[#708aa0] font-medium">
+                                        {profileData.documents.businessLicense.name} • {(profileData.documents.businessLicense.size / 1024).toFixed(1)} KB
+                                    </p>
+                                    <div className="flex items-center gap-3 mt-2">
+                                        <span className="text-[10px] text-[#708aa0] font-bold">Uploaded: {profileData.documents.businessLicense.uploadDate}</span>
+                                        <span className="text-[10px] font-black uppercase px-2 py-1 bg-green-100 text-green-700 rounded-lg">
+                                            {profileData.documents.businessLicense.status}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => toast.success("Viewing document...")}
+                                    className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-[#0b2d49] hover:bg-[#0b2d49] hover:text-white transition-all shadow-sm"
+                                >
+                                    <BsEye size={16} />
+                                </button>
+                                <button 
+                                    onClick={() => toast.success("Downloading document...")}
+                                    className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-[#d7a444] hover:bg-[#d7a444] hover:text-white transition-all shadow-sm"
+                                >
+                                    <BsDownload size={16} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Owner Identity */}
+                    <div className="p-6 bg-gradient-to-r from-[#e9eff1]/70 to-[#f3ddb1]/20 rounded-[2rem] border border-[#d7a444]/20 hover:shadow-lg transition-all">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-gradient-to-br from-[#f3ddb1] to-[#d0a862]/50 rounded-xl flex items-center justify-center text-[#d7a444] shadow-sm">
+                                    <BsFileEarmarkText size={20} />
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-black text-[#0b2d49] mb-1">Owner Identity Document</h4>
+                                    <p className="text-xs text-[#708aa0] font-medium">
+                                        {profileData.documents.ownerIdentity.name} • {(profileData.documents.ownerIdentity.size / 1024).toFixed(1)} KB
+                                    </p>
+                                    <div className="flex items-center gap-3 mt-2">
+                                        <span className="text-[10px] text-[#708aa0] font-bold">Uploaded: {profileData.documents.ownerIdentity.uploadDate}</span>
+                                        <span className="text-[10px] font-black uppercase px-2 py-1 bg-green-100 text-green-700 rounded-lg">
+                                            {profileData.documents.ownerIdentity.status}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => toast.success("Viewing document...")}
+                                    className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-[#0b2d49] hover:bg-[#0b2d49] hover:text-white transition-all shadow-sm"
+                                >
+                                    <BsEye size={16} />
+                                </button>
+                                <button 
+                                    onClick={() => toast.success("Downloading document...")}
+                                    className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-[#d7a444] hover:bg-[#d7a444] hover:text-white transition-all shadow-sm"
+                                >
+                                    <BsDownload size={16} />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Other Documents */}
+                    {profileData.documents.otherProofs.length > 0 && (
+                        <div className="mt-6">
+                            <p className="text-xs font-black text-[#0b2d49] uppercase tracking-widest mb-4">Additional Documents</p>
+                            <div className="space-y-3">
+                                {profileData.documents.otherProofs.map((doc, index) => (
+                                    <div key={index} className="p-5 bg-gradient-to-r from-[#e9eff1]/70 to-[#5a5b44]/5 rounded-xl border border-[#5a5b44]/15 hover:shadow-md transition-all">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-gradient-to-br from-[#5a5b44]/20 to-[#5a5b44]/10 rounded-lg flex items-center justify-center text-[#5a5b44]">
+                                                    <BsFileEarmarkText size={16} />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-bold text-[#0b2d49] mb-1">{doc.name}</h4>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-[10px] text-[#708aa0] font-medium">{(doc.size / 1024).toFixed(1)} KB</span>
+                                                        <span className="text-[10px] text-[#708aa0] font-bold">Uploaded: {doc.uploadDate}</span>
+                                                        <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-green-100 text-green-700 rounded">
+                                                            {doc.status}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <button 
+                                                    onClick={() => toast.success("Viewing document...")}
+                                                    className="w-9 h-9 bg-white rounded-lg flex items-center justify-center text-[#0b2d49] hover:bg-[#0b2d49] hover:text-white transition-all"
+                                                >
+                                                    <BsEye size={14} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => toast.success("Downloading document...")}
+                                                    className="w-9 h-9 bg-white rounded-lg flex items-center justify-center text-[#5a5b44] hover:bg-[#5a5b44] hover:text-white transition-all"
+                                                >
+                                                    <BsDownload size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

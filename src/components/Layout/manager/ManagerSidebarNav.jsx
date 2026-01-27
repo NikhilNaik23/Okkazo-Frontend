@@ -1,29 +1,8 @@
 import React, { useState } from "react";
-import {
-  MdDashboard,
-  MdCalendarMonth,
-  MdGroup,
-  MdBarChart,
-  MdChat,
-  MdDescription,
-  MdPerson,
-  MdSettings,
-  MdLogout,
-} from "react-icons/md";
+import { managerNavItems, managerFooterItems } from "../../data/managerData";
 
-const NAV_ITEMS = [
-  { key: "dashboard", label: "Dashboard", icon: MdDashboard },
-  { key: "events", label: "Events", icon: MdCalendarMonth },
-  { key: "vendors", label: "Manage Vendors", icon: MdGroup },
-  { key: "analytics", label: "View Analytics", icon: MdBarChart },
-  { key: "chat", label: "Chat", icon: MdChat },
-  { key: "reports", label: "Reports", icon: MdDescription },
-];
-
-const FOOTER_ITEMS = [
-  { key: "profile", label: "Profile", icon: MdPerson },
-  { key: "logout", label: "Logout", icon: MdLogout },
-];
+const NAV_ITEMS = managerNavItems;
+const FOOTER_ITEMS = managerFooterItems;
 
 const ManagerSidebarNav = ({ activeKey = "dashboard", onNavigate }) => {
   const [active, setActive] = useState(activeKey);
