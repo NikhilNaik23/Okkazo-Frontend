@@ -1,47 +1,70 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSelector, useDispatch } from "react-redux";
 import Navbar from "../../../components/Layout/user/Navbar";
 import Footer from "../../../components/Layout/user/Footer";
 import { BsPencil, BsGear, BsEnvelope, BsTelephone, BsGeoAlt } from "react-icons/bs";
-import { toast, Toaster } from "react-hot-toast";
-import { userProfileData, userActivitiesData } from "../../../data/userData";
+import { toast } from "react-hot-toast";
+import { selectUser, selectIsLoading as selectAuthLoading, selectIsAuthenticated, fetchCurrentUser } from "../../../store/slices/authSlice";
 
 const UserProfile = () => {
     const navigate = useNavigate();
-    const [isLoading, setIsLoading] = useState(true);
+    const dispatch = useDispatch();
+    
+    const authUser = useSelector(selectUser);
+    const authLoading = useSelector(selectAuthLoading);
+    const isAuthenticated = useSelector(selectIsAuthenticated);
+    
     const [user, setUser] = useState(null);
-    const [activities, setActivities] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Simulate fetching profile and activities from backend
+    // Fetch user data and map to local state
     useEffect(() => {
-        const fetchProfileData = async () => {
-            setIsLoading(true);
-            try {
-                // Simulated API delay
-                await new Promise(resolve => setTimeout(resolve, 800));
-                
-                // Mock user response
-                const userResponse = userProfileData;
+        // If not authenticated, redirect to login
+        if (!isAuthenticated) {
+            toast.error("Please login to view your profile");
+            navigate("/login");
+            return;
+        }
 
-                // Mock activities response
-                const activitiesResponse = userActivitiesData;
+        // If we don't have user data yet, fetch it
+        if (!authUser) {
+            dispatch(fetchCurrentUser());
+        }
+    }, [isAuthenticated, authUser, dispatch, navigate]);
 
-                setUser(userResponse);
-                setActivities(activitiesResponse);
-            } catch (error) {
-                toast.error("Failed to load profile");
-            } finally {
-                setIsLoading(false);
-            }
-        };
+    // Map authUser to local user state when it changes
+    useEffect(() => {
+        if (authUser) {
+            setUser({
+                id: authUser.id,
+                authId: authUser.authId,
+                name: authUser.name,
+                email: authUser.email,
+                phone: authUser.phone || "Not provided",
+                location: authUser.location || "Not provided",
+                avatar: authUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(authUser.name)}&background=d7a444&color=0b2d49&size=200`,
+                bio: authUser.bio || "",
+                interests: authUser.interests || [],
+                memberSince: authUser.memberSince ? new Date(authUser.memberSince).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Unknown",
+                role: authUser.role,
+                profileIsComplete: authUser.profileIsComplete,
+                profileCompletionPercentage: authUser.profileCompletionPercentage,
+                isActive: authUser.isActive,
+                lastLogin: authUser.lastLogin,
+            });
+            setIsLoading(false);
+        }
+    }, [authUser]);
 
-        fetchProfileData();
-    }, []);
+    // Sync loading state
+    useEffect(() => {
+        setIsLoading(authLoading);
+    }, [authLoading]);
 
     return (
         <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
             <Navbar />
-            <Toaster position="top-center" />
 
             <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-32 pb-20">
                 {isLoading ? (
@@ -151,24 +174,7 @@ const UserProfile = () => {
                                         {/* Vertical Line for Timeline */}
                                         <div className="absolute left-[23px] top-6 bottom-6 w-0.5 bg-gray-50"></div>
 
-                                        {activities.length > 0 ? (
-                                            activities.map((activity) => (
-                                                <div key={activity.id} className="relative flex gap-6 group">
-                                                    <div className={`z-10 w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border border-white shadow-sm shadow-black/5 ${activity.bgColor}`}>
-                                                        {activity.icon}
-                                                    </div>
-                                                    <div className="pt-1">
-                                                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-2">
-                                                            <h4 className="font-black text-[#0b2d49] group-hover:text-[#d7a444] transition-colors">{activity.title}</h4>
-                                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{activity.time}</span>
-                                                        </div>
-                                                        <p className="text-sm text-gray-500 font-medium leading-relaxed">{activity.description}</p>
-                                                    </div>
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <p className="text-sm text-gray-400 italic text-center py-10">No recent activity found.</p>
-                                        )}
+                                        <p className="text-sm text-gray-400 italic text-center py-10">No recent activity found.</p>
                                     </div>
                                 </div>
                             </div>

@@ -1,0 +1,271 @@
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+
+const API_BASE_URL = 'http://localhost:8080';
+
+// Async thunk for login
+export const loginUser = createAsyncThunk(
+    'auth/login',
+    async (credentials, { rejectWithValue }) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: credentials.email,
+                    password: credentials.password,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                return rejectWithValue(data.message || 'Login failed');
+            }
+
+            // Store tokens in localStorage
+            if (data.accessToken) {
+                localStorage.setItem('accessToken', data.accessToken);
+            }
+            if (data.refreshToken) {
+                localStorage.setItem('refreshToken', data.refreshToken);
+            }
+
+            return data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+// Async thunk for registration
+export const registerUser = createAsyncThunk(
+    'auth/register',
+    async (userData, { rejectWithValue }) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/register`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    username: userData.username,
+                    email: userData.email,
+                    password: userData.password,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                return rejectWithValue(data.message || 'Registration failed');
+            }
+
+            return data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+// Async thunk for fetching current user profile
+export const fetchCurrentUser = createAsyncThunk(
+    'auth/fetchCurrentUser',
+    async (_, { rejectWithValue }) => {
+        try {
+            const token = localStorage.getItem('accessToken');
+            
+            if (!token) {
+                return rejectWithValue('No access token found');
+            }
+
+            const response = await fetch(`${API_BASE_URL}/api/users/me`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                // If unauthorized, clear tokens
+                if (response.status === 401) {
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('refreshToken');
+                }
+                return rejectWithValue(data.message || 'Failed to fetch user');
+            }
+
+            return data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+// Async thunk for updating user profile
+export const updateProfile = createAsyncThunk(
+    'auth/updateProfile',
+    async (profileData, { rejectWithValue }) => {
+        try {
+            const token = localStorage.getItem('accessToken');
+            
+            if (!token) {
+                return rejectWithValue('No access token found. Please login.');
+            }
+
+            const response = await fetch(`${API_BASE_URL}/api/users/me`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify(profileData),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    localStorage.removeItem('accessToken');
+                    localStorage.removeItem('refreshToken');
+                }
+                return rejectWithValue(data.message || 'Failed to update profile');
+            }
+
+            return data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+// Initial state
+const initialState = {
+    user: null,
+    accessToken: localStorage.getItem('accessToken') || null,
+    refreshToken: localStorage.getItem('refreshToken') || null,
+    isAuthenticated: !!localStorage.getItem('accessToken'),
+    isLoading: false,
+    error: null,
+    registerSuccess: false,
+    registerMessage: null,
+    updateSuccess: false,
+};
+
+const authSlice = createSlice({
+    name: 'auth',
+    initialState,
+    reducers: {
+        logout: (state) => {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            state.user = null;
+            state.accessToken = null;
+            state.refreshToken = null;
+            state.isAuthenticated = false;
+            state.error = null;
+        },
+        clearError: (state) => {
+            state.error = null;
+        },
+        clearRegisterSuccess: (state) => {
+            state.registerSuccess = false;
+            state.registerMessage = null;
+        },
+        clearUpdateSuccess: (state) => {
+            state.updateSuccess = false;
+        },
+    },
+    extraReducers: (builder) => {
+        builder
+            // Login
+            .addCase(loginUser.pending, (state) => {
+                state.isLoading = true;
+                state.error = null;
+            })
+            .addCase(loginUser.fulfilled, (state, action) => {
+                state.isLoading = false;
+                state.isAuthenticated = true;
+                state.accessToken = action.payload.accessToken;
+                state.refreshToken = action.payload.refreshToken;
+                state.error = null;
+            })
+            .addCase(loginUser.rejected, (state, action) => {
+                state.isLoading = false;
+                state.error = action.payload;
+                state.isAuthenticated = false;
+            })
+            // Register
+            .addCase(registerUser.pending, (state) => {
+                state.isLoading = true;
+                state.error = null;
+                state.registerSuccess = false;
+            })
+            .addCase(registerUser.fulfilled, (state, action) => {
+                state.isLoading = false;
+                state.registerSuccess = true;
+                state.registerMessage = action.payload.message;
+                state.error = null;
+            })
+            .addCase(registerUser.rejected, (state, action) => {
+                state.isLoading = false;
+                state.error = action.payload;
+                state.registerSuccess = false;
+            })
+            // Fetch Current User
+            .addCase(fetchCurrentUser.pending, (state) => {
+                state.isLoading = true;
+                state.error = null;
+            })
+            .addCase(fetchCurrentUser.fulfilled, (state, action) => {
+                state.isLoading = false;
+                state.user = action.payload.data;
+                state.isAuthenticated = true;
+                state.error = null;
+            })
+            .addCase(fetchCurrentUser.rejected, (state, action) => {
+                state.isLoading = false;
+                state.error = action.payload;
+                state.user = null;
+                state.isAuthenticated = false;
+                state.accessToken = null;
+                state.refreshToken = null;
+            })
+            // Update Profile
+            .addCase(updateProfile.pending, (state) => {
+                state.isLoading = true;
+                state.error = null;
+                state.updateSuccess = false;
+            })
+            .addCase(updateProfile.fulfilled, (state, action) => {
+                state.isLoading = false;
+                state.user = action.payload.data || action.payload;
+                state.updateSuccess = true;
+                state.error = null;
+            })
+            .addCase(updateProfile.rejected, (state, action) => {
+                state.isLoading = false;
+                state.error = action.payload;
+                state.updateSuccess = false;
+            });
+    },
+});
+
+export const { logout, clearError, clearRegisterSuccess, clearUpdateSuccess } = authSlice.actions;
+
+// Selectors
+export const selectAuth = (state) => state.auth;
+export const selectUser = (state) => state.auth.user;
+export const selectIsAuthenticated = (state) => state.auth.isAuthenticated;
+export const selectUserRole = (state) => state.auth.user?.role || null;
+export const selectIsLoading = (state) => state.auth.isLoading;
+export const selectError = (state) => state.auth.error;
+export const selectRegisterSuccess = (state) => state.auth.registerSuccess;
+export const selectRegisterMessage = (state) => state.auth.registerMessage;
+export const selectUpdateSuccess = (state) => state.auth.updateSuccess;
+
+export default authSlice.reducer;

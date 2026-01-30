@@ -4,7 +4,7 @@ import Navbar from "../../../components/Layout/user/Navbar";
 import Footer from "../../../components/Layout/user/Footer";
 import { BsShieldLock, BsBell, BsEye, BsLink45Deg } from "react-icons/bs";
 import { FaGoogle, FaFacebookF } from "react-icons/fa";
-import { toast, Toaster } from "react-hot-toast";
+import { toast } from "react-hot-toast";
 
 const AccountSettings = () => {
     const navigate = useNavigate();
@@ -77,7 +77,6 @@ const AccountSettings = () => {
     return (
         <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
             <Navbar />
-            <Toaster position="top-center" />
 
             <main className="flex-1 max-w-4xl mx-auto w-full px-6 pt-32 pb-20">
                 <div className="mb-10">

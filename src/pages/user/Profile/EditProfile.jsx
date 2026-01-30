@@ -1,63 +1,88 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useSelector, useDispatch } from "react-redux";
 import Navbar from "../../../components/Layout/user/Navbar";
 import Footer from "../../../components/Layout/user/Footer";
-import { userProfileData } from "../../../data/userData";
 import { locations as locationsData } from "../../../data/commonData";
 import { BsPencil, BsX } from "react-icons/bs";
-import { toast, Toaster } from "react-hot-toast";
+import { toast } from "react-hot-toast";
+import { selectUser, selectIsAuthenticated, updateProfile, selectUpdateSuccess, selectIsLoading, selectError, clearUpdateSuccess, clearError } from "../../../store/slices/authSlice";
 
 const EditProfile = () => {
     const navigate = useNavigate();
-    const [isLoading, setIsLoading] = useState(true);
-    const [isSaving, setIsSaving] = useState(false);
+    const dispatch = useDispatch();
+    
+    const authUser = useSelector(selectUser);
+    const isAuthenticated = useSelector(selectIsAuthenticated);
+    const isLoading = useSelector(selectIsLoading);
+    const updateSuccess = useSelector(selectUpdateSuccess);
+    const error = useSelector(selectError);
+    
     const [formData, setFormData] = useState({
-        fullName: "",
+        name: "",
         email: "",
         phone: "",
         location: "",
         bio: "",
         interests: []
     });
+    const [isInitialized, setIsInitialized] = useState(false);
 
-    // Simulate fetching data from backend
+    // Redirect if not authenticated
     useEffect(() => {
-        const fetchUserData = async () => {
-            setIsLoading(true);
-            try {
-                // Simulated API delay
-                await new Promise(resolve => setTimeout(resolve, 800));
-                
-                // Mock backend response
-                const response = userProfileData;
-                
-                setFormData(response);
-            } catch (error) {
-                toast.error("Failed to load profile data");
-            } finally {
-                setIsLoading(false);
-            }
-        };
+        if (!isAuthenticated) {
+            toast.error("Please login to edit your profile");
+            navigate("/login");
+        }
+    }, [isAuthenticated, navigate]);
 
-        fetchUserData();
-    }, []);
+    // Initialize form with user data
+    useEffect(() => {
+        if (authUser && !isInitialized) {
+            setFormData({
+                name: authUser.name || "",
+                email: authUser.email || "",
+                phone: authUser.phone || "",
+                location: authUser.location || "",
+                bio: authUser.bio || "",
+                interests: authUser.interests || []
+            });
+            setIsInitialized(true);
+        }
+    }, [authUser, isInitialized]);
+
+    // Handle update success
+    useEffect(() => {
+        if (updateSuccess) {
+            toast.success("Profile updated successfully!");
+            dispatch(clearUpdateSuccess());
+            setTimeout(() => navigate("/user/profile"), 1000);
+        }
+    }, [updateSuccess, dispatch, navigate]);
+
+    // Handle errors
+    useEffect(() => {
+        if (error) {
+            toast.error(error);
+            dispatch(clearError());
+        }
+    }, [error, dispatch]);
 
     const locations = locationsData;
 
     const handleSave = async (e) => {
         e.preventDefault();
-        setIsSaving(true);
         
-        try {
-            // Simulated API call
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            toast.success("Profile updated successfully!");
-            setTimeout(() => navigate("/user/profile"), 1000);
-        } catch (error) {
-            toast.error("Failed to save changes. Please try again.");
-        } finally {
-            setIsSaving(false);
-        }
+        // Only send fields that can be updated
+        const updateData = {
+            name: formData.name,
+            phone: formData.phone,
+            location: formData.location,
+            bio: formData.bio,
+            interests: formData.interests
+        };
+        
+        dispatch(updateProfile(updateData));
     };
 
     const removeInterest = (interest) => {
@@ -70,7 +95,6 @@ const EditProfile = () => {
     return (
         <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
             <Navbar />
-            <Toaster position="top-center" />
 
             <main className="flex-1 max-w-4xl mx-auto w-full px-6 pt-32 pb-20">
                 <div className="mb-10">
@@ -78,7 +102,7 @@ const EditProfile = () => {
                     <p className="text-gray-500 font-medium tracking-tight">Manage your personal information and preferences.</p>
                 </div>
 
-                {isLoading ? (
+                {!isInitialized ? (
                     <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[2.5rem] shadow-xl border border-gray-100">
                         <div className="w-12 h-12 border-4 border-[#d7a444] border-t-transparent rounded-full animate-spin mb-4"></div>
                         <p className="font-bold text-gray-400 uppercase tracking-widest text-xs">Loading Profile...</p>
@@ -89,7 +113,7 @@ const EditProfile = () => {
                         <div className="flex flex-col items-center mb-12 border-b border-gray-50 pb-12">
                             <div className="relative mb-4">
                                 <div className="w-32 h-32 rounded-full border-4 border-white shadow-lg overflow-hidden bg-gray-50">
-                                    <img src={`https://ui-avatars.com/api/?name=${formData.fullName}&background=d7a444&color=0b2d49&size=128`} alt="Profile" className="w-full h-full object-cover" />
+                                    <img src={authUser?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&background=d7a444&color=0b2d49&size=128`} alt="Profile" className="w-full h-full object-cover" />
                                 </div>
                                 <button type="button" className="absolute bottom-1 right-1 w-10 h-10 bg-white shadow-md border border-gray-100 rounded-full flex items-center justify-center text-[#0b2d49] hover:text-[#d7a444] transition-all">
                                     <BsPencil size={18} />
@@ -106,8 +130,8 @@ const EditProfile = () => {
                                 <input 
                                     type="text"
                                     required
-                                    value={formData.fullName}
-                                    onChange={(e) => setFormData({...formData, fullName: e.target.value})}
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({...formData, name: e.target.value})}
                                     className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-gray-50 focus:border-[#d7a444] outline-none font-bold text-[#0b2d49] transition-all"
                                 />
                             </div>
@@ -116,9 +140,9 @@ const EditProfile = () => {
                                 <input 
                                     type="email"
                                     required
+                                    disabled
                                     value={formData.email}
-                                    onChange={(e) => setFormData({...formData, email: e.target.value})}
-                                    className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-gray-50 focus:border-[#d7a444] outline-none font-bold text-[#0b2d49] transition-all"
+                                    className="w-full px-6 py-4 bg-gray-50 rounded-2xl border-2 border-gray-50 outline-none font-bold text-gray-400 transition-all cursor-not-allowed"
                                 />
                             </div>
                             <div className="space-y-2">
@@ -193,17 +217,17 @@ const EditProfile = () => {
                             <button 
                                 type="button"
                                 onClick={() => navigate("/user/profile")}
-                                disabled={isSaving}
+                                disabled={isLoading}
                                 className="flex-1 py-5 bg-white text-[#0b2d49] font-black rounded-2xl border-2 border-gray-50 hover:bg-gray-50 transition-all text-sm uppercase tracking-widest disabled:opacity-50"
                             >
                                 Cancel
                             </button>
                             <button 
                                 type="submit"
-                                disabled={isSaving}
+                                disabled={isLoading}
                                 className="flex-1 py-5 bg-[#0caf7d] text-white font-black rounded-2xl shadow-xl shadow-emerald-500/10 hover:bg-[#09926a] transition-all text-sm uppercase tracking-widest active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2"
                             >
-                                {isSaving ? (
+                                {isLoading ? (
                                     <>
                                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                                         Saving...
