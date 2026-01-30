@@ -84,8 +84,15 @@ const App = () => {
       />
       <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
-        {/* Public Routes */}
-        <Route path="/" element={<Dashboard />} />
+        {/* Public Routes - Redirect authenticated users to their dashboard */}
+        <Route 
+          path="/" 
+          element={
+            <PublicRoute restricted>
+              <Dashboard />
+            </PublicRoute>
+          } 
+        />
         
         {/* Auth Routes - Redirect if already logged in */}
         <Route 
