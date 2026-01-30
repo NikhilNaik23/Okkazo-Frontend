@@ -1,14 +1,17 @@
 import React from "react";
 import { Link, useNavigate } from "react-router";
+import { useSelector } from "react-redux";
 import Navbar from "../../../components/Layout/user/Navbar";
 import { BsSearch, BsFilter, BsArrowRight, BsArrowLeft, BsHeart, BsHeartFill, BsGeoAlt } from "react-icons/bs";
 import Footer from "../../../components/Layout/user/Footer";
 import { popularEvents, allEvents } from "../../../data/eventsData";
+import { selectUser } from "../../../store/slices/authSlice";
 
 const UserDashboard = () => {
     // State for pagination
     const [currentPage, setCurrentPage] = React.useState(1);
     const navigate = useNavigate();
+    const user = useSelector(selectUser);
     const eventsPerPage = 8;
 
     // Pagination Logic
@@ -31,7 +34,9 @@ const UserDashboard = () => {
         {/* Welcome & Search Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 md:mb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div>
-                <h1 className="text-3xl md:text-4xl font-extrabold text-[#0b2d49] mb-2 tracking-tight">Welcome back, Alex!</h1>
+                <h1 className="text-3xl md:text-4xl font-extrabold text-[#0b2d49] mb-2 tracking-tight">
+                    Welcome back, {user?.name || user?.fullName || "User"}!
+                </h1>
                 <p className="text-gray-500 text-sm md:text-lg">Discover the best experiences happening around you.</p>
             </div>
             

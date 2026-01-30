@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import Navbar from "../../../components/Layout/user/Navbar";
 import Footer from "../../../components/Layout/user/Footer";
-import { locations as locationsData } from "../../../data/commonData";
-import { BsPencil, BsX } from "react-icons/bs";
+import LocationPicker from "../../../components/Map/LocationPicker";
+import { BsPencil, BsX, BsGeoAlt } from "react-icons/bs";
 import { toast } from "react-hot-toast";
 import { selectUser, selectIsAuthenticated, updateProfile, selectUpdateSuccess, selectIsLoading, selectError, clearUpdateSuccess, clearError } from "../../../store/slices/authSlice";
 
@@ -20,6 +20,7 @@ const EditProfile = () => {
     
     const [formData, setFormData] = useState({
         name: "",
+        fullName: "",
         email: "",
         phone: "",
         location: "",
@@ -27,6 +28,7 @@ const EditProfile = () => {
         interests: []
     });
     const [isInitialized, setIsInitialized] = useState(false);
+    const [showLocationPicker, setShowLocationPicker] = useState(false);
 
     // Redirect if not authenticated
     useEffect(() => {
@@ -41,6 +43,7 @@ const EditProfile = () => {
         if (authUser && !isInitialized) {
             setFormData({
                 name: authUser.name || "",
+                fullName: authUser.fullName || "",
                 email: authUser.email || "",
                 phone: authUser.phone || "",
                 location: authUser.location || "",
@@ -68,14 +71,13 @@ const EditProfile = () => {
         }
     }, [error, dispatch]);
 
-    const locations = locationsData;
-
     const handleSave = async (e) => {
         e.preventDefault();
         
-        // Only send fields that can be updated
+        // Only send fields that can be updated (matching backend User model)
         const updateData = {
             name: formData.name,
+            fullName: formData.fullName,
             phone: formData.phone,
             location: formData.location,
             bio: formData.bio,
@@ -83,6 +85,13 @@ const EditProfile = () => {
         };
         
         dispatch(updateProfile(updateData));
+    };
+
+    const handleLocationSelect = (locationData) => {
+        if (locationData.isValid) {
+            setFormData({...formData, location: locationData.address});
+            setShowLocationPicker(false);
+        }
     };
 
     const removeInterest = (interest) => {
@@ -126,13 +135,23 @@ const EditProfile = () => {
                         {/* Form Grid */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
                             <div className="space-y-2">
-                                <label className="text-xs font-black text-[#0b2d49] uppercase tracking-widest pl-2">Full Name</label>
+                                <label className="text-xs font-black text-[#0b2d49] uppercase tracking-widest pl-2">Username</label>
                                 <input 
                                     type="text"
                                     required
                                     value={formData.name}
                                     onChange={(e) => setFormData({...formData, name: e.target.value})}
                                     className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-gray-50 focus:border-[#d7a444] outline-none font-bold text-[#0b2d49] transition-all"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-black text-[#0b2d49] uppercase tracking-widest pl-2">Full Name</label>
+                                <input 
+                                    type="text"
+                                    value={formData.fullName}
+                                    onChange={(e) => setFormData({...formData, fullName: e.target.value})}
+                                    placeholder="Enter your full name"
+                                    className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-gray-50 focus:border-[#d7a444] outline-none font-bold text-[#0b2d49] transition-all placeholder:text-gray-300 placeholder:font-medium"
                                 />
                             </div>
                             <div className="space-y-2">
@@ -151,26 +170,51 @@ const EditProfile = () => {
                                     type="text"
                                     value={formData.phone}
                                     onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                                    className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-gray-50 focus:border-[#d7a444] outline-none font-bold text-[#0b2d49] transition-all"
+                                    placeholder="Enter your phone number"
+                                    className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-gray-50 focus:border-[#d7a444] outline-none font-bold text-[#0b2d49] transition-all placeholder:text-gray-300 placeholder:font-medium"
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <label className="text-xs font-black text-[#0b2d49] uppercase tracking-widest pl-2">Location</label>
-                                <div className="relative">
-                                    <select 
-                                        value={formData.location}
-                                        onChange={(e) => setFormData({...formData, location: e.target.value})}
-                                        className="w-full px-6 py-4 bg-white rounded-2xl border-2 border-gray-50 focus:border-[#d7a444] outline-none font-bold text-[#0b2d49] transition-all appearance-none cursor-pointer"
-                                    >
-                                        {locations.map(loc => (
-                                            <option key={loc} value={loc}>{loc}</option>
-                                        ))}
-                                    </select>
-                                    <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
-                                    </div>
+                        </div>
+
+                        {/* Location Section with Map */}
+                        <div className="space-y-4 mb-10">
+                            <label className="text-xs font-black text-[#0b2d49] uppercase tracking-widest pl-2">Location</label>
+                            
+                            {/* Current Location Display */}
+                            <div className="flex items-center gap-4">
+                                <div className="flex-1 px-6 py-4 bg-white rounded-2xl border-2 border-gray-50 font-bold text-[#0b2d49] flex items-center gap-3">
+                                    <BsGeoAlt className="text-[#d7a444] shrink-0" size={18} />
+                                    <span className={formData.location ? "" : "text-gray-400 font-medium"}>
+                                        {formData.location || "No location selected"}
+                                    </span>
                                 </div>
+                                <button 
+                                    type="button"
+                                    onClick={() => setShowLocationPicker(!showLocationPicker)}
+                                    className={`px-6 py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${
+                                        showLocationPicker 
+                                            ? "bg-[#0b2d49] text-white" 
+                                            : "bg-[#d7a444]/10 text-[#d7a444] hover:bg-[#d7a444] hover:text-white border border-[#d7a444]/20"
+                                    }`}
+                                >
+                                    {showLocationPicker ? "Close Map" : "Pick on Map"}
+                                </button>
                             </div>
+
+                            {/* Location Picker Map */}
+                            {showLocationPicker && (
+                                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <p className="text-xs text-gray-400 font-medium mb-3 pl-2">
+                                        Click on the map to select your location. We'll automatically detect the address.
+                                    </p>
+                                    <LocationPicker 
+                                        lat={null} 
+                                        lng={null} 
+                                        onLocationSelect={handleLocationSelect}
+                                        className="h-80 w-full rounded-2xl overflow-hidden border-2 border-gray-50 relative z-0 bg-gray-100"
+                                    />
+                                </div>
+                            )}
                         </div>
 
                         <div className="space-y-2 mb-10">
@@ -179,7 +223,8 @@ const EditProfile = () => {
                                 value={formData.bio}
                                 onChange={(e) => setFormData({...formData, bio: e.target.value})}
                                 rows="4"
-                                className="w-full px-6 py-5 bg-white rounded-2xl border-2 border-gray-50 focus:border-[#d7a444] outline-none font-bold text-[#0b2d49] transition-all resize-none leading-relaxed"
+                                placeholder="Tell us a bit about yourself..."
+                                className="w-full px-6 py-5 bg-white rounded-2xl border-2 border-gray-50 focus:border-[#d7a444] outline-none font-bold text-[#0b2d49] transition-all resize-none leading-relaxed placeholder:text-gray-300 placeholder:font-medium"
                             />
                         </div>
 

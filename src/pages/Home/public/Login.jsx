@@ -207,6 +207,9 @@ const Login = () => {
           <p className="mt-8 text-center text-sm text-gray-500">
             Don't have an account? <Link to="/register" className="text-[#d7a444] font-bold hover:underline">Create an account</Link>
           </p>
+          <p className="mt-2 text-center text-sm text-gray-400">
+            Didn't receive verification email? <Link to="/resend-verification" className="text-[#0b2d49] font-semibold hover:underline">Resend it</Link>
+          </p>
         </div>
       </div>
     </motion.div>

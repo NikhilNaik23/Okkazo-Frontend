@@ -2,6 +2,51 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 
 const API_BASE_URL = 'http://localhost:8080';
 
+// Async thunk for refreshing access token
+export const refreshAccessToken = createAsyncThunk(
+    'auth/refreshAccessToken',
+    async (_, { rejectWithValue }) => {
+        try {
+            const refreshToken = localStorage.getItem('refreshToken');
+            
+            if (!refreshToken) {
+                return rejectWithValue('No refresh token found');
+            }
+
+            const response = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ refreshToken }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                // Clear tokens if refresh fails
+                localStorage.removeItem('accessToken');
+                localStorage.removeItem('refreshToken');
+                return rejectWithValue(data.message || 'Token refresh failed');
+            }
+
+            // Store new tokens
+            if (data.accessToken) {
+                localStorage.setItem('accessToken', data.accessToken);
+            }
+            if (data.refreshToken) {
+                localStorage.setItem('refreshToken', data.refreshToken);
+            }
+
+            return data;
+        } catch (error) {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
 // Async thunk for login
 export const loginUser = createAsyncThunk(
     'auth/login',
@@ -143,6 +188,109 @@ export const updateProfile = createAsyncThunk(
     }
 );
 
+// Async thunk for forgot password
+export const forgotPassword = createAsyncThunk(
+    'auth/forgotPassword',
+    async ({ email }, { rejectWithValue }) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                return rejectWithValue(data.message || 'Failed to send reset email');
+            }
+
+            return data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+// Async thunk for reset password
+export const resetPassword = createAsyncThunk(
+    'auth/resetPassword',
+    async ({ token, newPassword }, { rejectWithValue }) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ token, newPassword }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                return rejectWithValue(data.message || 'Failed to reset password');
+            }
+
+            return data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+// Async thunk for email verification
+export const verifyEmail = createAsyncThunk(
+    'auth/verifyEmail',
+    async ({ token }, { rejectWithValue }) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/verify-email?token=${token}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                return rejectWithValue(data.message || 'Email verification failed');
+            }
+
+            return data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+// Async thunk for resend verification email
+export const resendVerification = createAsyncThunk(
+    'auth/resendVerification',
+    async ({ email }, { rejectWithValue }) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                return rejectWithValue(data.message || 'Failed to resend verification email');
+            }
+
+            return data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
 // Initial state
 const initialState = {
     user: null,
@@ -182,6 +330,26 @@ const authSlice = createSlice({
     },
     extraReducers: (builder) => {
         builder
+            // Refresh Access Token
+            .addCase(refreshAccessToken.pending, (state) => {
+                state.isLoading = true;
+                state.error = null;
+            })
+            .addCase(refreshAccessToken.fulfilled, (state, action) => {
+                state.isLoading = false;
+                state.isAuthenticated = true;
+                state.accessToken = action.payload.accessToken;
+                state.refreshToken = action.payload.refreshToken;
+                state.error = null;
+            })
+            .addCase(refreshAccessToken.rejected, (state, action) => {
+                state.isLoading = false;
+                state.error = action.payload;
+                state.isAuthenticated = false;
+                state.accessToken = null;
+                state.refreshToken = null;
+                state.user = null;
+            })
             // Login
             .addCase(loginUser.pending, (state) => {
                 state.isLoading = true;
@@ -251,6 +419,58 @@ const authSlice = createSlice({
                 state.isLoading = false;
                 state.error = action.payload;
                 state.updateSuccess = false;
+            })
+            // Forgot Password
+            .addCase(forgotPassword.pending, (state) => {
+                state.isLoading = true;
+                state.error = null;
+            })
+            .addCase(forgotPassword.fulfilled, (state) => {
+                state.isLoading = false;
+                state.error = null;
+            })
+            .addCase(forgotPassword.rejected, (state, action) => {
+                state.isLoading = false;
+                state.error = action.payload;
+            })
+            // Reset Password
+            .addCase(resetPassword.pending, (state) => {
+                state.isLoading = true;
+                state.error = null;
+            })
+            .addCase(resetPassword.fulfilled, (state) => {
+                state.isLoading = false;
+                state.error = null;
+            })
+            .addCase(resetPassword.rejected, (state, action) => {
+                state.isLoading = false;
+                state.error = action.payload;
+            })
+            // Verify Email
+            .addCase(verifyEmail.pending, (state) => {
+                state.isLoading = true;
+                state.error = null;
+            })
+            .addCase(verifyEmail.fulfilled, (state) => {
+                state.isLoading = false;
+                state.error = null;
+            })
+            .addCase(verifyEmail.rejected, (state, action) => {
+                state.isLoading = false;
+                state.error = action.payload;
+            })
+            // Resend Verification
+            .addCase(resendVerification.pending, (state) => {
+                state.isLoading = true;
+                state.error = null;
+            })
+            .addCase(resendVerification.fulfilled, (state) => {
+                state.isLoading = false;
+                state.error = null;
+            })
+            .addCase(resendVerification.rejected, (state, action) => {
+                state.isLoading = false;
+                state.error = action.payload;
             });
     },
 });
