@@ -1,13 +1,77 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 import { FcGoogle } from "react-icons/fc";
 import { BsEye, BsEyeSlash } from "react-icons/bs";
+import { motion } from "framer-motion";
+import { toast } from "react-hot-toast";
+import { loginUser, fetchCurrentUser, clearError, selectIsLoading, selectError, selectIsAuthenticated, selectUserRole } from "../../../store/slices/authSlice";
 
 const Login = () => {
-  const [showPassword, setShowPassword] = React.useState(false);
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+  
+  const isLoading = useSelector(selectIsLoading);
+  const error = useSelector(selectError);
+  const isAuthenticated = useSelector(selectIsAuthenticated);
+  const userRole = useSelector(selectUserRole);
+  
+  const [showPassword, setShowPassword] = useState(false);
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+  });
+
+  // Redirect after successful login and user data is fetched
+  useEffect(() => {
+    if (isAuthenticated && userRole) {
+      if (userRole === 'ADMIN') {
+        navigate("/admin");
+      } else {
+        navigate("/user/dashboard");
+      }
+    }
+  }, [isAuthenticated, userRole, navigate]);
+
+  // Show error toast when Redux error changes
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+    }
+  }, [error]);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    if (error) dispatch(clearError());
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    const result = await dispatch(loginUser({
+      email: formData.email,
+      password: formData.password,
+    }));
+
+    // If login was successful, fetch user data to get role
+    if (loginUser.fulfilled.match(result)) {
+      dispatch(fetchCurrentUser());
+    }
+  };
 
   return (
-    <div className="flex min-h-screen w-full bg-linear-to-br from-[#e9eff1] via-white to-[#f3ddb1]/20">
+    <>
+    <motion.div 
+      initial={{ opacity: 0, x: -50 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -50 }}
+      transition={{ duration: 0.5, ease: "easeInOut" }}
+      className="flex min-h-screen w-full bg-linear-to-br from-[#e9eff1] via-white to-[#f3ddb1]/20"
+    >
       {/* Left Side - Image & Branding */}
       <div className="hidden lg:flex w-1/2 relative bg-[#0b2d49] items-center justify-center overflow-hidden">
         {/* Background Image Overlay */}
@@ -57,13 +121,17 @@ const Login = () => {
           <h2 className="text-3xl font-bold text-[#0b2d49] mb-2">Welcome Back</h2>
           <p className="text-gray-500 mb-8">Enter your details to access your account.</p>
 
-          <form className="flex flex-col gap-5">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             <div>
               <label className="block text-sm font-semibold text-[#0b2d49] mb-2">Email Address</label>
               <div className="relative">
                 <input 
-                  type="email" 
-                  placeholder="name@company.com" 
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  placeholder="name@company.com"
+                  required
                   className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-[#d7a444] focus:ring-1 focus:ring-[#d7a444] outline-none transition-all pl-10"
                 />
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -77,11 +145,15 @@ const Login = () => {
             <div>
               <div className="flex justify-between items-center mb-2">
                 <label className="block text-sm font-semibold text-[#0b2d49]">Password</label>
-                <a href="#" className="text-xs font-semibold text-[#d7a444] hover:text-[#0b2d49]">Forgot password?</a>
+                <Link to="/forgot-password" className="text-xs font-semibold text-[#d7a444] hover:text-[#0b2d49]">Forgot password?</Link>
               </div>
               <div className="relative">
                 <input 
-                  type={showPassword ? "text" : "password"} 
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  required
                   className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:border-[#d7a444] focus:ring-1 focus:ring-[#d7a444] outline-none transition-all pl-10"
                 />
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -104,8 +176,19 @@ const Login = () => {
                 <label htmlFor="keep-logged-in" className="text-sm text-gray-600">Keep me logged in</label>
             </div>
 
-            <button type="submit" className="w-full bg-[#0b2d49] hover:bg-[#d7a444] text-white font-bold py-3 rounded-lg transition-colors shadow-md">
-                Sign In
+            <button 
+              type="submit" 
+              disabled={isLoading}
+              className="w-full bg-[#0b2d49] hover:bg-[#d7a444] text-white font-bold py-3 rounded-lg transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+                {isLoading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Signing In...
+                  </>
+                ) : (
+                  "Sign In"
+                )}
             </button>
           </form>
 
@@ -124,9 +207,13 @@ const Login = () => {
           <p className="mt-8 text-center text-sm text-gray-500">
             Don't have an account? <Link to="/register" className="text-[#d7a444] font-bold hover:underline">Create an account</Link>
           </p>
+          <p className="mt-2 text-center text-sm text-gray-400">
+            Didn't receive verification email? <Link to="/resend-verification" className="text-[#0b2d49] font-semibold hover:underline">Resend it</Link>
+          </p>
         </div>
       </div>
-    </div>
+    </motion.div>
+    </>
   );
 };
 
