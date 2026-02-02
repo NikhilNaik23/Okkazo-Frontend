@@ -4,9 +4,7 @@ import { RiCloseLargeFill } from "react-icons/ri";
 import { Link } from "react-router-dom";
 
 const menus = [
-  { name: "ExploreEvents", path: "/explore" },
-  { name: "Pricing", path: "/pricing" },
-  { name: "Solutions", path: "/solutions" },
+  { name: "ExploreEvents", path: "#exploreEvents" },
 ];
 
 const Navbar = () => {
