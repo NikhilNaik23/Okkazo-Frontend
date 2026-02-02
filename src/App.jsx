@@ -41,7 +41,6 @@ import ManagerChat from "./pages/vendor/ManagerChat";
 import BusinessProfile from "./pages/vendor/BusinessProfile";
 import VendorEventDetails from "./pages/vendor/EventDetails";
 import AccountSettingsPage from "./pages/vendor/AccountSettings";
-import { Toaster } from "react-hot-toast";
 
 const App = () => {
   const location = useLocation();
@@ -254,8 +253,23 @@ const App = () => {
           } 
         />
 
-      <Route path="/vendor/register" element={<VendorRegistration />} />
-        <Route path="/vendor" element={<VendorLayout />}>
+        {/* Vendor Routes - For VENDOR role */}
+        <Route 
+          path="/vendor/register" 
+          element={
+            <PublicRoute>
+              <VendorRegistration />
+            </PublicRoute>
+          } 
+        />
+        <Route 
+          path="/vendor" 
+          element={
+            <ProtectedRoute allowedRoles={['VENDOR']}>
+              <VendorLayout />
+            </ProtectedRoute>
+          }
+        >
           <Route path="dashboard" element={<VendorDashboard />} />
           <Route path="booked-events" element={<BookedEvents />} />
           <Route path="service-management" element={<ServiceManagement />} />
@@ -266,9 +280,6 @@ const App = () => {
         </Route>
       </Routes>
     </AnimatePresence>
-
-
-    <Toaster position="top-right" />
     </>
     
   );
