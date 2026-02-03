@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
-import Navbar from "../../../components/Layout/user/Navbar";
-import Footer from "../../../components/Layout/user/Footer";
 import { BsPencil, BsGear, BsEnvelope, BsTelephone, BsGeoAlt } from "react-icons/bs";
 import { toast } from "react-hot-toast";
 import { selectUser, selectIsLoading as selectAuthLoading, selectIsAuthenticated, fetchCurrentUser } from "../../../store/slices/authSlice";
@@ -64,9 +62,7 @@ const UserProfile = () => {
 
     return (
         <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
-            <Navbar />
-
-            <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-32 pb-20">
+            <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-12 pb-20">
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center py-40 bg-white rounded-[3rem] shadow-xl border border-gray-100">
                         <div className="w-12 h-12 border-4 border-[#d7a444] border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -186,8 +182,6 @@ const UserProfile = () => {
                     </div>
                 )}
             </main>
-
-            <Footer />
         </div>
     );
 };

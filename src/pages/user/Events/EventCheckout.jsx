@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
-import Navbar from "../../../components/Layout/user/Navbar";
-import Footer from "../../../components/Layout/user/Footer";
 import { BsArrowLeft, BsCheckCircleFill, BsQrCode, BsCalendarEvent  } from "react-icons/bs";
 import { toast, Toaster } from "react-hot-toast";
 import PaymentMethod from "../../../components/Forms/Checkout/PaymentMethod";
@@ -63,10 +61,9 @@ const EventCheckout = () => {
 
     return (
         <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
-            <Navbar />
             <Toaster position="top-center" />
 
-            <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-32 pb-20">
+            <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-12 pb-20">
                 {isSuccess ? (
                     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700">
                         <div className="bg-white rounded-[3rem] overflow-hidden shadow-2xl border border-gray-100">
@@ -159,8 +156,6 @@ const EventCheckout = () => {
                     </>
                 )}
             </main>
-
-            <Footer />
         </div>
     );
 };

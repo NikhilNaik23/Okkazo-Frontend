@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import Navbar from "../../../components/Layout/user/Navbar";
-import Footer from "../../../components/Layout/user/Footer";
 import { BsArrowLeft, BsGeoAlt, BsCalendarEvent, BsPeople, BsClock, BsBuilding, BsCheckCircleFill  } from "react-icons/bs";
 import { allEvents, popularEvents } from "../../../data/eventsData";
 import { toast, Toaster } from "react-hot-toast";
@@ -58,10 +56,9 @@ const EventDetails = () => {
 
     return (
         <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
-            <Navbar />
             <Toaster position="top-center" />
 
-            <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-32 pb-20">
+            <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-12 pb-20">
                 {/* Back Button */}
                 <Link to="/user/dashboard" className="flex items-center gap-2 text-gray-400 hover:text-[#0b2d49] font-bold transition-all group mb-8 w-fit">
                     <BsArrowLeft className="group-hover:-translate-x-1 transition-transform" />
@@ -221,8 +218,6 @@ const EventDetails = () => {
                     </div>
                 </div>
             </main>
-
-            <Footer />
         </div>
     );
 };

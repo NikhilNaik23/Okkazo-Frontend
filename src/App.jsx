@@ -24,6 +24,8 @@ import AdminLayout from "./components/Layout/admin/AdminLayout";
 // Manager Pages
 import ManagerLayout from "./components/Layout/manager/ManagerLayout";
 
+import UserLayout from "./components/Layout/user/UserLayout";
+
 // User Pages
 import UserDashboard from "./pages/user/Dashboard/UserDashboard";
 import PlanningWizard from "./pages/user/Events/PlanningWizard";
@@ -178,93 +180,25 @@ const App = () => {
 
         {/* User Routes - Only for USER role */}
         <Route 
-          path="/user/dashboard" 
+          path="/user" 
           element={
             <ProtectedRoute allowedRoles={['USER']}>
-              <UserDashboard />
+              <UserLayout />
             </ProtectedRoute>
           } 
-        />
-        <Route 
-          path="/user/planning-wizard" 
-          element={
-            <ProtectedRoute allowedRoles={['USER']}>
-              <PlanningWizard />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/user/promote" 
-          element={
-            <ProtectedRoute allowedRoles={['USER']}>
-              <PromoteEvent />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/user/event/:eventId" 
-          element={
-            <ProtectedRoute allowedRoles={['USER']}>
-              <EventDetails />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/user/checkout/:eventId" 
-          element={
-            <ProtectedRoute allowedRoles={['USER']}>
-              <EventCheckout />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/user/my-events" 
-          element={
-            <ProtectedRoute allowedRoles={['USER']}>
-              <MyEvents />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/user/profile" 
-          element={
-            <ProtectedRoute allowedRoles={['USER']}>
-              <UserProfile />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/user/notifications" 
-          element={
-            <ProtectedRoute allowedRoles={['USER']}>
-              <Notifications />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/user/edit-profile" 
-          element={
-            <ProtectedRoute allowedRoles={['USER']}>
-              <EditProfile />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/user/account-settings" 
-          element={
-            <ProtectedRoute allowedRoles={['USER']}>
-              <AccountSettings />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/user/notifications" 
-          element={
-            <ProtectedRoute allowedRoles={['USER']}>
-              <Notifications />
-            </ProtectedRoute>
-          } 
-        />
+        >
+          <Route path="dashboard" element={<UserDashboard />} />
+          <Route path="planning-wizard" element={<PlanningWizard />} />
+          <Route path="promote" element={<PromoteEvent />} />
+          <Route path="event/:eventId" element={<EventDetails />} />
+          <Route path="checkout/:eventId" element={<EventCheckout />} />
+          <Route path="my-events" element={<MyEvents />} />
+          <Route path="profile" element={<UserProfile />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="edit-profile" element={<EditProfile />} />
+          <Route path="account-settings" element={<AccountSettings />} />
+        </Route>
+
 
         {/* Vendor Routes - For VENDOR role */}
         <Route 

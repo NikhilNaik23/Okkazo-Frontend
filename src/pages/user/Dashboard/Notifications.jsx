@@ -1,6 +1,4 @@
 import React from "react";
-import Navbar from "../../../components/Layout/user/Navbar";
-import Footer from "../../../components/Layout/user/Footer";
 import { BsCheck2All } from "react-icons/bs";
 import { notificationsData } from "../../../data/notificationsData";
 
@@ -9,9 +7,7 @@ const Notifications = () => {
 
     return (
         <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
-            <Navbar />
-
-            <main className="flex-1 max-w-5xl mx-auto w-full px-6 pt-32 pb-20">
+            <main className="flex-1 max-w-5xl mx-auto w-full px-6 pt-12 pb-20">
                 {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
                     <div>
@@ -97,8 +93,6 @@ const Notifications = () => {
                     </div>
                 </div>
             </main>
-
-            <Footer />
         </div>
     );
 };

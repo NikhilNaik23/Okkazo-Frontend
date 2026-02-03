@@ -1,6 +1,4 @@
 import React, { useState } from "react";
-import Navbar from "../../../components/Layout/user/Navbar";
-import Footer from "../../../components/Layout/user/Footer";
 import { BsArrowRight } from "react-icons/bs";
 import SidebarProgress from "../../../components/Forms/EventWizard/SidebarProgress";
 import StepEventDetails from "../../../components/Forms/EventWizard/StepEventDetails";
@@ -55,9 +53,7 @@ const PlanningWizard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
-      <Navbar />
-      
-      <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-32 pb-10 flex gap-8">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-12 pb-10 flex gap-8">
         
         <SidebarProgress currentStep={currentStep} steps={steps} />
 
@@ -139,7 +135,6 @@ const PlanningWizard = () => {
          </div>
 
       </main>
-      <Footer />
     </div>
   );
 };
