@@ -1,28 +1,29 @@
-import React, { useState } from "react";
+import React from "react";
+import { NavLink } from "react-router-dom";
 import { managerNavItems, managerFooterItems } from "../../../data/managerData";
 
 const NAV_ITEMS = managerNavItems;
 const FOOTER_ITEMS = managerFooterItems;
 
-const ManagerSidebarNav = ({ activeKey = "dashboard", onNavigate }) => {
-  const [active, setActive] = useState(activeKey);
-
-  const handleClick = (key) => {
-    setActive(key);
-    onNavigate?.(key);
-  };
+const ManagerSidebarNav = () => {
 
   const Item = ({ item }) => {
     const Icon = item.icon;
+    const path = item.key === 'dashboard' ? 'dashboard' : item.key;
 
     return (
-      <button
-        onClick={() => handleClick(item.key)}
-        className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-100 transition-colors w-full text-left"
+      <NavLink
+        to={`/manager/${path}`}
+        className={({ isActive }) =>
+          `flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-colors w-full text-left ${isActive
+            ? "bg-teal-50 text-teal-700"
+            : "text-gray-700 hover:bg-gray-100"
+          }`
+        }
       >
         <Icon className="text-[22px]" />
         {item.label}
-      </button>
+      </NavLink>
     );
   };
 

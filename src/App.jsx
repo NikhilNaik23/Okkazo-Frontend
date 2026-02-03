@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import { useDispatch, useSelector } from 'react-redux';
 import { Toaster } from 'react-hot-toast';
 import { fetchCurrentUser, refreshAccessToken, selectIsAuthenticated, selectUser } from './store/slices/authSlice';
@@ -24,6 +25,14 @@ import AdminLayout from "./components/Layout/admin/AdminLayout";
 
 // Manager Pages
 import ManagerLayout from "./components/Layout/manager/ManagerLayout";
+import ManagerHomePage from "./pages/Home/manager/ManagerHomePage";
+import ManagerEvents from "./pages/Home/manager/ManagerEvents";
+import ManagerVendors from "./pages/Home/manager/ManagerVendors";
+import ManagerAnalytics from "./pages/Home/manager/ManagerAnalytics";
+import ManagerChatPage from "./pages/Home/manager/ManagerChatPage";
+import ManagerReports from "./pages/Home/manager/ManagerReports";
+import ManagerProfile from "./pages/Home/manager/ManagerProfile";
+import ManagerLogout from "./pages/Home/manager/ManagerLogout";
 
 import UserLayout from "./components/Layout/user/UserLayout";
 
@@ -61,6 +70,7 @@ const App = () => {
       const refreshToken = localStorage.getItem('refreshToken');
       const accessToken = localStorage.getItem('accessToken');
 
+
       if (refreshToken && !accessToken) {
         // We have refresh token but no access token - try to refresh
         const result = await dispatch(refreshAccessToken());
@@ -72,6 +82,7 @@ const App = () => {
         // We have access token - fetch user
         dispatch(fetchCurrentUser());
       }
+
 
       setIsInitializing(false);
     };
@@ -97,7 +108,67 @@ const App = () => {
           top: 20,
         }}
       />
-      <Routes location={location}>
+      <AnimatePresence mode="wait">
+        <Routes location={location} key={location.pathname}>
+          {/* Public Routes - Redirect authenticated users to their dashboard */}
+          <Route
+            path="/"
+            element={
+              <PublicRoute restricted>
+                <Dashboard />
+              </PublicRoute>
+            }
+          />
+
+          {/* Auth Routes - Redirect if already logged in */}
+          <Route
+            path="/login"
+            element={
+              <PublicRoute restricted>
+                <Login />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              <PublicRoute restricted>
+                <Register />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              <PublicRoute restricted>
+                <ForgotPassword />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/reset-password"
+            element={
+              <PublicRoute restricted>
+                <ResetPassword />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/verify-email"
+            element={
+              <PublicRoute>
+                <VerifyEmail />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/resend-verification"
+            element={
+              <PublicRoute restricted>
+                <ResendVerification />
+              </PublicRoute>
+            }
+          />
         {/* Public Routes - Redirect authenticated users to their dashboard */}
         <Route
           path="/"
@@ -176,6 +247,15 @@ const App = () => {
           }
         />
 
+          {/* Admin Routes - Only for ADMIN role */}
+          <Route
+            path="/admin/*"
+            element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          />
         {/* Admin Routes - Only for ADMIN role */}
         <Route
           path="/admin/*"
@@ -186,15 +266,28 @@ const App = () => {
           }
         />
 
-        {/* Manager Routes - Only for MANAGER role */}
-        <Route
-          path="/manager/*"
-          element={
-            <ProtectedRoute allowedRoles={['MANAGER']}>
+          {/* Manager Routes - Only for MANAGER role */}
+          <Route
+            path="/manager"
+            element={
+              // <ProtectedRoute allowedRoles={['MANAGER']}>
+
               <ManagerLayout />
-            </ProtectedRoute>
-          }
-        />
+              // </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<ManagerHomePage />} />
+            <Route path="events" element={<ManagerEvents />} />
+            <Route path="vendors" element={<ManagerVendors />} />
+            <Route path="analytics" element={<ManagerAnalytics />} />
+            <Route path="chat" element={<ManagerChatPage />} />
+            <Route path="reports" element={<ManagerReports />} />
+            <Route path="profile" element={<ManagerProfile />} />
+            <Route path="logout" element={<ManagerLogout />} />
+          </Route>
+
+            
 
         {/* User Routes - Only for USER role */}
         <Route
@@ -218,33 +311,36 @@ const App = () => {
         </Route>
 
 
-        {/* Vendor Routes - For VENDOR role */}
-        <Route
-          path="/vendor/register"
-          element={
-            <PublicRoute>
-              <VendorRegistration />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/vendor"
-          element={
-            // <ProtectedRoute allowedRoles={['VENDOR']}>
-              <VendorLayout />
-            // </ProtectedRoute>
-          }
-        >
-          <Route path="dashboard" element={<VendorDashboard />} />
-          <Route path="booked-events" element={<BookedEvents />} />
-          <Route path="service-management" element={<ServiceManagement />} />
-          <Route path="messages" element={<ManagerChat />} />
-          <Route path="profile" element={<BusinessProfile />} />
-          <Route path="event/:id" element={<VendorEventDetails />} />
-          <Route path="settings" element={<AccountSettingsPage />} />
-        </Route>
-      </Routes>
+          {/* Vendor Routes - For VENDOR role */}
+          <Route
+            path="/vendor/register"
+            element={
+              <PublicRoute>
+                <VendorRegistration />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/vendor"
+            element={
+              <ProtectedRoute allowedRoles={['VENDOR']}>
+                <VendorLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="dashboard" element={<VendorDashboard />} />
+            <Route path="booked-events" element={<BookedEvents />} />
+            <Route path="service-management" element={<ServiceManagement />} />
+            <Route path="messages" element={<ManagerChat />} />
+            <Route path="profile" element={<BusinessProfile />} />
+            <Route path="event/:id" element={<VendorEventDetails />} />
+            <Route path="settings" element={<AccountSettingsPage />} />
+          </Route>
+        </Routes>
+      </AnimatePresence>
+
     </>
+
 
   );
 };
