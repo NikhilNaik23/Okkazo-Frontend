@@ -7,6 +7,7 @@ import StepEventDetails from "../../../components/Forms/EventWizard/StepEventDet
 import StepVendorSelection from "../../../components/Forms/EventWizard/StepVendorSelection";
 import StepReview from "../../../components/Forms/EventWizard/StepReview";
 import StepConfirmation from "../../../components/Forms/EventWizard/StepConfirmation";
+import { planningWizardSteps } from "../../../data/planningWizardData";
 
 const PlanningWizard = () => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -32,12 +33,7 @@ const PlanningWizard = () => {
     vendors: {}, // { 'Venue': vendorObj, 'Catering': vendorObj }
   });
   
-  const steps = [
-    { id: 1, title: "Event Details", desc: "Basic info & preferences" },
-    { id: 2, title: "Vendor Selection", desc: "Choose your team" },
-    { id: 3, title: "Review & Bill", desc: "Finalize your plan" },
-    { id: 4, title: "Confirmation", desc: "All set!" }
-  ];
+  const steps = planningWizardSteps;
 
   // Ensure active tab is valid
   React.useEffect(() => {

@@ -21,6 +21,9 @@ import ResendVerification from "./pages/Home/public/ResendVerification";
 // Admin Pages
 import AdminLayout from "./components/Layout/admin/AdminLayout";
 
+// Manager Pages
+import ManagerLayout from "./components/Layout/manager/ManagerLayout";
+
 // User Pages
 import UserDashboard from "./pages/user/Dashboard/UserDashboard";
 import PlanningWizard from "./pages/user/Events/PlanningWizard";
@@ -32,6 +35,15 @@ import UserProfile from "./pages/user/Profile/UserProfile";
 import Notifications from "./pages/user/Dashboard/Notifications";
 import EditProfile from "./pages/user/Profile/EditProfile";
 import AccountSettings from "./pages/user/Profile/AccountSettings";
+import VendorRegistration from "./pages/vendor/VendorRegistration";
+import VendorDashboard from "./pages/vendor/VendorDashboard";
+import VendorLayout from "./components/Layout/vendor/VendorLayout";
+import BookedEvents from "./pages/vendor/BookedEvents";
+import ServiceManagement from "./pages/vendor/ServiceManagement";
+import ManagerChat from "./pages/vendor/ManagerChat";
+import BusinessProfile from "./pages/vendor/BusinessProfile";
+import VendorEventDetails from "./pages/vendor/EventDetails";
+import AccountSettingsPage from "./pages/vendor/AccountSettings";
 
 const App = () => {
   const location = useLocation();
@@ -154,6 +166,16 @@ const App = () => {
           } 
         />
 
+        {/* Manager Routes - Only for MANAGER role */}
+        <Route 
+          path="/manager/*" 
+          element={
+            <ProtectedRoute allowedRoles={['MANAGER']}>
+              <ManagerLayout />
+            </ProtectedRoute>
+          } 
+        />
+
         {/* User Routes - Only for USER role */}
         <Route 
           path="/user/dashboard" 
@@ -235,9 +257,44 @@ const App = () => {
             </ProtectedRoute>
           } 
         />
+        <Route 
+          path="/user/notifications" 
+          element={
+            <ProtectedRoute allowedRoles={['USER']}>
+              <Notifications />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Vendor Routes - For VENDOR role */}
+        <Route 
+          path="/vendor/register" 
+          element={
+            <PublicRoute>
+              <VendorRegistration />
+            </PublicRoute>
+          } 
+        />
+        <Route 
+          path="/vendor" 
+          element={
+            <ProtectedRoute allowedRoles={['VENDOR']}>
+              <VendorLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="dashboard" element={<VendorDashboard />} />
+          <Route path="booked-events" element={<BookedEvents />} />
+          <Route path="service-management" element={<ServiceManagement />} />
+          <Route path="messages" element={<ManagerChat />} />
+          <Route path="profile" element={<BusinessProfile />} />
+          <Route path="event/:id" element={<VendorEventDetails />} />
+          <Route path="settings" element={<AccountSettingsPage />} />
+        </Route>
       </Routes>
     </AnimatePresence>
     </>
+    
   );
 };
 

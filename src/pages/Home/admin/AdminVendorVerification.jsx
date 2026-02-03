@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { mockVendors } from "../../../data/adminData";
 
 import {
   Search,
@@ -19,7 +20,9 @@ import {
   Plus
 } from "lucide-react";
 
-const MOCK_VENDORS = [
+const MOCK_VENDORS = mockVendors;
+
+/*const MOCK_VENDORS_OLD = [
   {
     id: "V-92842",
     name: "EcoMart Solutions",
@@ -100,7 +103,7 @@ const MOCK_VENDORS = [
     },
     logoColor: "bg-red-100 text-red-600"
   }
-];
+];*/
 
 const AdminVendorVerification = () => {
   const [selectedVendorId, setSelectedVendorId] = useState(MOCK_VENDORS[0].id);

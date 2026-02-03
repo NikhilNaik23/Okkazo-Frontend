@@ -1,28 +1,5 @@
 import React from "react";
-import { BsFileEarmarkText, BsPersonCheck, BsPatchCheckFill } from "react-icons/bs";
-import { FaUserCircle } from "react-icons/fa"; // Fallback for user image
-
-// Using generic icons that fit the description
-const benefits = [
-  {
-    icon: <BsFileEarmarkText className="text-xl text-white" />,
-    title: "5% Service Fee Transparency",
-    description:
-      "No hidden costs. Keep more of your revenue with our industry-leading flat fee model.",
-  },
-  {
-    icon: <BsPersonCheck className="text-xl text-white" />,
-    title: "Expert Event Managers",
-    description:
-      "Access dedicated support and on-site experts to ensure your high-stakes events run perfectly.",
-  },
-  {
-    icon: <BsPatchCheckFill className="text-xl text-white" />,
-    title: "Seamless Vendor Negotiations",
-    description:
-      "Connect with pre-vetted vendors and manage contracts and payments within the app.",
-  },
-];
+import { benefits, testimonial } from "../../../data/publicData.jsx";
 
 const Testimonials = () => {
   return (
@@ -63,20 +40,20 @@ const Testimonials = () => {
              <div className="flex items-center gap-4 mb-6">
                 <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-200">
                     {/* Placeholder for user image */}
-                    <img src="https://i.pravatar.cc/150?u=sarah" alt="Sarah Jenkins" className="w-full h-full object-cover" />
+                    <img src={testimonial.avatar} alt={testimonial.name} className="w-full h-full object-cover" />
                 </div>
                 <div>
-                    <h5 className="font-bold text-[#0b2d49]">Sarah Jenkins</h5>
-                    <p className="text-xs text-gray-400 uppercase tracking-wide">Festival Director</p>
+                    <h5 className="font-bold text-[#0b2d49]">{testimonial.name}</h5>
+                    <p className="text-xs text-gray-400 uppercase tracking-wide">{testimonial.role}</p>
                 </div>
              </div>
              
              <p className="text-gray-600 italic leading-relaxed mb-6">
-                 "Switching to this platform was the best decision we made for Groove Music. The ticket management is flawless and our vendors love the streamlined portal."
+                 "{testimonial.quote}"
              </p>
              
              <div className="flex text-[#d7a444] gap-1">
-                 {[...Array(5)].map((_, i) => (
+                 {[...Array(testimonial.rating)].map((_, i) => (
                      <span key={i}>★</span>
                  ))}
              </div>

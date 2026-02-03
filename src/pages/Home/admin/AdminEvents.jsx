@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { mockAdminEvents } from "../../../data/adminData";
 
 import InternalEventCard from "../../../components/Global/cards/InternalEventCard";
 import { 
@@ -13,7 +14,9 @@ import {
   Briefcase
 } from "lucide-react";
 
-const MOCK_EVENTS = [
+const MOCK_EVENTS = mockAdminEvents;
+
+/*const MOCK_EVENTS_OLD = [
   {
     id: 1,
     title: "Summer Soundwaves 2024",
@@ -54,7 +57,7 @@ const MOCK_EVENTS = [
     status: "PENDING",
     image: "https://images.unsplash.com/photo-1628194380993-97ae0c868427?q=80&w=1000&auto=format&fit=crop"
   }
-];
+];*/
 
 const ManualEntryCard = () => {
     return (
