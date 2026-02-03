@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { managerNavItems, managerFooterItems } from "../../data/managerData";
+import { managerNavItems, managerFooterItems } from "../../../data/managerData";
 
 const NAV_ITEMS = managerNavItems;
 const FOOTER_ITEMS = managerFooterItems;

@@ -21,6 +21,9 @@ import ResendVerification from "./pages/Home/public/ResendVerification";
 // Admin Pages
 import AdminLayout from "./components/Layout/admin/AdminLayout";
 
+// Manager Pages
+import ManagerLayout from "./components/Layout/manager/ManagerLayout";
+
 // User Pages
 import UserDashboard from "./pages/user/Dashboard/UserDashboard";
 import PlanningWizard from "./pages/user/Events/PlanningWizard";
@@ -159,6 +162,16 @@ const App = () => {
           element={
             <ProtectedRoute allowedRoles={['ADMIN']}>
               <AdminLayout />
+            </ProtectedRoute>
+          } 
+        />
+
+        {/* Manager Routes - Only for MANAGER role */}
+        <Route 
+          path="/manager/*" 
+          element={
+            <ProtectedRoute allowedRoles={['MANAGER']}>
+              <ManagerLayout />
             </ProtectedRoute>
           } 
         />
