@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from "react";
-import Navbar from "../../../components/Layout/user/Navbar";
-import Footer from "../../../components/Layout/user/Footer";
 import { BsCalendarEvent, BsGeoAlt, BsQrCode, BsCheckCircleFill, BsThreeDotsVertical, BsPlusLg } from "react-icons/bs";
 import { Link } from "react-router-dom";
 import { toast, Toaster } from "react-hot-toast";
@@ -40,10 +38,9 @@ const MyEvents = () => {
 
     return (
         <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
-            <Navbar />
             <Toaster position="top-center" />
 
-            <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-32 pb-20">
+            <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-12 pb-20">
                 {/* Header Tabs */}
                 <div className="flex items-center gap-12 border-b border-gray-200 mb-10 overflow-x-auto whitespace-nowrap scrollbar-hide">
                     <button 
@@ -182,8 +179,6 @@ const MyEvents = () => {
                     )
                 )}
             </main>
-
-            <Footer />
         </div>
     );
 };

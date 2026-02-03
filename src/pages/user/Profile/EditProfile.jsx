@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
-import Navbar from "../../../components/Layout/user/Navbar";
-import Footer from "../../../components/Layout/user/Footer";
 import LocationPicker from "../../../components/Map/LocationPicker";
 import { BsPencil, BsX, BsGeoAlt } from "react-icons/bs";
 import { toast } from "react-hot-toast";
@@ -103,9 +101,7 @@ const EditProfile = () => {
 
     return (
         <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
-            <Navbar />
-
-            <main className="flex-1 max-w-4xl mx-auto w-full px-6 pt-32 pb-20">
+            <main className="flex-1 max-w-4xl mx-auto w-full px-6 pt-12 pb-20">
                 <div className="mb-10">
                     <h1 className="text-4xl font-black mb-2 tracking-tight">Edit Profile</h1>
                     <p className="text-gray-500 font-medium tracking-tight">Manage your personal information and preferences.</p>
@@ -283,8 +279,6 @@ const EditProfile = () => {
                     </form>
                 )}
             </main>
-
-            <Footer />
         </div>
     );
 };

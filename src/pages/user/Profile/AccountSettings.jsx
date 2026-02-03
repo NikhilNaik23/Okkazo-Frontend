@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import Navbar from "../../../components/Layout/user/Navbar";
-import Footer from "../../../components/Layout/user/Footer";
 import { BsShieldLock, BsBell, BsEye, BsLink45Deg } from "react-icons/bs";
 import { FaGoogle, FaFacebookF } from "react-icons/fa";
 import { toast } from "react-hot-toast";
@@ -76,9 +74,7 @@ const AccountSettings = () => {
 
     return (
         <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
-            <Navbar />
-
-            <main className="flex-1 max-w-4xl mx-auto w-full px-6 pt-32 pb-20">
+            <main className="flex-1 max-w-4xl mx-auto w-full px-6 pt-12 pb-20">
                 <div className="mb-10">
                     <h1 className="text-4xl font-black mb-2 tracking-tight">Account Settings</h1>
                     <p className="text-gray-500 font-medium tracking-tight">Manage your account preferences and security settings.</p>
@@ -220,7 +216,6 @@ const AccountSettings = () => {
                         <div className="flex items-center justify-end gap-6 pt-10">
                             <button 
                                 onClick={() => navigate("/user/profile")}
-                                disabled={isSaving}
                                 className="text-gray-400 font-black text-sm uppercase tracking-widest hover:text-[#0b2d49] transition-colors disabled:opacity-50"
                             >
                                 Cancel
@@ -241,8 +236,6 @@ const AccountSettings = () => {
                     </div>
                 )}
             </main>
-
-            <Footer />
         </div>
     );
 };

@@ -1,9 +1,7 @@
 import React from "react";
-import { Link, useNavigate } from "react-router";
+import { useNavigate, Link } from "react-router-dom";
 import { useSelector } from "react-redux";
-import Navbar from "../../../components/Layout/user/Navbar";
 import { BsSearch, BsFilter, BsArrowRight, BsArrowLeft, BsHeart, BsHeartFill, BsGeoAlt } from "react-icons/bs";
-import Footer from "../../../components/Layout/user/Footer";
 import { popularEvents, allEvents } from "../../../data/eventsData";
 import { selectUser } from "../../../store/slices/authSlice";
 
@@ -27,9 +25,7 @@ const UserDashboard = () => {
 
   return (
     <div className="min-h-screen bg-linear-to-br from-[#e9eff1] via-[#f3ddb1]/30 to-[#e9eff1] font-sans w-full overflow-x-hidden flex flex-col">
-      <Navbar />
-
-      <main className="max-w-7xl mx-auto px-4 md:px-6 pt-20 md:pt-24">
+      <main className="max-w-7xl mx-auto px-4 md:px-6 pt-8 md:pt-12">
         
         {/* Welcome & Search Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 md:mb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -176,7 +172,6 @@ const UserDashboard = () => {
         </div>
 
       </main>
-      <Footer/>
     </div>
   );
 };
