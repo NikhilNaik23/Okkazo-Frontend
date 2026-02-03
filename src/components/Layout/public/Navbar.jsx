@@ -2,10 +2,9 @@ import React, { useState } from "react";
 import { GiHamburgerMenu } from "react-icons/gi";
 import { RiCloseLargeFill } from "react-icons/ri";
 import { Link } from "react-router-dom";
+import { publicNavMenus } from "../../../data/publicNavData";
 
-const menus = [
-  { name: "ExploreEvents", path: "#exploreEvents" },
-];
+const menus = publicNavMenus;
 
 const Navbar = () => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);

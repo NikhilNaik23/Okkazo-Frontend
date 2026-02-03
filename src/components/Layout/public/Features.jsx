@@ -1,30 +1,5 @@
 import React from "react";
-import { BsMegaphone, BsTicketPerforated } from "react-icons/bs";
-import { MdEventNote } from "react-icons/md";
-
-const features = [
-  {
-    icon: <MdEventNote className="text-white text-2xl" />,
-    title: "Event Organizing",
-    description:
-      "Streamline logistics with our smart planning wizard. Manage schedules, guests, and venues effortlessly.",
-    bg: "bg-[#5a5b44]", 
-  },
-  {
-    icon: <BsMegaphone className="text-white text-2xl" />,
-    title: "Marketing & Promotion",
-    description:
-      "Reach thousands of potential attendees with built-in email tools, social integration, and targeted ads.",
-    bg: "bg-[#d7a444]",
-  },
-  {
-    icon: <BsTicketPerforated className="text-white text-2xl" />,
-    title: "Ticket Management",
-    description:
-      "Secure digital ticketing with QR validation. Track real-time sales and revenue directly from your dashboard.",
-    bg: "bg-[#0b2d49]", 
-  },
-];
+import { features } from "../../../data/publicData.jsx";
 
 const Features = () => {
   return (

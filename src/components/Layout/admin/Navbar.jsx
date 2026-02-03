@@ -1,38 +1,13 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { MdDashboard, MdEvent, MdStorefront, MdBarChart, MdAccountBalanceWallet, MdSecurity, MdSettings, MdPerson, MdLogout, MdClose } from "react-icons/md";
+import { MdLogout, MdClose } from "react-icons/md";
+import { adminMenuSections, adminBottomItems } from "../../../data/adminData";
 
 const Navbar = ({ isOpen, onClose }) => {
   const location = useLocation();
 
-  const menuSections = [
-    {
-      title: "General",
-      items: [
-        { path: "/admin/dashboard", label: "Dashboard", icon: MdDashboard },
-        { path: "/admin/events", label: "Events", icon: MdEvent },
-        { path: "/admin/vendors", label: "Vendors", icon: MdStorefront }
-      ]
-    },
-    {
-      title: "Financial",
-      items: [
-        { path: "/admin/reports", label: "Reports", icon: MdBarChart },
-        { path: "/admin/ledger", label: "Ledger", icon: MdAccountBalanceWallet }
-      ]
-    },
-    {
-      title: "System",
-      items: [
-        { path: "/admin/team-access", label: "Team Access", icon: MdSecurity },
-        { path: "/admin/settings", label: "Settings", icon: MdSettings }
-      ]
-    }
-  ];
-
-  const bottomItems = [
-    { path: "/admin/profile", label: "Profile", icon: MdPerson }
-  ];
+  const menuSections = adminMenuSections;
+  const bottomItems = adminBottomItems;
 
   const handleLogout = () => {
     // Add your logout logic here
