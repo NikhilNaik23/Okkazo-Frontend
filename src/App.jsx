@@ -27,6 +27,7 @@ import AdminLayout from "./components/Layout/admin/AdminLayout";
 import ManagerLayout from "./components/Layout/manager/ManagerLayout";
 import ManagerHomePage from "./pages/Home/manager/ManagerHomePage";
 import ManagerEvents from "./pages/Home/manager/ManagerEvents";
+import ManagerEventDetails from "./pages/Home/manager/ManagerEventDetails";
 import ManagerVendors from "./pages/Home/manager/ManagerVendors";
 import ManagerAnalytics from "./pages/Home/manager/ManagerAnalytics";
 import ManagerChatPage from "./pages/Home/manager/ManagerChatPage";
@@ -279,6 +280,7 @@ const App = () => {
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<ManagerHomePage />} />
             <Route path="events" element={<ManagerEvents />} />
+            <Route path="events/:id" element={<ManagerEventDetails />} />
             <Route path="vendors" element={<ManagerVendors />} />
             <Route path="analytics" element={<ManagerAnalytics />} />
             <Route path="chat" element={<ManagerChatPage />} />
