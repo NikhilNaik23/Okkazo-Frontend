@@ -1,13 +1,22 @@
 import React, { useState } from "react";
-import { Link, useLocation } from "react-router";
+import { Link, useLocation } from "react-router-dom";
 import { BsBell, BsPersonCircle } from "react-icons/bs";
 import { GiHamburgerMenu } from "react-icons/gi";
 import { RiCloseLargeFill } from "react-icons/ri";
+import { motion, AnimatePresence } from "framer-motion";
 
 const Navbar = () => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const location = useLocation();
   const isActive = (path) => location.pathname === path;
+
+  const navLinks = [
+    { name: "Dashboard", path: "/user/dashboard" },
+    { name: "Planning Wizard", path: "/user/planning-wizard" },
+    { name: "Promote", path: "/user/promote" },
+    { name: "My Events", path: "/user/my-events" },
+  ];
+
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0b2d49] shadow-md border-b border-[#071d30]">
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
@@ -19,46 +28,24 @@ const Navbar = () => {
 
         {/* Navigation Links */}
         <div className="hidden md:flex items-center gap-8">
-          <Link
-            to="/user/dashboard"
-            className={`text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all ${
-                isActive('/user/dashboard') 
-                ? 'bg-[#d7a444] text-[#0b2d49]' 
-                : 'text-gray-300 hover:text-[#d7a444] bg-transparent shadow-none'
-            }`}
-          >
-            Dashboard
-          </Link>
-          <Link
-            to="/user/planning-wizard"
-            className={`text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all ${
-                isActive('/user/planning-wizard') 
-                ? 'bg-[#d7a444] text-[#0b2d49]' 
-                : 'text-gray-300 hover:text-[#d7a444] bg-transparent shadow-none'
-            }`}
-          >
-            Planning Wizard
-          </Link>
-          <Link
-            to="/user/promote"
-            className={`text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all ${
-                isActive('/user/promote') 
-                ? 'bg-[#d7a444] text-[#0b2d49]' 
-                : 'text-gray-300 hover:text-[#d7a444] bg-transparent shadow-none'
-            }`}
-          >
-            Promote
-          </Link>
-          <Link
-            to="/user/my-events"
-            className={`text-sm font-bold px-4 py-2 rounded-lg shadow-sm transition-all ${
-                isActive('/user/my-events') 
-                ? 'bg-[#d7a444] text-[#0b2d49]' 
-                : 'text-gray-300 hover:text-[#d7a444] bg-transparent shadow-none'
-            }`}
-          >
-            My Events
-          </Link>
+          {navLinks.map((link) => (
+            <Link
+              key={link.path}
+              to={link.path}
+              className={`relative text-sm font-bold px-4 py-2 rounded-lg transition-colors duration-300 ${
+                isActive(link.path) ? "text-[#0b2d49]" : "text-gray-300 hover:text-[#d7a444]"
+              }`}
+            >
+              <span className="relative z-10">{link.name}</span>
+              {isActive(link.path) && (
+                <motion.div
+                  layoutId="activeTab"
+                  className="absolute inset-0 bg-[#d7a444] rounded-lg shadow-sm"
+                  transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                />
+              )}
+            </Link>
+          ))}
         </div>
 
         {/* Right Actions */}
@@ -101,50 +88,25 @@ const Navbar = () => {
                   <p className="text-xs text-gray-400">Attendee</p>
                </div>
             </div>
-            <Link
-              to="/user/dashboard"
-              onClick={() => setIsMobileOpen(false)}
-              className={`text-sm font-bold px-4 py-3 rounded-lg shadow-sm text-center transition-all ${
-                  isActive('/user/dashboard') 
-                  ? 'bg-[#d7a444] text-[#0b2d49]' 
-                  : 'text-gray-300 hover:text-[#d7a444] bg-transparent'
-              }`}
-            >
-              Dashboard
-            </Link>
-            <Link
-              to="/user/planning-wizard"
-              onClick={() => setIsMobileOpen(false)}
-              className={`text-sm font-bold px-4 py-3 rounded-lg shadow-sm text-center transition-all ${
-                  isActive('/user/planning-wizard') 
-                  ? 'bg-[#d7a444] text-[#0b2d49]' 
-                  : 'text-gray-300 hover:text-[#d7a444] bg-transparent'
-              }`}
-            >
-              Planning Wizard
-            </Link>
-            <Link
-              to="/user/promote"
-              onClick={() => setIsMobileOpen(false)}
-              className={`text-sm font-bold px-4 py-3 rounded-lg shadow-sm text-center transition-all ${
-                  isActive('/user/promote') 
-                  ? 'bg-[#d7a444] text-[#0b2d49]' 
-                  : 'text-gray-300 hover:text-[#d7a444] bg-transparent shadow-none'
-              }`}
-            >
-              Promote
-            </Link>
-            <Link
-              to="/user/my-events"
-              onClick={() => setIsMobileOpen(false)}
-              className={`text-sm font-bold px-4 py-3 rounded-lg shadow-sm text-center transition-all ${
-                  isActive('/user/my-events') 
-                  ? 'bg-[#d7a444] text-[#0b2d49]' 
-                  : 'text-gray-300 hover:text-[#d7a444] bg-transparent'
-              }`}
-            >
-              My Events
-            </Link>
+            {navLinks.map((link) => (
+              <Link
+                key={link.path}
+                to={link.path}
+                onClick={() => setIsMobileOpen(false)}
+                className={`relative text-sm font-bold px-4 py-3 rounded-lg text-center transition-all ${
+                  isActive(link.path) ? "text-[#0b2d49]" : "text-gray-300 hover:text-[#d7a444]"
+                }`}
+              >
+                <span className="relative z-10">{link.name}</span>
+                {isActive(link.path) && (
+                  <motion.div
+                    layoutId="activeTabMobile"
+                    className="absolute inset-0 bg-[#d7a444] rounded-lg"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                  />
+                )}
+              </Link>
+            ))}
           </div>
         </div>
       )}

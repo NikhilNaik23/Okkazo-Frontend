@@ -9,7 +9,7 @@ import { forgotPassword, selectIsLoading } from "../../../store/slices/authSlice
 const ForgotPassword = () => {
   const dispatch = useDispatch();
   const isLoading = useSelector(selectIsLoading);
-  
+
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
@@ -37,67 +37,75 @@ const ForgotPassword = () => {
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -50 }}
       transition={{ duration: 0.5, ease: "easeInOut" }}
-      className="flex min-h-screen w-full bg-linear-to-br from-[#e9eff1] via-white to-[#f3ddb1]/20"
+      className="flex min-h-screen w-full bg-[#EBF4F6]"
     >
       {/* Left Side - Image & Branding */}
-      <div className="hidden lg:flex w-1/2 relative bg-[#0b2d49] items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 z-0 opacity-40">
+      <div className="hidden lg:flex w-1/2 relative bg-[#09637E] items-center justify-center overflow-hidden">
+        {/* Background Image Overlay with Gradient */}
+        <div className="absolute inset-0 z-0">
           <img
             src="https://images.unsplash.com/photo-1540575467063-178a50c2df87?q=80&w=2670&auto=format&fit=crop"
             alt="Event Background"
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover opacity-40 mix-blend-overlay"
           />
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#09637E] via-[#09637E]/40 to-transparent" />
         </div>
 
-        <div className="relative z-10 p-12 text-white">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="bg-white/10 p-2 rounded-lg backdrop-blur-sm">
-              <img src="/public_logo.png" alt="Okkazo" className="h-8 md:h-10 w-auto" />
+        {/* Branding Content */}
+        <div className="relative z-10 p-16 text-white max-w-xl">
+          <div className="flex items-center gap-3 mb-10">
+            {/* Logo */}
+            <div className="bg-white/10 p-3 rounded-2xl backdrop-blur-md border border-white/20">
+              <img src="/public_logo.png" alt="Okkazo" className="h-10 w-auto" />
             </div>
           </div>
-          <h1 className="text-5xl font-bold mb-6 leading-tight">
+          <h1 className="text-6xl font-black mb-8 leading-[1.1] tracking-tight">
             Forgot your <br /> password?
           </h1>
-          <p className="text-lg text-gray-200 max-w-md leading-relaxed">
+          <p className="text-xl text-white/80 leading-relaxed mb-12">
             No worries! Enter your email and we'll send you a link to reset your password.
           </p>
+
+          <p className="absolute bottom-12 left-16 text-[10px] font-black uppercase tracking-[0.2em] text-white/40">© 2026 OKKAZO GLOBAL INC.</p>
         </div>
       </div>
 
       {/* Right Side - Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 md:p-12">
-        <div className="w-full max-w-md">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-[#EBF4F6]">
+        <div className="max-w-md w-full">
           {/* Mobile Logo */}
-          <div className="flex lg:hidden items-center gap-3 mb-8">
-            <div className="bg-[#0b2d49] p-2 rounded-lg">
-              <img src="/public_logo.png" alt="Okkazo" className="h-8 w-auto" />
+          <div className="flex lg:hidden justify-center mb-8">
+            <div className="w-10 h-10 bg-[#09637E] rounded-xl flex items-center justify-center text-white font-bold text-xl">
+              O
             </div>
           </div>
 
           {!submitted ? (
             <>
-              <h2 className="text-3xl font-bold text-[#0b2d49] mb-2">
-                Reset Password
-              </h2>
-              <p className="text-gray-500 mb-8">
-                Enter your email address and we'll send you instructions to reset your password.
-              </p>
+              <div className="mb-10 text-center lg:text-left">
+                <h2 className="text-4xl font-black text-[#09637E] mb-3 tracking-tight">
+                  Reset Password
+                </h2>
+                <p className="text-[#708aa0] font-medium max-w-sm">
+                  Enter your email address and we'll send you instructions to reset your password.
+                </p>
+              </div>
 
-              <form onSubmit={handleSubmit} className="space-y-5">
+              <form onSubmit={handleSubmit} className="flex flex-col gap-6">
                 {/* Email Input */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                <div className="space-y-2">
+                  <label className="text-xs font-black text-[#09637E] uppercase tracking-widest ml-1">
                     Email Address
                   </label>
-                  <div className="relative">
-                    <MdEmail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                  <div className="relative group">
+                    <MdEmail className="absolute left-4 top-1/2 -translate-y-1/2 text-[#708aa0] group-focus-within:text-[#09637E] transition-colors" size={20} />
                     <input
                       type="email"
                       name="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@example.com"
-                      className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 focus:border-[#0b2d49] focus:ring-2 focus:ring-[#0b2d49]/20 outline-none transition-all duration-200"
+                      className="w-full pl-12 pr-5 py-4 rounded-2xl bg-white border border-gray-100 focus:border-[#7AB2B2] focus:ring-4 focus:ring-[#7AB2B2]/10 outline-none transition-all duration-300 font-medium text-sm placeholder:text-[#708aa0]"
                       required
                     />
                   </div>
@@ -107,43 +115,50 @@ const ForgotPassword = () => {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full bg-[#0b2d49] text-white py-3 rounded-xl font-semibold hover:bg-[#0a2640] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full mt-2 bg-gradient-to-r from-[#09637E] to-[#088395] hover:from-[#088395] hover:to-[#09637E] text-white font-black py-4 rounded-[1.25rem] transition-all duration-300 shadow-xl shadow-[#09637E]/20 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  {isLoading ? "Sending..." : "Send Reset Link"}
+                  {isLoading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Sending...
+                    </>
+                  ) : "Send Reset Link"}
                 </button>
               </form>
             </>
           ) : (
-            <div className="text-center">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <MdEmail className="text-green-600" size={40} />
+            <div className="text-center animate-[fadeInUp_0.5s_ease-out]">
+              <div className="w-24 h-24 bg-gradient-to-br from-[#088395]/20 to-[#09637E]/30 rounded-[2rem] flex items-center justify-center text-[#088395] mx-auto mb-8 shadow-lg shadow-[#088395]/10">
+                <MdEmail size={48} />
               </div>
-              <h2 className="text-3xl font-bold text-[#0b2d49] mb-4">
+              <h2 className="text-3xl font-black text-[#09637E] mb-4">
                 Check Your Email
               </h2>
-              <p className="text-gray-500 mb-6">
-                We've sent a password reset link to <strong>{email}</strong>. 
+              <p className="text-[#708aa0] font-medium leading-relaxed mb-8">
+                We've sent a password reset link to <span className="text-[#09637E] font-bold">{email}</span>.
                 Please check your inbox and follow the instructions.
               </p>
-              <p className="text-sm text-gray-400 mb-8">
-                Didn't receive the email? Check your spam folder or{" "}
-                <button
-                  onClick={() => setSubmitted(false)}
-                  className="text-[#0b2d49] hover:underline font-medium"
-                >
-                  try again
-                </button>
-              </p>
+              <div className="bg-white/50 backdrop-blur-sm rounded-2xl p-6 mb-8 border border-white">
+                <p className="text-sm text-[#708aa0] font-medium">
+                  Didn't receive the email? Check your spam folder or{" "}
+                  <button
+                    onClick={() => setSubmitted(false)}
+                    className="text-[#09637E] font-black hover:underline underline-offset-4 decoration-2"
+                  >
+                    try again
+                  </button>
+                </p>
+              </div>
             </div>
           )}
 
           {/* Back to Login Link */}
-          <div className="mt-8 text-center">
+          <div className="mt-10 text-center">
             <Link
               to="/login"
-              className="text-[#0b2d49] hover:underline font-medium"
+              className="group inline-flex items-center gap-2 text-[#708aa0] font-bold hover:text-[#09637E] transition-colors"
             >
-              ← Back to Login
+              <span className="group-hover:-translate-x-1 transition-transform">←</span> Back to Login
             </Link>
           </div>
         </div>
