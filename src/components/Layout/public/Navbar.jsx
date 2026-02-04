@@ -13,16 +13,17 @@ const Navbar = () => {
   };
   return (
     <>
-      <nav className="fixed top-0 left-0 right-0 w-full bg-white z-50">
+      <header className="fixed top-6 left-0 right-0 z-50 flex justify-center px-4 md:px-10">
+        <nav className="w-full max-w-7xl bg-[#7AB2B2]/40 backdrop-blur-xl rounded-2xl border border-white/30 shadow-xl transition-all duration-300 ring-1 ring-white/10">
         <div className="hidden md:flex justify-between max-w-7xl mx-auto px-10 h-16 items-center">
           <div className="flex justify-center items-center gap-12">
             <Link to="/">
-              <img src="/public_logo.png" alt="Okkazo-logo" className="h-12 w-auto object-contain" />
+              <img src="/public_logo.png" alt="Okkazo-logo" className="h-14 pt-4 w-auto object-contain" />
             </Link>
-            <ul className="flex justify-around items-center gap-8 text-sm font-semibold text-gray-400">
+            <ul className="flex justify-around items-center gap-8 text-sm font-bold text-[#088395]">
               {menus.map((menu, index) => (
                 <Link to={menu.path} key={index}>
-                  <li className="cursor-pointer hover:text-[#d7a444] transition-colors">
+                  <li className="cursor-pointer hover:text-[#09637E] transition-colors">
                     {menu.name}
                   </li>
                 </Link>
@@ -33,7 +34,7 @@ const Navbar = () => {
             <Link to="/login">
               <button
                 type="button"
-                className="text-sm font-semibold text-gray-400 hover:text-[#d7a444] transition-colors"
+                className="text-sm font-bold text-[#088395] hover:text-[#09637E] transition-colors"
               >
                 Login
               </button>
@@ -41,43 +42,43 @@ const Navbar = () => {
             <Link to="/register">
               <button
                 type="button"
-                className="bg-[#0b2d49] text-white py-2 px-6 rounded-lg text-sm font-bold hover:bg-[#d7a444] transition-colors shadow-sm"
+                className="bg-[#09637E] text-white py-2 px-6 rounded-lg text-sm font-bold hover:bg-[#08556d] transition-colors shadow-sm"
               >
                 Get Started
               </button>
             </Link>
           </div>
         </div>
-        <div className="md:hidden flex justify-between items-center p-5">
+        <div className="md:hidden flex justify-between items-center p-4">
           <div>
             <Link to="/">
               <img src="/mobile_logo.png" alt="Okkazo-logo" className="h-8 w-auto object-contain" />
             </Link>
           </div>
           {isMobileOpen ? (
-            <RiCloseLargeFill className="text-2xl cursor-pointer" onClick={handleHamburger} />
+            <RiCloseLargeFill className="text-2xl cursor-pointer text-white" onClick={handleHamburger} />
           ) : (
-            <GiHamburgerMenu className="text-2xl cursor-pointer" onClick={handleHamburger} />
+            <GiHamburgerMenu className="text-2xl cursor-pointer text-white" onClick={handleHamburger} />
           )}
           {isMobileOpen && (
             <div className="fixed inset-0 z-40" onClick={handleHamburger}></div>
           )}{" "}
           {isMobileOpen && (
-            <div className="absolute top-16 left-0 w-full bg-white shadow-lg z-50 animate-slide-down transition-all duration-300 ease-in-out border-t border-gray-100">
+            <div className="absolute top-16 left-0 w-full bg-[#0D47A1]/95 backdrop-blur-2xl shadow-xl z-50 animate-slide-down transition-all duration-300 ease-in-out border-t border-white/10 rounded-b-2xl">
               <ul className="flex flex-col gap-5 p-5">
                 {menus.map((menu, index) => (
                   <Link to={menu.path} key={index} onClick={handleHamburger}>
-                    <li className="cursor-pointer text-gray-400 font-semibold hover:text-[#d7a444]">
+                    <li className="cursor-pointer text-[#088395] font-bold hover:text-[#09637E]">
                       {menu.name}
                     </li>
                   </Link>
                 ))}
               </ul>
-              <div className="flex flex-col gap-3 p-5 border-t border-gray-100">
+              <div className="flex flex-col gap-3 p-5 border-t border-white/10">
                 <Link to="/login" onClick={handleHamburger}>
                   <button
                     type="button"
-                    className="text-md font-semibold text-gray-400 hover:text-[#d7a444] py-2 w-full text-left"
+                    className="text-md font-bold text-[#088395] hover:text-[#09637E] py-2 w-full text-left"
                   >
                     Login
                   </button>
@@ -85,7 +86,7 @@ const Navbar = () => {
                 <Link to="/register" onClick={handleHamburger}>
                   <button
                     type="button"
-                    className="bg-[#0b2d49] text-white py-2 px-6 rounded-lg text-md font-bold hover:bg-[#d7a444] transition-colors w-full"
+                    className="bg-[#09637E] text-white py-2 px-6 rounded-lg text-md font-bold hover:bg-[#08556d] transition-colors w-full"
                   >
                     Get Started
                   </button>
@@ -94,7 +95,8 @@ const Navbar = () => {
             </div>
           )}
         </div>
-      </nav>
+        </nav>
+      </header>
     </>
   );
 };

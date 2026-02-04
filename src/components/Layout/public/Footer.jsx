@@ -4,30 +4,28 @@ import { Link } from "react-router-dom";
 
 const Footer = () => {
   return (
-    <footer className="bg-[#0b2d49] text-white py-10">
+    <footer className="bg-[#09637E] text-white py-10">
       <div className="container mx-auto px-6 md:px-12 lg:px-20">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           {/* Brand/About */}
           <div className="md:col-span-1">
-            <div className="flex items-center gap-2 mb-6">
-               <div className="w-8 h-8 bg-[#d7a444] rounded-lg flex items-center justify-center">
-                   {/* Simple Logo Icon Placeholder */}
-                   <span className="font-bold text-[#0b2d49] text-lg">O</span>
-               </div>
-               <span className="text-xl font-bold">Okkazo</span>
+            <div className="flex items-center gap-2 mb-2">
+              <Link to="/">
+                <img src="/public_logo.png" alt="Okkazo-logo" className="h-14 pt-4 w-auto object-contain" />
+              </Link>
             </div>
             <p className="text-gray-400 text-sm leading-relaxed mb-6">
               Empowering event organizers and attendees with seamless management
               tools and unforgettable experiences.
             </p>
             <div className="flex gap-3">
-              <a href="#" className="w-8 h-8 rounded-full bg-[#1e293b] flex items-center justify-center text-gray-400 hover:text-white hover:bg-[#d7a444] transition-colors">
+              <a href="#" className="w-8 h-8 rounded-full bg-[#1e293b] flex items-center justify-center text-gray-400 hover:text-white hover:bg-[#03A9F4] transition-colors">
                 <FaFacebookF size={14} />
               </a>
-              <a href="#" className="w-8 h-8 rounded-full bg-[#1e293b] flex items-center justify-center text-gray-400 hover:text-white hover:bg-[#d7a444] transition-colors">
+              <a href="#" className="w-8 h-8 rounded-full bg-[#1e293b] flex items-center justify-center text-gray-400 hover:text-white hover:bg-[#03A9F4] transition-colors">
                 <FaTwitter size={14} />
               </a>
-              <a href="#" className="w-8 h-8 rounded-full bg-[#1e293b] flex items-center justify-center text-gray-400 hover:text-white hover:bg-[#d7a444] transition-colors">
+              <a href="#" className="w-8 h-8 rounded-full bg-[#1e293b] flex items-center justify-center text-gray-400 hover:text-white hover:bg-[#03A9F4] transition-colors">
                 <FaLinkedinIn size={14} />
               </a>
             </div>
@@ -66,7 +64,7 @@ const Footer = () => {
         </div>
 
         <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-gray-500">
-          <p>© 2024 EventPro. All rights reserved.</p>
+          <p>© 2026 Okkazo. All rights reserved.</p>
           <div className="flex gap-6">
             <Link to="#" className="hover:text-gray-300">Privacy Policy</Link>
             <Link to="#" className="hover:text-gray-300">Terms of Service</Link>

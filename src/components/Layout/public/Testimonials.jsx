@@ -3,7 +3,7 @@ import { benefits, testimonial } from "../../../data/publicData.jsx";
 
 const Testimonials = () => {
   return (
-    <section className="bg-[#0b2d49] py-20 relative overflow-hidden">
+    <section className="bg-[#09637E] py-20 relative overflow-hidden">
         {/* Background blobs for visual interest - optional based on strict design adherence but looks good */}
       <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-20 -mt-20"></div>
       <div className="absolute bottom-0 left-0 w-40 h-40 bg-white opacity-5 rounded-full -ml-10 -mb-10"></div>
@@ -43,7 +43,7 @@ const Testimonials = () => {
                     <img src={testimonial.avatar} alt={testimonial.name} className="w-full h-full object-cover" />
                 </div>
                 <div>
-                    <h5 className="font-bold text-[#0b2d49]">{testimonial.name}</h5>
+                    <h5 className="font-bold text-[#1565C0]">{testimonial.name}</h5>
                     <p className="text-xs text-gray-400 uppercase tracking-wide">{testimonial.role}</p>
                 </div>
              </div>
@@ -52,7 +52,7 @@ const Testimonials = () => {
                  "{testimonial.quote}"
              </p>
              
-             <div className="flex text-[#d7a444] gap-1">
+             <div className="flex text-[#03A9F4] gap-1">
                  {[...Array(testimonial.rating)].map((_, i) => (
                      <span key={i}>★</span>
                  ))}

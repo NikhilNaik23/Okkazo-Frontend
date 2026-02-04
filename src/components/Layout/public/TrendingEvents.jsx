@@ -10,7 +10,7 @@ const TrendingEvents = () => {
       <div className="container mx-auto px-6 md:px-12 lg:px-20">
         <div className="flex justify-between items-end mb-12">
           <div>
-            <h2 className="text-3xl font-bold text-[#0b2d49] mb-2">
+            <h2 className="text-3xl font-bold text-[#09637E] mb-2">
               Trending Public Events
             </h2>
             <p className="text-gray-500">
@@ -43,7 +43,7 @@ const TrendingEvents = () => {
                   <span className="block text-xs font-bold text-gray-400 uppercase">
                     {event.date.month}
                   </span>
-                  <span className="block text-xl font-bold text-[#0b2d49]">
+                  <span className="block text-xl font-bold text-[#09637E]">
                     {event.date.day}
                   </span>
                 </div>
@@ -55,7 +55,7 @@ const TrendingEvents = () => {
                 >
                   {event.tag}
                 </span>
-                <h3 className="text-xl font-bold text-[#0b2d49] mb-2">
+                <h3 className="text-xl font-bold text-[#09637E] mb-2">
                   {event.title}
                 </h3>
                 <div className="flex items-center text-gray-400 text-sm mb-6">
@@ -64,10 +64,10 @@ const TrendingEvents = () => {
                 </div>
 
                 <div className="mt-auto flex items-center justify-between">
-                  <span className="text-xl font-bold text-[#0b2d49]">
+                  <span className="text-xl font-bold text-[#09637E]">
                     {event.price}
                   </span>
-                  <button className="px-5 py-2 rounded-lg bg-[#f3ddb1] text-[#0b2d49] font-semibold text-sm hover:bg-[#e9ce9d] transition-colors cursor-pointer">
+                  <button className="px-5 py-2 rounded-lg bg-[#7AB2B2] text-white hover:bg-[#09637E] transition-colors cursor-pointer">
                     Get Tickets
                   </button>
                 </div>

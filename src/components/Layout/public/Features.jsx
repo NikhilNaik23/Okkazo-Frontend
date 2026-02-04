@@ -6,7 +6,7 @@ const Features = () => {
     <section className="py-20 bg-white flex justify-center">
       <div className="container mx-auto px-6 md:px-12 lg:px-20">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-[#0b2d49] mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-[#09637E] mb-4">
             Powerful Tools for Every Occasion
           </h2>
           <p className="text-gray-500 text-lg">
@@ -25,7 +25,7 @@ const Features = () => {
               >
                 {feature.icon}
               </div>
-              <h3 className="text-xl font-bold text-[#0b2d49] mb-3">
+              <h3 className="text-xl font-bold text-[#0D47A1] mb-3">
                 {feature.title}
               </h3>
               <p className="text-gray-500 leading-relaxed">
