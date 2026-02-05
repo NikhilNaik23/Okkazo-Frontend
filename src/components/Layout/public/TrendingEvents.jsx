@@ -1,6 +1,7 @@
 import React from "react";
 import { MdPlace } from "react-icons/md";
 import { trendingEvents } from "../../../data/publicData.jsx";
+import { Link } from "react-router-dom";
 
 const events = trendingEvents;
 
@@ -67,9 +68,11 @@ const TrendingEvents = () => {
                   <span className="text-xl font-bold text-[#09637E]">
                     {event.price}
                   </span>
-                  <button className="px-5 py-2 rounded-lg bg-[#7AB2B2] text-white hover:bg-[#09637E] transition-colors cursor-pointer">
-                    Get Tickets
-                  </button>
+                  <Link to={"/login"}>
+                    <button className="px-5 py-2 rounded-lg bg-[#7AB2B2] text-white hover:bg-[#09637E] transition-colors cursor-pointer">
+                      Get Tickets
+                    </button>
+                  </Link>
                 </div>
               </div>
             </div>

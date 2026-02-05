@@ -1,3 +1,4 @@
 export const publicNavMenus = [
-  { name: "ExploreEvents", path: "#exploreEvents" }
+  { name: "ExploreEvents", path: "#exploreEvents" },
+  { name: "Pricing", path: "/pricing" }
 ];

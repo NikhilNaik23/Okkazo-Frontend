@@ -17,6 +17,8 @@ import ForgotPassword from "./pages/Home/public/ForgotPassword";
 import ResetPassword from "./pages/Home/public/ResetPassword";
 import VerifyEmail from "./pages/Home/public/VerifyEmail";
 import ResendVerification from "./pages/Home/public/ResendVerification";
+import Pricing from "./pages/Home/public/Pricing";
+import QuoteSuccess from "./pages/Home/public/QuoteSuccess";
 
 // Admin Pages
 import AdminLayout from "./components/Layout/admin/AdminLayout";
@@ -59,7 +61,7 @@ const App = () => {
     const initAuth = async () => {
       const refreshToken = localStorage.getItem('refreshToken');
       const accessToken = localStorage.getItem('accessToken');
-      
+
       if (refreshToken && !accessToken) {
         // We have refresh token but no access token - try to refresh
         const result = await dispatch(refreshAccessToken());
@@ -71,7 +73,7 @@ const App = () => {
         // We have access token - fetch user
         dispatch(fetchCurrentUser());
       }
-      
+
       setIsInitializing(false);
     };
 
@@ -87,8 +89,8 @@ const App = () => {
 
   return (
     <>
-      <Toaster 
-        position="top-center" 
+      <Toaster
+        position="top-center"
         toastOptions={{
           duration: 4000,
         }}
@@ -97,138 +99,156 @@ const App = () => {
         }}
       />
       <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
-        {/* Public Routes - Redirect authenticated users to their dashboard */}
-        <Route 
-          path="/" 
-          element={
-            <PublicRoute restricted>
-              <Dashboard />
-            </PublicRoute>
-          } 
-        />
-        
-        {/* Auth Routes - Redirect if already logged in */}
-        <Route 
-          path="/login" 
-          element={
-            <PublicRoute restricted>
-              <Login />
-            </PublicRoute>
-          } 
-        />
-        <Route 
-          path="/register" 
-          element={
-            <PublicRoute restricted>
-              <Register />
-            </PublicRoute>
-          } 
-        />
-        <Route 
-          path="/forgot-password" 
-          element={
-            <PublicRoute restricted>
-              <ForgotPassword />
-            </PublicRoute>
-          } 
-        />
-        <Route 
-          path="/reset-password" 
-          element={
-            <PublicRoute restricted>
-              <ResetPassword />
-            </PublicRoute>
-          } 
-        />
-        <Route 
-          path="/verify-email" 
-          element={
-            <PublicRoute>
-              <VerifyEmail />
-            </PublicRoute>
-          } 
-        />
-        <Route 
-          path="/resend-verification" 
-          element={
-            <PublicRoute restricted>
-              <ResendVerification />
-            </PublicRoute>
-          } 
-        />
+        <Routes location={location} key={location.pathname}>
+          {/* Public Routes - Redirect authenticated users to their dashboard */}
+          <Route
+            path="/"
+            element={
+              <PublicRoute restricted>
+                <Dashboard />
+              </PublicRoute>
+            }
+          />
 
-        {/* Admin Routes - Only for ADMIN role */}
-        <Route 
-          path="/admin/*" 
-          element={
-            <ProtectedRoute allowedRoles={['ADMIN']}>
-              <AdminLayout />
-            </ProtectedRoute>
-          } 
-        />
+          {/* Auth Routes - Redirect if already logged in */}
+          <Route
+            path="/login"
+            element={
+              <PublicRoute restricted>
+                <Login />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              <PublicRoute restricted>
+                <Register />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              <PublicRoute restricted>
+                <ForgotPassword />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/reset-password"
+            element={
+              <PublicRoute restricted>
+                <ResetPassword />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/verify-email"
+            element={
+              <PublicRoute>
+                <VerifyEmail />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/resend-verification"
+            element={
+              <PublicRoute restricted>
+                <ResendVerification />
+              </PublicRoute>
+            }
+          />
 
-        {/* Manager Routes - Only for MANAGER role */}
-        <Route 
-          path="/manager/*" 
-          element={
-            <ProtectedRoute allowedRoles={['MANAGER']}>
-              <ManagerLayout />
-            </ProtectedRoute>
-          } 
-        />
+          <Route
+            path="/pricing"
+            element={
+              <PublicRoute>
+                <Pricing />
+              </PublicRoute>
+            }
+          />
 
-        {/* User Routes - Only for USER role */}
-        <Route 
-          path="/user" 
-          element={
-            // <ProtectedRoute allowedRoles={['USER']}>
+          <Route
+            path="/quote-success"
+            element={
+              <PublicRoute>
+                <QuoteSuccess />
+              </PublicRoute>
+            }
+          />
+
+          {/* Admin Routes - Only for ADMIN role */}
+          <Route
+            path="/admin/*"
+            element={
+              <ProtectedRoute allowedRoles={['ADMIN']}>
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Manager Routes - Only for MANAGER role */}
+          <Route
+            path="/manager/*"
+            element={
+              <ProtectedRoute allowedRoles={['MANAGER']}>
+                <ManagerLayout />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* User Routes - Only for USER role */}
+          <Route
+            path="/user"
+            element={
+              // <ProtectedRoute allowedRoles={['USER']}>
               <UserLayout />
-            // </ProtectedRoute>
-          } 
-        >
-          <Route path="dashboard" element={<UserDashboard />} />
-          <Route path="planning-wizard" element={<PlanningWizard />} />
-          <Route path="promote" element={<PromoteEvent />} />
-          <Route path="event/:eventId" element={<EventDetails />} />
-          <Route path="checkout/:eventId" element={<EventCheckout />} />
-          <Route path="my-events" element={<MyEvents />} />
-          <Route path="profile" element={<UserProfile />} />
-          <Route path="notifications" element={<Notifications />} />
-          <Route path="edit-profile" element={<EditProfile />} />
-          <Route path="account-settings" element={<AccountSettings />} />
-        </Route>
+              // </ProtectedRoute>
+            }
+          >
+            <Route path="dashboard" element={<UserDashboard />} />
+            <Route path="planning-wizard" element={<PlanningWizard />} />
+            <Route path="promote" element={<PromoteEvent />} />
+            <Route path="event/:eventId" element={<EventDetails />} />
+            <Route path="checkout/:eventId" element={<EventCheckout />} />
+            <Route path="my-events" element={<MyEvents />} />
+            <Route path="profile" element={<UserProfile />} />
+            <Route path="notifications" element={<Notifications />} />
+            <Route path="edit-profile" element={<EditProfile />} />
+            <Route path="account-settings" element={<AccountSettings />} />
+          </Route>
 
 
-        {/* Vendor Routes - For VENDOR role */}
-        <Route 
-          path="/vendor/register" 
-          element={
-            <PublicRoute>
-              <VendorRegistration />
-            </PublicRoute>
-          } 
-        />
-        <Route 
-          path="/vendor" 
-          element={
-            <ProtectedRoute allowedRoles={['VENDOR']}>
-              <VendorLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="dashboard" element={<VendorDashboard />} />
-          <Route path="booked-events" element={<BookedEvents />} />
-          <Route path="service-management" element={<ServiceManagement />} />
-          <Route path="messages" element={<ManagerChat />} />
-          <Route path="profile" element={<BusinessProfile />} />
-          <Route path="event/:id" element={<VendorEventDetails />} />
-          <Route path="settings" element={<AccountSettingsPage />} />
-        </Route>
-      </Routes>
-    </AnimatePresence>
+          {/* Vendor Routes - For VENDOR role */}
+          <Route
+            path="/vendor/register"
+            element={
+              <PublicRoute>
+                <VendorRegistration />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/vendor"
+            element={
+              <ProtectedRoute allowedRoles={['VENDOR']}>
+                <VendorLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="dashboard" element={<VendorDashboard />} />
+            <Route path="booked-events" element={<BookedEvents />} />
+            <Route path="service-management" element={<ServiceManagement />} />
+            <Route path="messages" element={<ManagerChat />} />
+            <Route path="profile" element={<BusinessProfile />} />
+            <Route path="event/:id" element={<VendorEventDetails />} />
+            <Route path="settings" element={<AccountSettingsPage />} />
+          </Route>
+        </Routes>
+      </AnimatePresence>
     </>
-    
+
   );
 };
 

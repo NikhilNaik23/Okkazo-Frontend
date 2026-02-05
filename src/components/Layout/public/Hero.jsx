@@ -11,7 +11,13 @@ const Hero = () => {
   const animations = [weddingLottie, birthdayLottie, eventLottie];
 
   const handleAnimationComplete = () => {
-    setCurrentAnimationIndex((prevIndex) => (prevIndex + 1) % animations.length);
+    if (currentAnimationIndex === 0) {
+      setTimeout(() => {
+        setCurrentAnimationIndex((prevIndex) => (prevIndex + 1) % animations.length);
+      }, 800);
+    } else {
+      setCurrentAnimationIndex((prevIndex) => (prevIndex + 1) % animations.length);
+    }
   };
 
   return (
