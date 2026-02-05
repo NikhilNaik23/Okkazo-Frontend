@@ -66,33 +66,6 @@ const EventLifecycle = () => {
                 "ROI Measurement Tools",
                 "Data Export & Integration"
             ],
-            color: "bg-[#A8D1D1]", // Slightly lighter version of 7AB2B2 or distinct
-            // Let's stick to the palette requested: #09637E, #088395, #7AB2B2, #EBF4F6
-            // We need a 4th distinctive color or reuse.
-            // Let's use the lightest teal #7AB2B2 for Day of event and maybe a mix or Opacity?
-            // Actually, let's gradients or rotate the palette slightly.
-            // Let's use #09637E for Planning, #088395 for Promotion, #7AB2B2 for Day of Event.
-            // For Post Event, maybe a lighter slate or reusing #088395 with opacity? 
-            // Or lets use #4C8F9E (midpoint). 
-            // Re-reading user request: "we will use #09637E, #088395, #7AB2B2, #EBF4F6 palette"
-            // EBF4F6 is background. So we have 3 main colors.
-            // I will recycle #09637E for Post Event but maybe simpler styling or just strict cycle.
-            // Let's use #2C7A8E mixed. 
-            // Actually, Day of Event could be #088395 and Post Event #7AB2B2?
-            // Let's try:
-            // Planning: #09637E (Darkest)
-            // Promotion: #088395 (Medium)
-            // Day of Event: #459EA5 (Custom blend or just #7AB2B2)
-            // Post Event: #7AB2B2 (Lightest)
-            // Wait, 4 stages, 3 colors. I will make Post Event loop back to dark or use a distinct shade. 
-            // Let's use #09637E and #088395 alternating or gradient.
-            // Let's assign specific hexes:
-            // Planning: #09637E
-            // Promotion: #088395
-            // Day of Event: #7AB2B2
-            // Post Event: #5C9EAD (Interpolated) or just #09637E again? No.
-            // Let's use #4A90A4.
-            // I will put a custom color for Post Event to make it distinct but harmonious.
             color: "bg-[#5D9C9F]",
             textColor: "text-[#5D9C9F]",
             position: "top-0 left-0 rounded-tl-full"

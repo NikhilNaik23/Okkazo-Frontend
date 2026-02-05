@@ -2,14 +2,26 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from "../../../components/Layout/public/Navbar";
 import Footer from '../../../components/Layout/public/Footer';
+import quoteSuccess from "../../../assets/images/quote-image-background.jpeg"
 import { FaCheckCircle } from 'react-icons/fa';
 
 const QuoteSuccess = () => {
     return (
         <div className="bg-white min-h-screen flex flex-col">
             <Navbar />
-            <div className="flex-grow flex items-center justify-center pt-40 pb-12">
-                <div className="container mx-auto px-6 text-center">
+            <div
+                className="flex-grow flex items-center justify-center pt-40 pb-12 relative overflow-hidden"
+                style={{
+                    backgroundImage: `url(${quoteSuccess})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundRepeat: 'no-repeat'
+                }}
+            >
+                {/* Overlay for readability */}
+                <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px]"></div>
+
+                <div className="container mx-auto px-6 text-center relative z-10">
                     <div className="max-w-xl mx-auto bg-[#EBF4F6] p-12 rounded-3xl shadow-xl border border-[#09637E]/10">
                         <div className="flex justify-center mb-6">
                             <FaCheckCircle className="text-[#09637E] text-6xl shadow-lg rounded-full bg-white" />
