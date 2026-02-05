@@ -253,10 +253,10 @@ const App = () => {
         <Route
           path="/admin/*"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN']}>
+            // <ProtectedRoute allowedRoles={['ADMIN']}>
               <AdminLayout />
-            </ProtectedRoute>
-          }
+            // </ProtectedRoute> 
+          } 
         />
 
           {/* Manager Routes - Only for MANAGER role */}

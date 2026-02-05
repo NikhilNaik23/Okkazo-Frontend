@@ -5,6 +5,12 @@ import Navbar from "./Navbar";
 import AdminDashboard from "../../../pages/Home/admin/AdminDashboard";
 import AdminEvents from "../../../pages/Home/admin/AdminEvents";
 import AdminVendorVerification from "../../../pages/Home/admin/AdminVendorVerification";
+import AdminReports from "../../../pages/Home/admin/AdminReports";
+import AdminLedger from "../../../pages/Home/admin/AdminLedger";
+import AdminTeamAccess from "../../../pages/Home/admin/AdminTeamAccess";
+import AdminSettings from "../../../pages/Home/admin/AdminSettings";
+import AdminProfile from "../../../pages/Home/admin/AdminProfile";
+import AdminManager from "../../../pages/Home/admin/AdminManager";
 import EventDetails from "../../../pages/Home/admin/EventDetails";
 
 const AdminLayout = () => {
@@ -35,6 +41,12 @@ const AdminLayout = () => {
                 <Route path="events" element={<AdminEvents />} />
                 <Route path="events/:id" element={<EventDetails />} />
                 <Route path="vendors" element={<AdminVendorVerification />} />
+                <Route path="reports" element={<AdminReports />} />
+                <Route path="ledger" element={<AdminLedger />} />
+                <Route path="team-access" element={<AdminTeamAccess />} />
+                <Route path="team-access/add" element={<AdminManager />} />
+                <Route path="settings" element={<AdminSettings />} />
+                <Route path="profile" element={<AdminProfile />} />
                 <Route path="dashboard" element={<AdminDashboard />} />
             </Routes>
         </div>

@@ -8,7 +8,8 @@ import {
   Users, 
   TrendingUp, 
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  IndianRupee
 } from 'lucide-react';
 
 const AdminDashboard = () => {
@@ -44,10 +45,10 @@ const AdminDashboard = () => {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard 
-            icon={<DollarSign size={24} className="text-[#d7a444]" />}
+            icon={<IndianRupee size={24} className="text-[#d7a444]" />}
             iconBg="bg-[#f3ddb1]/30"
             label="Total Revenue"
-            value="$128,430"
+            value="₹1,28,430"
             trend="+12%"
             trendUp={true}
           />
@@ -188,7 +189,7 @@ const AdminDashboard = () => {
                     status="CONFIRMED"
                     statusStyle="bg-[#0b2d49]/10 text-[#0b2d49]"
                     date="Mar 12, 2024"
-                    revenue="$12,400.00"
+                    revenue="₹12,400.00"
                  />
                  <EventRow 
                     name="Spring Music Festival"
@@ -197,7 +198,7 @@ const AdminDashboard = () => {
                     status="PENDING"
                     statusStyle="bg-[#f3ddb1] text-[#5a5b44]"
                     date="Mar 24, 2024"
-                    revenue="$45,000.00"
+                    revenue="₹45,000.00"
                  />
                  <EventRow 
                     name="Tech Summit 2024"
@@ -206,7 +207,7 @@ const AdminDashboard = () => {
                     status="ACTIVE"
                     statusStyle="bg-[#0b2d49]/10 text-[#0b2d49]"
                     date="Apr 02, 2024"
-                    revenue="$32,150.00"
+                    revenue="₹32,150.00"
                  />
               </tbody>
             </table>

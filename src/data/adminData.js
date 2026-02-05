@@ -109,6 +109,66 @@ export const mockVendors = [
       bankAccount: { status: "invalid", linked: false, message: "Account frozen" },
     },
     logoColor: "bg-red-100 text-red-600"
+  },
+  {
+    id: "V-89212",
+    name: "Nebula Catering",
+    legalName: "Nebula Hospitality Services LLC",
+    status: "PENDING",
+    submittedDate: "Oct 25, 2023",
+    riskLevel: "Low Risk",
+    description: "Premium corporate catering and events",
+    location: "Chicago, IL",
+    taxId: "36-1294857",
+    registryNumber: "REG-2022-IL-4421",
+    yearFounded: "2020",
+    address: "500 N Michigan Ave, Suite 1200, Chicago, IL 60611, USA",
+    checks: {
+      businessLicense: { status: "valid", match: true, message: "Match found in IL State Registry" },
+      ownerIdentity: { status: "valid", verified: true, message: "Verified via Persona API" },
+      bankAccount: { status: "valid", linked: true, message: "Verified via Plaid" },
+    },
+    logoColor: "bg-[#0b2d49]/10 text-[#0b2d49]"
+  },
+  {
+    id: "V-88102",
+    name: "Titan Security Group",
+    legalName: "Titan Guard Services Inc.",
+    status: "REVIEWING",
+    submittedDate: "Oct 26, 2023",
+    riskLevel: "Medium Risk",
+    description: "Event security and crowd management",
+    location: "Miami, FL",
+    taxId: "59-1029348",
+    registryNumber: "REG-2018-FL-0021",
+    yearFounded: "2018",
+    address: "100 Biscayne Blvd, Suite 2500, Miami, FL 33132, USA",
+    checks: {
+      businessLicense: { status: "valid", match: true, message: "Match found in FL State Registry" },
+      ownerIdentity: { status: "warning", verified: false, message: "Background check in progress" },
+      bankAccount: { status: "valid", linked: true, message: "Verified via Plaid" },
+    },
+    logoColor: "bg-[#d7a444]/10 text-[#d7a444]"
+  },
+  {
+    id: "V-87991",
+    name: "Velvet Venues",
+    legalName: "Velvet Event Spaces LLC",
+    status: "PENDING",
+    submittedDate: "Oct 27, 2023",
+    riskLevel: "Low Risk",
+    description: "Luxury venue management and booking",
+    location: "New York, NY",
+    taxId: "13-5556677",
+    registryNumber: "REG-2021-NY-9911",
+    yearFounded: "2021",
+    address: "75 Rockefeller Plaza, Floor 14, New York, NY 10019, USA",
+    checks: {
+      businessLicense: { status: "valid", match: true, message: "Match found in NY State Registry" },
+      ownerIdentity: { status: "valid", verified: true, message: "Verified via Persona API" },
+      bankAccount: { status: "pending", linked: false, message: "Awaiting bank verification" },
+    },
+    logoColor: "bg-[#708aa0]/10 text-[#708aa0]"
   }
 ];
 
