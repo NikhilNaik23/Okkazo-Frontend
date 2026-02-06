@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Navbar from "../../../components/Layout/public/Navbar";
+import Footer from "../../../components/Layout/public/Footer";
 import { useNavigate } from 'react-router-dom';
 
 
@@ -59,14 +60,16 @@ const Pricing = () => {
     const wrapperClasses = "bg-white flex items-center rounded-lg overflow-hidden border border-gray-200 focus-within:border-[#09637E] focus-within:ring-1 focus-within:ring-[#09637E] transition-all";
 
     return (
-        <div className="bg-white min-h-screen flex flex-col">
-            <Navbar />
-            <div className="flex-grow pt-40 pb-12">
+        <div className="bg-white min-h-screen flex flex-col select-none">
+            <header>
+                <Navbar />
+            </header>
+            <main className="flex-grow pt-40 pb-12">
                 <div className="container mx-auto px-6 md:px-12 lg:px-20">
 
                     <div className="flex flex-col lg:flex-row gap-8 items-stretch">
                         {/* Left Side: Project Roadmap */}
-                        <div className="lg:w-1/2 flex">
+                        <div id="dark-section-pricing" className="lg:w-1/2 flex">
                             <div className="bg-gradient-to-br from-[#09637E] to-[#088395] p-8 rounded-2xl w-full text-white shadow-xl flex flex-col justify-between overflow-hidden">
                                 <div>
                                     <h3 className="text-2xl font-black mb-1 tracking-tight">How Okkazo Works</h3>
@@ -282,8 +285,10 @@ const Pricing = () => {
                         </div>
                     </div>
                 </div>
-            </div>
+            </main>
+            <Footer />
         </div>
     );
 };
+
 export default Pricing;

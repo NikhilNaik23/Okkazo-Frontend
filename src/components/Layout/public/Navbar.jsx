@@ -18,6 +18,8 @@ const Navbar = () => {
     const handleScroll = () => {
       const testimonialsSection = document.getElementById("testimonials");
       const footerSection = document.getElementById("public-footer");
+      const pricingDarkSection = document.getElementById("dark-section-pricing");
+      const dashboardHero = document.getElementById("dashboard-hero");
 
       const isOverSection = (element) => {
         if (!element) return false;
@@ -27,7 +29,7 @@ const Navbar = () => {
         return rect.top <= 88 && rect.bottom >= 24;
       };
 
-      const isOver = isOverSection(testimonialsSection) || isOverSection(footerSection);
+      const isOver = isOverSection(testimonialsSection) || isOverSection(footerSection) || isOverSection(pricingDarkSection) || isOverSection(dashboardHero);
       setIsOverDarkSection(isOver);
     };
 
@@ -43,10 +45,10 @@ const Navbar = () => {
     <>
       <header className="fixed top-6 left-0 right-0 z-50 flex justify-center px-4 md:px-10">
         <nav className="w-full max-w-7xl bg-[#7AB2B2]/40 backdrop-blur-xl rounded-2xl border border-white/30 shadow-xl transition-all duration-300 ring-1 ring-white/10">
-          <div className="hidden md:flex justify-between max-w-7xl mx-auto px-10 h-16 items-center">
+          <div className="hidden md:flex justify-between max-w-7xl mx-auto px-10 h-20 items-center">
             <div className="flex justify-center items-center gap-12">
               <Link to="/">
-                <img src="/public_logo.png" alt="Okkazo-logo" className="h-14 pt-4 w-auto object-contain" />
+                <img src="/public_logo.png" alt="Okkazo-logo" className="h-16 pt-2 w-auto object-contain" />
               </Link>
               <ul className={`flex justify-around items-center gap-8 text-sm font-bold ${textColor}`}>
                 {menus.map((menu, index) => (
