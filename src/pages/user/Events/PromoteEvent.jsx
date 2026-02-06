@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import Navbar from "../../../components/Layout/user/Navbar";
-import Footer from "../../../components/Layout/user/Footer";
 import { BsCheck2, BsArrowRight } from "react-icons/bs";
 import { toast, Toaster } from "react-hot-toast";
 import EventDetailsForm from "../../../components/Forms/PromoteEvent/EventDetailsForm";
@@ -268,7 +267,6 @@ const PromoteEvent = () => {
                 )}
             </main>
             
-            <Footer />
         </div>
     );
 };

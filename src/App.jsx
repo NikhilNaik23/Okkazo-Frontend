@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react'
 import { Routes, Route, useLocation } from "react-router-dom";
-import { AnimatePresence } from "framer-motion";
 import { useDispatch, useSelector } from 'react-redux';
 import { Toaster } from 'react-hot-toast';
 import { fetchCurrentUser, refreshAccessToken, selectIsAuthenticated, selectUser } from './store/slices/authSlice';
@@ -17,6 +16,8 @@ import ForgotPassword from "./pages/Home/public/ForgotPassword";
 import ResetPassword from "./pages/Home/public/ResetPassword";
 import VerifyEmail from "./pages/Home/public/VerifyEmail";
 import ResendVerification from "./pages/Home/public/ResendVerification";
+import Pricing from "./pages/Home/public/Pricing";
+import QuoteSuccess from "./pages/Home/public/QuoteSuccess";
 
 // Admin Pages
 import AdminLayout from "./components/Layout/admin/AdminLayout";
@@ -59,7 +60,7 @@ const App = () => {
     const initAuth = async () => {
       const refreshToken = localStorage.getItem('refreshToken');
       const accessToken = localStorage.getItem('accessToken');
-      
+
       if (refreshToken && !accessToken) {
         // We have refresh token but no access token - try to refresh
         const result = await dispatch(refreshAccessToken());
@@ -71,7 +72,7 @@ const App = () => {
         // We have access token - fetch user
         dispatch(fetchCurrentUser());
       }
-      
+
       setIsInitializing(false);
     };
 
@@ -87,8 +88,8 @@ const App = () => {
 
   return (
     <>
-      <Toaster 
-        position="top-center" 
+      <Toaster
+        position="top-center"
         toastOptions={{
           duration: 4000,
         }}
@@ -96,96 +97,113 @@ const App = () => {
           top: 20,
         }}
       />
-      <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
+      <Routes location={location}>
         {/* Public Routes - Redirect authenticated users to their dashboard */}
-        <Route 
-          path="/" 
+        <Route
+          path="/"
           element={
             <PublicRoute restricted>
               <Dashboard />
             </PublicRoute>
-          } 
+          }
         />
-        
+
         {/* Auth Routes - Redirect if already logged in */}
-        <Route 
-          path="/login" 
+        <Route
+          path="/login"
           element={
             <PublicRoute restricted>
               <Login />
             </PublicRoute>
-          } 
+          }
         />
-        <Route 
-          path="/register" 
+        <Route
+          path="/register"
           element={
             <PublicRoute restricted>
               <Register />
             </PublicRoute>
-          } 
+          }
         />
-        <Route 
-          path="/forgot-password" 
+        <Route
+          path="/forgot-password"
           element={
             <PublicRoute restricted>
               <ForgotPassword />
             </PublicRoute>
-          } 
+          }
         />
-        <Route 
-          path="/reset-password" 
+        <Route
+          path="/reset-password"
           element={
             <PublicRoute restricted>
               <ResetPassword />
             </PublicRoute>
-          } 
+          }
         />
-        <Route 
-          path="/verify-email" 
+        <Route
+          path="/verify-email"
           element={
             <PublicRoute>
               <VerifyEmail />
             </PublicRoute>
-          } 
+          }
         />
-        <Route 
-          path="/resend-verification" 
+        <Route
+          path="/resend-verification"
           element={
             <PublicRoute restricted>
               <ResendVerification />
             </PublicRoute>
-          } 
+          }
+        />
+
+        <Route
+          path="/pricing"
+          element={
+            <PublicRoute>
+              <Pricing />
+            </PublicRoute>
+          }
+        />
+
+        <Route
+          path="/quote-success"
+          element={
+            <PublicRoute>
+              <QuoteSuccess />
+            </PublicRoute>
+          }
         />
 
         {/* Admin Routes - Only for ADMIN role */}
-        <Route 
-          path="/admin/*" 
+        <Route
+          path="/admin/*"
           element={
             <ProtectedRoute allowedRoles={['ADMIN']}>
               <AdminLayout />
             </ProtectedRoute>
-          } 
+          }
         />
 
         {/* Manager Routes - Only for MANAGER role */}
-        <Route 
-          path="/manager/*" 
+        <Route
+          path="/manager/*"
           element={
             <ProtectedRoute allowedRoles={['MANAGER']}>
               <ManagerLayout />
             </ProtectedRoute>
-          } 
+          }
         />
 
         {/* User Routes - Only for USER role */}
-        <Route 
-          path="/user" 
+        <Route
+          path="/user"
           element={
             // <ProtectedRoute allowedRoles={['USER']}>
-              <UserLayout />
+            <UserLayout />
             // </ProtectedRoute>
-          } 
+          }
         >
           <Route path="dashboard" element={<UserDashboard />} />
           <Route path="planning-wizard" element={<PlanningWizard />} />
@@ -201,20 +219,20 @@ const App = () => {
 
 
         {/* Vendor Routes - For VENDOR role */}
-        <Route 
-          path="/vendor/register" 
+        <Route
+          path="/vendor/register"
           element={
             <PublicRoute>
               <VendorRegistration />
             </PublicRoute>
-          } 
+          }
         />
-        <Route 
-          path="/vendor" 
+        <Route
+          path="/vendor"
           element={
-            <ProtectedRoute allowedRoles={['VENDOR']}>
+            // <ProtectedRoute allowedRoles={['VENDOR']}>
               <VendorLayout />
-            </ProtectedRoute>
+            // </ProtectedRoute>
           }
         >
           <Route path="dashboard" element={<VendorDashboard />} />
@@ -226,9 +244,8 @@ const App = () => {
           <Route path="settings" element={<AccountSettingsPage />} />
         </Route>
       </Routes>
-    </AnimatePresence>
     </>
-    
+
   );
 };
 
