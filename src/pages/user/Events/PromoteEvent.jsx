@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from "react";
 import Navbar from "../../../components/Layout/user/Navbar";
-import { BsCheck2, BsArrowRight } from "react-icons/bs";
 import { toast, Toaster } from "react-hot-toast";
 import EventDetailsForm from "../../../components/Forms/PromoteEvent/EventDetailsForm";
 import VenueLocation from "../../../components/Forms/PromoteEvent/VenueLocation";
 import TicketCategories from "../../../components/Forms/PromoteEvent/TicketCategories";
 import BannerUpload from "../../../components/Forms/PromoteEvent/BannerUpload";
 import RevenueCard from "../../../components/Forms/PromoteEvent/RevenueCard";
+import StepIndicator from "../../../components/User/Events/StepIndicator";
+import PaymentConfirmation from "../../../components/User/Events/PaymentConfirmation";
+import SuccessConfirmation from "../../../components/User/Events/SuccessConfirmation";
+import ActionButtons from "../../../components/User/Events/ActionButtons";
 
 const PromoteEvent = () => {
     const [currentStep, setCurrentStep] = useState(1);
@@ -55,7 +58,7 @@ const PromoteEvent = () => {
     // Calculations
     const totalTicketValue = formData.tickets.reduce((acc, t) => acc + (t.price * t.quantity), 0);
     const serviceCharge = totalTicketValue * 0.05;
-    const platformFee = 149.00;
+    const platformFee = 12367.00;
     const projectedRevenue = totalTicketValue - serviceCharge;
 
     const handleAddTicket = () => {
@@ -167,24 +170,7 @@ const PromoteEvent = () => {
                         {/* Right Content (Sidebar) */}
                         <div className="space-y-8">
                             {/* Step Indicator (Ref 2) */}
-                            <div className="flex items-center justify-between mb-2">
-                                <div className="flex gap-2">
-                                    {[1, 2, 3].map(step => (
-                                        <div 
-                                            key={step} 
-                                            className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                                                step === currentStep 
-                                                ? 'bg-[#0b2d49] text-white' 
-                                                : step < currentStep 
-                                                    ? 'bg-[#0b2d49]/20 text-[#0b2d49]' 
-                                                    : 'bg-white text-gray-300 border border-gray-200'
-                                            }`}
-                                        >
-                                            {step < currentStep ? <BsCheck2 /> : step}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                            <StepIndicator currentStep={currentStep} />
 
                             <BannerUpload formData={formData} setFormData={setFormData} />
 
@@ -196,75 +182,26 @@ const PromoteEvent = () => {
                             />
 
                             {/* Action Buttons */}
-                            <div className="space-y-4">
-                                <button 
-                                    onClick={handleNext}
-                                    disabled={!isFormComplete()}
-                                    className={`w-full py-4 font-bold rounded-2xl shadow-lg flex items-center justify-center gap-3 transition-all ${
-                                        isFormComplete()
-                                        ? 'bg-[#0b2d49] hover:bg-[#d7a444] text-white hover:shadow-xl hover:-translate-y-1 active:scale-[0.98]'
-                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                    }`}
-                                >
-                                    Pay Platform Fee Only (${platformFee}) <BsArrowRight />
-                                </button>
-                                <button 
-                                    onClick={handleSaveDraft}
-                                    className="w-full py-4 bg-white text-[#0b2d49] font-bold rounded-2xl border border-gray-200 hover:border-[#d7a444] transition-all hover:bg-gray-50 active:scale-[0.98]"
-                                >
-                                    Save as Draft
-                                </button>
-                                <p className="text-center text-[10px] text-gray-400">Need help? <a href="#" className="underline font-bold text-gray-600">Contact Support</a></p>
-                            </div>
+                            <ActionButtons 
+                                isFormComplete={isFormComplete()}
+                                handleNext={handleNext}
+                                handleSaveDraft={handleSaveDraft}
+                                platformFee={platformFee}
+                            />
                         </div>
                     </div>
                 )}
 
                 {currentStep === 2 && (
-                    <div className="max-w-2xl mx-auto bg-white rounded-3xl p-10 shadow-sm text-center animate-in fade-in zoom-in duration-300">
-                        <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6 text-[#0b2d49]">
-                             <span className="text-4xl">💳</span>
-                        </div>
-                        <h2 className="text-3xl font-extrabold mb-4 text-[#0b2d49]">Confirm Payment</h2>
-                        <p className="text-gray-500 mb-8 text-lg">
-                            You are about to pay <b className="text-[#0b2d49]">${platformFee}</b> to publish your event <br/>
-                            <span className="italic">"{formData.eventName}"</span>
-                        </p>
-                        
-                        <div className="space-y-4">
-                            <button 
-                                onClick={handlePaymentSuccess}
-                                className="w-full py-4 bg-[#0b2d49] text-white font-bold rounded-2xl shadow-xl hover:bg-[#d7a444] hover:-translate-y-1 transition-all"
-                            >
-                                Pay & Publish
-                            </button>
-                            <button 
-                                onClick={() => setCurrentStep(1)}
-                                className="text-gray-400 hover:text-[#0b2d49] font-bold text-sm"
-                            >
-                                Back to Edit
-                            </button>
-                        </div>
-                    </div>
+                    <PaymentConfirmation 
+                        formData={formData}
+                        platformFee={platformFee}
+                        setCurrentStep={setCurrentStep}
+                        handlePaymentSuccess={handlePaymentSuccess}
+                    />
                 )}
 
-                {currentStep === 3 && (
-                    <div className="max-w-2xl mx-auto bg-white rounded-3xl p-10 shadow-sm text-center animate-in fade-in zoom-in duration-500">
-                        <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6 text-green-500">
-                             <BsCheck2 size={48} />
-                        </div>
-                        <h2 className="text-3xl font-extrabold mb-4 text-[#0b2d49]">Event Published!</h2>
-                        <p className="text-gray-500 mb-8">
-                            Your event is now live and tickets are available for purchase.
-                        </p>
-                        <button 
-                            onClick={() => window.location.reload()}
-                            className="bg-[#0b2d49] text-white px-8 py-3 rounded-xl font-bold hover:shadow-lg transition-all"
-                        >
-                            Back to Dashboard
-                        </button>
-                    </div>
-                )}
+                {currentStep === 3 && <SuccessConfirmation />}
             </main>
             
         </div>

@@ -21,7 +21,7 @@ const TicketCategories = ({ formData, handleTicketChange, handleRemoveTicket, ha
                             />
                         </div>
                         <div className="md:col-span-3">
-                            <label className="block text-[8px] font-extrabold text-gray-400 uppercase mb-1">Price per Ticket ($)</label>
+                            <label className="block text-[8px] font-extrabold text-gray-400 uppercase mb-1">Price per Ticket (₹)</label>
                             <input
                                 type="number"
                                 value={ticket.price}

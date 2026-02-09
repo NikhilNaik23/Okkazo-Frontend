@@ -55,6 +55,10 @@ const EventCheckout = () => {
         return numeric ? parseFloat(numeric) : 0;
     };
 
+    const ticketPrice = getNumericPrice(event?.price);
+    const subtotal = ticketPrice * quantity;
+    const totalFees = subtotal === 0 ? 0 : 622.50; // Service + Processing fees waived for free events
+
     // Generate QR Content
     const qrContent = `Booking for ${event?.title}. Tickets: ${quantity}. Ref: ${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrContent)}`;
@@ -96,7 +100,7 @@ const EventCheckout = () => {
                                             </div>
                                             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1">Total Paid</p>
-                                                <p className="text-2xl font-black text-[#d7a444]">${(getNumericPrice(event.price) * quantity + 7.5).toFixed(2)}</p>
+                                                <p className="text-2xl font-black text-[#d7a444]">₹{(subtotal + totalFees).toFixed(2)}</p>
                                             </div>
                                         </div>
 

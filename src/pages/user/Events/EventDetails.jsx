@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { BsArrowLeft, BsGeoAlt, BsCalendarEvent, BsPeople, BsClock, BsBuilding, BsCheckCircleFill  } from "react-icons/bs";
+import { BsArrowLeft, BsCheckCircleFill } from "react-icons/bs";
 import { allEvents, popularEvents } from "../../../data/eventsData";
 import { toast, Toaster } from "react-hot-toast";
+import EventInfoGrid from "../../../components/User/Events/EventInfoGrid";
+import TicketSelector from "../../../components/User/Events/TicketSelector";
 
 const EventDetails = () => {
     const { eventId } = useParams();
@@ -78,9 +80,6 @@ const EventDetails = () => {
                                     {event.tag}
                                 </span>
                                 <h1 className="text-5xl md:text-6xl font-black mb-4 tracking-tight drop-shadow-lg">{event.title}</h1>
-                                <p className="text-gray-200 text-lg flex items-center gap-2 font-medium">
-                                    <BsGeoAlt className="text-[#d7a444]" /> {event.location}
-                                </p>
                             </div>
                         </div>
 
@@ -98,108 +97,35 @@ const EventDetails = () => {
                                 </p>
                             </div>
 
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-6 pt-4">
-                                <div className="flex flex-col gap-1 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                                    <BsCalendarEvent className="text-[#d7a444] mb-2" size={20} />
-                                    <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Date</span>
-                                    <span className="font-extrabold text-[#0b2d49] text-sm">{event.date.split('•')[0]}</span>
-                                </div>
-                                <div className="flex flex-col gap-1 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                                    <BsClock className="text-[#d7a444] mb-2" size={20} />
-                                    <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Time</span>
-                                    <span className="font-extrabold text-[#0b2d49] text-sm">{event.date.split('•')[1] || "6:00 PM"}</span>
-                                </div>
-                                <div className="flex flex-col gap-1 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                                    <BsBuilding className="text-[#d7a444] mb-2" size={20} />
-                                    <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">Venue</span>
-                                    <span className="font-extrabold text-[#0b2d49] text-sm">{event.location.split(',')[0]}</span>
-                                </div>
-                            </div>
+                            <EventInfoGrid event={event} />
                         </div>
                     </div>
 
                     {/* Right: Booking Sidebar (Sticky Container) */}
                     <div className="lg:sticky lg:top-32 space-y-8 h-fit">
-                        <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-gray-100">
-                            <h3 className="text-2xl font-black mb-8">Ticket Booking</h3>
-                            
-                            <div className="space-y-8">
-                                {/* Category Selection */}
-                                {event.categories && (
-                                    <div className="space-y-4">
-                                        <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Select Ticket Category</p>
-                                        <div className="grid gap-3">
-                                            {event.categories.map((cat) => (
-                                                <button 
-                                                    key={cat.name}
-                                                    onClick={() => setSelectedCategory(cat.name)}
-                                                    className={`p-4 rounded-2xl border-2 transition-all flex justify-between items-center ${
-                                                        selectedCategory === cat.name 
-                                                        ? "border-[#d7a444] bg-[#fdf8ee] shadow-sm" 
-                                                        : "border-gray-50 bg-gray-50/50 hover:bg-gray-100"
-                                                    }`}
-                                                >
-                                                    <span className={`font-black uppercase text-xs tracking-wider ${selectedCategory === cat.name ? "text-[#d7a444]" : "text-gray-400"}`}>
-                                                        {cat.name}
-                                                    </span>
-                                                    <span className="font-extrabold text-[#0b2d49]">{cat.price}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
+                        <TicketSelector
+                            event={event}
+                            selectedCategory={selectedCategory}
+                            setSelectedCategory={setSelectedCategory}
+                            bookingQty={bookingQty}
+                            setBookingQty={setBookingQty}
+                            availableTickets={availableTickets}
+                            getCurrentPrice={getCurrentPrice}
+                        />
 
-                                <div className="flex justify-between items-center py-4 border-b border-gray-50">
-                                    <div>
-                                        <p className="font-black text-[#0b2d49] text-xl">{getCurrentPrice()}</p>
-                                        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">
-                                            {selectedCategory ? `${selectedCategory} Ticket` : "Single Entry Ticket"}
-                                        </p>
-                                    </div>
-                                    <div className="flex items-center gap-4 bg-gray-50 p-2 rounded-2xl border border-gray-100">
-                                        <button 
-                                            onClick={() => setBookingQty(q => Math.max(1, q - 1))}
-                                            className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center font-bold text-[#0b2d49] hover:bg-[#0b2d49] hover:text-white transition-all active:scale-95"
-                                        >
-                                            -
-                                        </button>
-                                        <span className="w-8 text-center font-black text-[#0b2d49]">{bookingQty}</span>
-                                        <button 
-                                            onClick={() => setBookingQty(q => Math.min(availableTickets, q + 1))}
-                                            className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center font-bold text-[#0b2d49] hover:bg-[#0b2d49] hover:text-white transition-all active:scale-95"
-                                        >
-                                            +
-                                        </button>
-                                    </div>
-                                </div>
+                        <button 
+                            onClick={handleProceed}
+                            className="w-full py-5 bg-[#0b2d49] text-white font-black rounded-[1.5rem] shadow-xl shadow-blue-900/10 hover:bg-[#d7a444] hover:-translate-y-1 transition-all active:scale-[0.98] text-lg uppercase tracking-tight"
+                        >
+                            Proceed to Booking
+                        </button>
 
-                                <div className="space-y-4">
-                                     <div className="flex justify-between items-center">
-                                        <span className="px-3 py-1 bg-green-50 text-green-600 text-[10px] font-black rounded-lg uppercase tracking-wider">
-                                            Available: {availableTickets} Tickets
-                                        </span>
-                                        <div className="flex items-center gap-1.5 text-[#0b2d49]">
-                                            <BsPeople />
-                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{bookingQty} Selected</span>
-                                        </div>
-                                     </div>
-
-                                     <button 
-                                        onClick={handleProceed}
-                                        className="w-full py-5 bg-[#0b2d49] text-white font-black rounded-[1.5rem] shadow-xl shadow-blue-900/10 hover:bg-[#d7a444] hover:-translate-y-1 transition-all active:scale-[0.98] text-lg uppercase tracking-tight"
-                                     >
-                                        Proceed to Booking
-                                     </button>
-                                </div>
-
-                                <div className="pt-6 mt-4 border-t border-gray-50">
-                                    <div className="flex justify-between text-sm mb-2">
-                                        <span className="text-gray-400 font-bold">Total Price</span>
-                                        <span className="text-[#0b2d49] font-black text-xl">${(getNumericPrice(getCurrentPrice()) * bookingQty).toFixed(2)}</span>
-                                    </div>
-                                    <p className="text-[10px] text-gray-400 text-center font-medium">Extra platform and service fees will be added at checkout.</p>
-                                </div>
+                        <div className="pt-6 mt-4 border-t border-gray-50 bg-white rounded-[2rem] p-6">
+                            <div className="flex justify-between text-sm mb-2">
+                                <span className="text-gray-400 font-bold">Total Price</span>
+                                <span className="text-[#0b2d49] font-black text-xl">₹{(getNumericPrice(getCurrentPrice()) * bookingQty * 83).toFixed(2)}</span>
                             </div>
+                            <p className="text-[10px] text-gray-400 text-center font-medium">Extra platform and service fees will be added at checkout.</p>
                         </div>
 
                         {/* Guarantee Card - Inside the Same Column Stacking */}
