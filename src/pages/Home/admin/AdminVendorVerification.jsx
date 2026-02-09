@@ -17,7 +17,8 @@ import {
   Building2,
   FileText,
   CreditCard,
-  Plus
+  Plus,
+  IndianRupee
 } from "lucide-react";
 
 const MOCK_VENDORS = mockVendors;
@@ -132,7 +133,7 @@ const AdminVendorVerification = () => {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6rem)] relative overflow-hidden">
+    <div className="flex flex-col h-full relative overflow-hidden">
         {/* Header Section */}
         <div className="px-6 mb-6 pt-6 shrink-0">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">

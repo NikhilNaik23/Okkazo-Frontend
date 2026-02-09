@@ -118,7 +118,7 @@ const EventDetails = () => {
                                        <tr key={index} className="group hover:bg-[#f8fafc] transition-colors border-b border-[#e9eff1] last:border-0 border-dashed">
                                            <td className="py-4 pl-4 text-sm font-semibold text-[#0b2d49]">{txn.id}</td>
                                            <td className="py-4 text-sm text-[#5a5b44]">{txn.date}</td>
-                                           <td className="py-4 text-sm font-bold text-[#0b2d49]">${txn.amount}</td>
+                                           <td className="py-4 text-sm font-bold text-[#0b2d49]">₹{txn.amount}</td>
                                            <td className="py-4 text-sm text-[#5a5b44]">{txn.method}</td>
                                            <td className="py-4 pr-4 text-right">
                                                <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase ${
@@ -148,15 +148,15 @@ const EventDetails = () => {
                            <div className="space-y-4">
                                <div className="flex justify-between items-center border-b border-white/10 pb-3">
                                    <span className="text-sm font-medium text-[#708aa0]">Original</span>
-                                   <span className="text-lg font-bold text-white">${eventData.budget.original}</span>
+                                   <span className="text-lg font-bold text-white">₹{eventData.budget.original}</span>
                                </div>
                                <div className="flex justify-between items-center border-b border-white/10 pb-3">
                                    <span className="text-sm font-medium text-[#708aa0]">Revised</span>
-                                   <span className="text-lg font-bold text-white">${eventData.budget.revised}</span>
+                                   <span className="text-lg font-bold text-white">₹{eventData.budget.revised}</span>
                                </div>
                                <div className="flex justify-between items-end pt-2">
                                    <span className="text-sm font-medium text-[#d7a444] mb-1">Final Amount</span>
-                                   <span className="text-3xl font-bold text-white">${eventData.budget.final}</span>
+                                   <span className="text-3xl font-bold text-white">₹{eventData.budget.final}</span>
                                </div>
                            </div>
                        </div>
