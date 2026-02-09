@@ -18,10 +18,11 @@ const CheckoutOrderSummary = ({ event, quantity = 1, category = "General" }) => 
         if (cat) ticketPrice = getNumericPrice(cat.price);
     }
 
-    // Fixed fees for demonstration as per design
-    const serviceFee = 5.00;
-    const processingFee = 2.50;
     const subtotal = ticketPrice * quantity;
+    
+    // Fixed fees for demonstration as per design (in INR) - waived for free events
+    const serviceFee = subtotal === 0 ? 0 : 415.00;
+    const processingFee = subtotal === 0 ? 0 : 207.50;
 
     return (
         <div className="bg-white rounded-[2.5rem] overflow-hidden shadow-sm border border-gray-100 h-fit sticky top-32">
@@ -69,17 +70,17 @@ const CheckoutOrderSummary = ({ event, quantity = 1, category = "General" }) => 
                                 <p className="text-[10px] text-gray-400 font-medium">Standard Entry</p>
                             </div>
                         </div>
-                        <span className="font-bold text-[#0b2d49]">${subtotal.toFixed(2)}</span>
+                        <span className="font-bold text-[#0b2d49]">₹{subtotal.toFixed(2)}</span>
                     </div>
 
                     <div className="space-y-3 pt-4 border-t border-gray-50">
                         <div className="flex justify-between text-sm">
                             <span className="text-gray-400 font-medium">Service Fee</span>
-                            <span className="text-[#0b2d49] font-bold">${serviceFee.toFixed(2)}</span>
+                            <span className="text-[#0b2d49] font-bold">₹{serviceFee.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-gray-400 font-medium">Processing Fee</span>
-                            <span className="text-[#0b2d49] font-bold">${processingFee.toFixed(2)}</span>
+                            <span className="text-[#0b2d49] font-bold">₹{processingFee.toFixed(2)}</span>
                         </div>
                     </div>
 
@@ -87,9 +88,9 @@ const CheckoutOrderSummary = ({ event, quantity = 1, category = "General" }) => 
                     <div className="pt-6 border-t-2 border-dashed border-gray-100 flex justify-between items-end">
                         <div>
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-2">Total to pay</p>
-                            <p className="text-4xl font-black text-[#d7a444] tracking-tighter">${(subtotal + serviceFee + processingFee).toFixed(2)}</p>
+                            <p className="text-4xl font-black text-[#d7a444] tracking-tighter">₹{(subtotal + serviceFee + processingFee).toFixed(2)}</p>
                         </div>
-                        <span className="px-3 py-1 bg-gray-50 text-gray-400 text-[10px] font-black rounded-lg border border-gray-100">USD</span>
+                        <span className="px-3 py-1 bg-gray-50 text-gray-400 text-[10px] font-black rounded-lg border border-gray-100">INR</span>
                     </div>
                 </div>
             </div>

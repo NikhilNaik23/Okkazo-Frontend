@@ -34,7 +34,7 @@ const StepReview = ({ formData }) => {
                                 </div>
                             </div>
                             <div className="font-medium text-[#0b2d49] text-right">
-                                ${vendor.priceMin} - ${vendor.priceMax}
+                                ₹{vendor.priceMin * 83} - ₹{vendor.priceMax * 83}
                             </div>
                         </div>
                     ))}
@@ -45,8 +45,8 @@ const StepReview = ({ formData }) => {
                         <p className="text-gray-500 font-medium">Total Estimated Cost</p>
                         <div className="text-right">
                             <p className="text-3xl font-extrabold text-[#0b2d49]">
-                                ${Object.values(formData.vendors).reduce((acc, v) => acc + v.priceMin, 0)} -
-                                ${Object.values(formData.vendors).reduce((acc, v) => acc + v.priceMax, 0)}
+                                ₹{Object.values(formData.vendors).reduce((acc, v) => acc + v.priceMin, 0) * 83} -
+                                ₹{Object.values(formData.vendors).reduce((acc, v) => acc + v.priceMax, 0) * 83}
                             </p>
                             <p className="text-xs text-gray-400">*Final cost depends on actual guest count and customizations</p>
                         </div>

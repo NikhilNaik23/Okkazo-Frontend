@@ -56,7 +56,7 @@ const StepVendorSelection = ({ formData, activeServiceTab, setActiveServiceTab, 
                                     <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
                                         <div>
                                             <p className="text-[10px] uppercase font-bold text-gray-400">Estimated Range</p>
-                                            <p className="text-[#0b2d49] font-bold text-lg">${vendor.priceMin} - ${vendor.priceMax}</p>
+                                            <p className="text-[#0b2d49] font-bold text-lg">₹{vendor.priceMin * 83} - ₹{vendor.priceMax * 83}</p>
                                         </div>
                                         <button className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${isSelected ? 'bg-green-50 text-green-600' : 'bg-gray-50 text-gray-600 group-hover:bg-[#0b2d49] group-hover:text-white'}`}>
                                             {isSelected ? 'Selected' : 'Select'}

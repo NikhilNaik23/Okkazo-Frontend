@@ -55,7 +55,7 @@ export const trendingEvents = [
     tag: "CONCERT",
     title: "Groove Music Festival",
     location: "Central Park, NY",
-    price: "$45.00",
+    price: "₹3,735",
     tagColor: "text-[#d7a444]",
   },
   {
@@ -65,7 +65,7 @@ export const trendingEvents = [
     tag: "CONFERENCE",
     title: "Future Tech Summit 2024",
     location: "Convention Center, NV",
-    price: "$120.00",
+    price: "₹9,960",
     tagColor: "text-[#0b2d49]",
   },
   {

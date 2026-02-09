@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { BsShieldLock, BsBell, BsEye, BsLink45Deg } from "react-icons/bs";
-import { FaGoogle, FaFacebookF } from "react-icons/fa";
 import { toast } from "react-hot-toast";
+import SecuritySection from "../../../components/User/Settings/SecuritySection";
+import NotificationSection from "../../../components/User/Settings/NotificationSection";
+import PrivacySection from "../../../components/User/Settings/PrivacySection";
+import LinkedAccountsSection from "../../../components/User/Settings/LinkedAccountsSection";
 
 const AccountSettings = () => {
     const navigate = useNavigate();
@@ -36,7 +38,7 @@ const AccountSettings = () => {
                 };
                 
                 setSettings(response);
-            } catch (error) {
+            } catch {
                 toast.error("Failed to load account settings");
             } finally {
                 setIsLoading(false);
@@ -56,21 +58,12 @@ const AccountSettings = () => {
             // Simulated API call
             await new Promise(resolve => setTimeout(resolve, 1500));
             toast.success("Settings saved successfully!");
-        } catch (error) {
+        } catch {
             toast.error("Failed to save settings");
         } finally {
             setIsSaving(false);
         }
     };
-
-    const Toggle = ({ active, onClick }) => (
-        <button 
-            onClick={onClick}
-            className={`w-14 h-8 rounded-full transition-all relative ${active ? "bg-[#0caf7d]" : "bg-gray-200"}`}
-        >
-            <div className={`absolute top-1 w-6 h-6 rounded-full bg-white transition-all shadow-sm ${active ? "right-1" : "left-1"}`}></div>
-        </button>
-    );
 
     return (
         <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
@@ -88,129 +81,16 @@ const AccountSettings = () => {
                 ) : (
                     <div className="space-y-8 animate-in fade-in duration-500">
                         {/* Security Section */}
-                        <div className="bg-white rounded-[2.5rem] p-10 shadow-sm border border-gray-100">
-                            <div className="flex items-center gap-3 mb-10 pb-4 border-b border-gray-50">
-                                <BsShieldLock className="text-[#0caf7d]" size={24} />
-                                <h2 className="text-xl font-black uppercase tracking-widest text-[#0b2d49]">Security</h2>
-                            </div>
-                            
-                            <div className="space-y-8">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h3 className="font-black text-[#0b2d49]">Password</h3>
-                                        <p className="text-xs text-gray-400 font-medium mt-1">Update your account password regularly to stay secure.</p>
-                                    </div>
-                                    <button className="px-6 py-2.5 bg-[#0caf7d]/10 text-[#0caf7d] rounded-xl font-black text-xs uppercase tracking-widest hover:bg-[#0caf7d] hover:text-white transition-all border border-[#0caf7d]/20">
-                                        Change Password
-                                    </button>
-                                </div>
-
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h3 className="font-black text-[#0b2d49]">Two-Factor Authentication</h3>
-                                        <p className="text-xs text-gray-400 font-medium mt-1">Add an extra layer of security to your account.</p>
-                                    </div>
-                                    <Toggle active={settings.twoFactor} onClick={() => toggleSetting("twoFactor")} />
-                                </div>
-                            </div>
-                        </div>
+                        <SecuritySection settings={settings} toggleSetting={toggleSetting} />
 
                         {/* Notification Preferences */}
-                        <div className="bg-white rounded-[2.5rem] p-10 shadow-sm border border-gray-100">
-                            <div className="flex items-center gap-3 mb-10 pb-4 border-b border-gray-50">
-                                <BsBell className="text-[#0caf7d]" size={24} />
-                                <h2 className="text-xl font-black uppercase tracking-widest text-[#0b2d49]">Notification Preferences</h2>
-                            </div>
-                            
-                            <div className="space-y-8">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h3 className="font-black text-[#0b2d49]">Email Notifications</h3>
-                                        <p className="text-xs text-gray-400 font-medium mt-1">Receive updates about your events via email.</p>
-                                    </div>
-                                    <Toggle active={settings.emailNotifications} onClick={() => toggleSetting("emailNotifications")} />
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h3 className="font-black text-[#0b2d49]">Push Notifications</h3>
-                                        <p className="text-xs text-gray-400 font-medium mt-1">Get instant alerts on your mobile or desktop.</p>
-                                    </div>
-                                    <Toggle active={settings.pushNotifications} onClick={() => toggleSetting("pushNotifications")} />
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h3 className="font-black text-[#0b2d49]">SMS Alerts</h3>
-                                        <p className="text-xs text-gray-400 font-medium mt-1">Critical updates sent directly to your phone.</p>
-                                    </div>
-                                    <Toggle active={settings.smsAlerts} onClick={() => toggleSetting("smsAlerts")} />
-                                </div>
-                            </div>
-                        </div>
+                        <NotificationSection settings={settings} toggleSetting={toggleSetting} />
 
                         {/* Privacy Section */}
-                        <div className="bg-white rounded-[2.5rem] p-10 shadow-sm border border-gray-100">
-                            <div className="flex items-center gap-3 mb-10 pb-4 border-b border-gray-50">
-                                <BsEye className="text-[#0caf7d]" size={24} />
-                                <h2 className="text-xl font-black uppercase tracking-widest text-[#0b2d49]">Privacy</h2>
-                            </div>
-                            
-                            <div className="space-y-8">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h3 className="font-black text-[#0b2d49]">Make Profile Public</h3>
-                                        <p className="text-xs text-gray-400 font-medium mt-1">Allow others to find and view your public profile.</p>
-                                    </div>
-                                    <Toggle active={settings.profilePublic} onClick={() => toggleSetting("profilePublic")} />
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h3 className="font-black text-[#0b2d49]">Show My Activity</h3>
-                                        <p className="text-xs text-gray-400 font-medium mt-1">Display your event attendance history to followers.</p>
-                                    </div>
-                                    <Toggle active={settings.showActivity} onClick={() => toggleSetting("showActivity")} />
-                                </div>
-                            </div>
-                        </div>
+                        <PrivacySection settings={settings} toggleSetting={toggleSetting} />
 
                         {/* Linked Accounts */}
-                        <div className="bg-white rounded-[2.5rem] p-10 shadow-sm border border-gray-100">
-                            <div className="flex items-center gap-3 mb-10 pb-4 border-b border-gray-50">
-                                <BsLink45Deg className="text-[#0caf7d]" size={26} />
-                                <h2 className="text-xl font-black uppercase tracking-widest text-[#0b2d49]">Linked Accounts</h2>
-                            </div>
-                            
-                            <div className="space-y-6">
-                                <div className="flex items-center justify-between bg-gray-50/50 p-6 rounded-3xl border border-gray-100">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-red-500 shadow-sm">
-                                            <FaGoogle size={20} />
-                                        </div>
-                                        <div>
-                                            <h4 className="font-black text-sm text-[#0b2d49]">Google Account</h4>
-                                            <p className="text-[10px] font-bold text-gray-400">alex.morgan@gmail.com</p>
-                                        </div>
-                                    </div>
-                                    <button className="px-5 py-2 bg-white text-gray-400 rounded-xl font-black text-[10px] uppercase tracking-widest border border-gray-100 hover:text-red-500 hover:border-red-100 transition-all">
-                                        Disconnect
-                                    </button>
-                                </div>
-
-                                <div className="flex items-center justify-between bg-gray-50/50 p-6 rounded-3xl border border-gray-100">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-blue-600 shadow-sm">
-                                            <FaFacebookF size={20} />
-                                        </div>
-                                        <div>
-                                            <h4 className="font-black text-sm text-[#0b2d49]">Facebook Account</h4>
-                                            <p className="text-[10px] font-bold text-gray-400">Alex Morgan</p>
-                                        </div>
-                                    </div>
-                                    <button className="px-5 py-2 bg-white text-gray-400 rounded-xl font-black text-[10px] uppercase tracking-widest border border-gray-100 hover:text-red-500 hover:border-red-100 transition-all">
-                                        Disconnect
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                        <LinkedAccountsSection />
 
                         {/* Actions Button */}
                         <div className="flex items-center justify-end gap-6 pt-10">
