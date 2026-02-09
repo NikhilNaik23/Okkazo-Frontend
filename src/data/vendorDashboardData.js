@@ -29,7 +29,7 @@ export const revenueData = {
 };
 
 export const vendorDashboardStats = {
-  totalRevenue: { value: "$45,280.00", change: "+12.5%", trend: "up" },
+  totalRevenue: { value: "₹37,58,240.00", change: "+12.5%", trend: "up" },
   activeBookings: { value: "24", status: "8 Active" },
   pendingRequests: { value: "12", priority: "High Priority" }
 };
@@ -52,7 +52,7 @@ export const recentActivity = [
   {
     id: 2,
     title: "Tech Frontier Summit booking confirmed.",
-    details: "Deposit payment of $1,200 received successfully.",
+    details: "Deposit payment of ₹99,600 received successfully.",
     time: "5 hours ago",
     type: "success"
   }

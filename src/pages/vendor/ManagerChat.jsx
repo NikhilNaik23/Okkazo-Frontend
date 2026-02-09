@@ -170,7 +170,7 @@ const ManagerChat = () => {
                         <div className="flex justify-between items-center">
                             <div>
                                 <p className="text-[10px] text-[#708aa0] font-black uppercase tracking-widest leading-none mb-2">Finalized Amount</p>
-                                <p className="text-2xl font-black text-[#0b2d49] tracking-tight">${msg.amount}</p>
+                                <p className="text-2xl font-black text-[#0b2d49] tracking-tight">₹{msg.amount}</p>
                             </div>
                             <button className="px-4 py-2 bg-[#d7a444] text-white rounded-xl text-xs font-black shadow-lg shadow-[#d7a444]/20 hover:scale-105 transition-all flex items-center gap-2">
                                 <BsEye /> Review Quote
