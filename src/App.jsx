@@ -248,15 +248,7 @@ const App = () => {
           }
         />
 
-          {/* Admin Routes - Only for ADMIN role */}
-          <Route
-            path="/admin/*"
-            element={
-              <ProtectedRoute allowedRoles={['ADMIN']}>
-                <AdminLayout />
-              </ProtectedRoute>
-            }
-          />
+         
         {/* Admin Routes - Only for ADMIN role */}
         <Route
           path="/admin/*"
@@ -300,6 +292,7 @@ const App = () => {
             // </ProtectedRoute>
           }
         >
+          <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<UserDashboard />} />
           <Route path="planning-wizard" element={<PlanningWizard />} />
           <Route path="promote" element={<PromoteEvent />} />
@@ -330,6 +323,7 @@ const App = () => {
               </ProtectedRoute>
             }
           >
+            <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<VendorDashboard />} />
             <Route path="booked-events" element={<BookedEvents />} />
             <Route path="service-management" element={<ServiceManagement />} />
