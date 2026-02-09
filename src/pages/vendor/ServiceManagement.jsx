@@ -193,7 +193,7 @@ const ServiceManagement = () => {
                                 </span>
                             </td>
                             <td className="px-8 py-6">
-                                <span className="text-[#0b2d49] font-black">${item.price}</span>
+                                <span className="text-[#0b2d49] font-black">₹{item.price}</span>
                             </td>
                             <td className="px-8 py-6 text-right">
                                 <div className="flex justify-end gap-2">
@@ -251,7 +251,7 @@ const ServiceManagement = () => {
                             <BsGeoAlt /> {venue.location}
                         </div>
                         <div className="flex items-center justify-between pt-4 border-t border-gray-50">
-                            <span className="text-[#d7a444] font-black text-lg">${venue.price} / day</span>
+                            <span className="text-[#d7a444] font-black text-lg">₹{venue.price} / day</span>
                             <button className="p-2 text-[#708aa0] hover:text-[#0b2d49] hover:bg-gray-50 rounded-xl transition-all">
                                 <BsGear size={20} />
                             </button>

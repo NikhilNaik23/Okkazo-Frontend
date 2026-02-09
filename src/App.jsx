@@ -318,9 +318,9 @@ const App = () => {
           <Route
             path="/vendor"
             element={
-              <ProtectedRoute allowedRoles={['VENDOR']}>
+              // <ProtectedRoute allowedRoles={['VENDOR']}>
                 <VendorLayout />
-              </ProtectedRoute>
+              // </ProtectedRoute>
             }
           >
             <Route index element={<Navigate to="dashboard" replace />} />

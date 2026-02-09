@@ -189,7 +189,7 @@ const BusinessProfile = () => {
                                 <p className="text-sm text-[#5a5b44] font-medium">{service.description}</p>
                             </div>
                             <div className="text-right shrink-0">
-                                <p className="text-[#d7a444] font-black text-xl leading-none mb-1">From ${service.price}</p>
+                                <p className="text-[#d7a444] font-black text-xl leading-none mb-1">From ₹{service.price}</p>
                                 <p className="text-[10px] text-[#708aa0] font-black uppercase tracking-[0.2em] leading-none">Per Person</p>
                             </div>
                         </div>
