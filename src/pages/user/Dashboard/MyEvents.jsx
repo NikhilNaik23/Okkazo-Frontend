@@ -37,7 +37,7 @@ const MyEvents = () => {
     }, []);
 
     return (
-        <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
+        <div className="bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
             <Toaster position="top-center" />
 
             <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-12 pb-20">

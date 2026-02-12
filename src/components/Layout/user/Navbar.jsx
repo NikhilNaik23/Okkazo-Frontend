@@ -14,162 +14,165 @@ const navLinks = [
 
 const Navbar = () => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isAtTop, setIsAtTop] = useState(true);
   const location = useLocation();
-  const containerRef = useRef(null);
-  const linkRefs = useRef({});
-  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0, opacity: 0 });
 
   const isActive = (path) => location.pathname === path;
+  const isDashboard = ["/user/dashboard", "/user/my-events"].includes(location.pathname);
+  const isWizard = location.pathname === "/user/planning-wizard";
 
+  // Scroll Detection logic
   useLayoutEffect(() => {
-    const updateIndicator = () => {
-      const activeLink = linkRefs.current[location.pathname];
-      const container = containerRef.current;
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      setIsAtTop(currentScrollY < 50);
 
-      if (activeLink && container) {
-        const activeRect = activeLink.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-
-        setIndicatorStyle({
-          left: activeRect.left - containerRect.left,
-          width: activeRect.width,
-          opacity: 1,
-        });
+      if (currentScrollY > 100) {
+        setIsCollapsed(true);
       } else {
-        setIndicatorStyle((prev) => ({ ...prev, opacity: 0 }));
+        setIsCollapsed(false);
       }
     };
 
-    updateIndicator();
-    window.addEventListener("resize", updateIndicator);
-    return () => window.removeEventListener("resize", updateIndicator);
-  }, [location.pathname]);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
-  const isDashboard = ["/user/dashboard", "/user/my-events"].includes(location.pathname);
+  const showFullNav = isAtTop || isHovered;
+  const isExpandingOnHover = isWizard && !isAtTop && isHovered;
 
   return (
-    <header className="fixed top-6 left-0 right-0 z-50 flex justify-center px-4 md:px-10">
-      <nav className={`w-full max-w-7xl backdrop-blur-xl rounded-2xl border shadow-xl ring-1 overflow-hidden transition-all duration-300 ${isDashboard
-        ? "bg-[#09637E]/95 border-[#EBF4F6]/20 ring-white/10 shadow-[#09637E]/20"
-        : "bg-[#7AB2B2]/40 border-white/30 ring-white/10"
-        }`}>
-        <div className="flex justify-between max-w-7xl mx-auto px-6 md:px-10 h-20 items-center">
-          <div className="flex items-center gap-8">
-            {/* Logo */}
-            <Link to="/user/dashboard" className="flex items-center gap-2">
-              <img
-                src="/public_logo.png"
-                alt="Okkazo"
-                className={`h-16 w-auto object-contain pt-2 transition-all duration-300 ${isDashboard ? "brightness-0 invert opacity-90" : ""}`}
-              />
-            </Link>
+    <header className="fixed top-6 left-0 right-0 z-[100] flex justify-start px-8 pointer-events-none transition-all duration-500" style={{ paddingRight: isWizard ? 'calc(var(--sidebar-width, 0px) + 32px)' : '32px' }}>
+      <motion.nav
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        initial={false}
+        animate={{
+          width: showFullNav ? (isExpandingOnHover ? "calc(100% - 380px)" : "100%") : "70px",
+          maxWidth: showFullNav ? (isExpandingOnHover ? "calc(100% - 380px)" : "100%") : "70px",
+          height: "70px",
+          borderRadius: showFullNav ? "24px" : "35px",
+        }}
+        className={`pointer-events-auto backdrop-blur-3xl border shadow-2xl overflow-hidden transition-all duration-500 flex items-center
+                    ${isDashboard
+            ? "bg-[#09637E]/90 border-[#EBF4F6]/20 shadow-[#09637E]/20"
+            : "bg-[#EBF4F6]/90 border-[#09637E]/10 shadow-[#09637E]/5"
+          }`}
+      >
+        <div className={`flex items-center w-full h-full px-5 transition-all duration-500 ${showFullNav ? "justify-between" : "justify-center"}`}>
 
-            {/* Navigation Links - Desktop */}
-            <div className="hidden md:flex items-center gap-2 relative h-10 px-1" ref={containerRef}>
-              {/* Sliding Indicator */}
-              <motion.div
-                className={`absolute top-0 bottom-0 rounded-lg shadow-md z-0 ${isDashboard ? "bg-[#EBF4F6] shadow-none" : "bg-[#09637E]"}`}
-                animate={{
-                  left: indicatorStyle.left,
-                  width: indicatorStyle.width,
-                  opacity: indicatorStyle.opacity,
-                }}
-                transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
-              />
-
-              {navLinks.map((link) => (
-                <Link
-                  key={link.path}
-                  to={link.path}
-                  ref={(el) => (linkRefs.current[link.path] = el)}
-                  className={`relative z-10 text-xs font-bold px-4 py-2 rounded-lg transition-colors duration-300 ${isActive(link.path)
-                    ? (isDashboard ? "text-[#09637E]" : "text-white")
-                    : (isDashboard ? "text-[#EBF4F6]/80 hover:text-white" : "text-[#09637E] hover:text-[#088395]")
-                    }`}
-                >
-                  {link.name}
-                </Link>
-              ))}
-            </div>
-
-            {/* Dashboard Search Bar */}
-            {isDashboard && (
-              <div className="hidden lg:flex items-center relative animate-fade-in">
-                <BsSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-[#EBF4F6] opacity-70" />
-                <input
-                  type="text"
-                  placeholder="Search events..."
-                  className="pl-10 pr-4 py-2 bg-[#EBF4F6]/10 border border-[#EBF4F6]/30 rounded-full text-[#EBF4F6] placeholder-[#EBF4F6]/50 focus:outline-none focus:ring-2 focus:ring-[#EBF4F6]/50 focus:bg-[#EBF4F6]/20 transition-all w-52 xl:w-64 text-sm font-bold shadow-sm"
+          {/* LEFT SECTION: LOGO OR HAMBURGER */}
+          <Link to="/user/dashboard" className="flex items-center shrink-0">
+            <AnimatePresence mode="wait">
+              {showFullNav ? (
+                <motion.img
+                  key="logo"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  src="/public_logo.png"
+                  alt="Okkazo"
+                  className={`h-10 w-auto object-contain transition-all duration-300 ${isDashboard ? "brightness-0 invert" : ""}`}
                 />
-              </div>
+              ) : (
+                <motion.div
+                  key="hamburger"
+                  initial={{ opacity: 0, rotate: -90 }}
+                  animate={{ opacity: 1, rotate: 0 }}
+                  exit={{ opacity: 0, rotate: 90 }}
+                >
+                  <GiHamburgerMenu size={24} className={isDashboard ? "text-white" : "text-[#09637E]"} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </Link>
+
+          {/* FULL CONTENT (HIDDEN WHEN COLLAPSED) */}
+          <AnimatePresence>
+            {showFullNav && (
+              <motion.div
+                initial={{ opacity: 0, x: isWizard ? -20 : 0 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: isWizard ? -20 : 0 }}
+                className="flex-1 flex items-center justify-between ml-10"
+              >
+                {/* Desktop Links */}
+                <div className="hidden md:flex items-center gap-1">
+                  {navLinks.map((link) => (
+                    <Link
+                      key={link.path}
+                      to={link.path}
+                      className={`relative text-[10px] font-black uppercase tracking-[0.2em] px-5 py-2.5 rounded-xl transition-all
+                                                ${isActive(link.path)
+                          ? (isDashboard ? "text-[#09637E]" : "text-white")
+                          : (isDashboard ? "text-white/60 hover:text-white" : "text-[#09637E]/40 hover:text-[#09637E]")
+                        }`}
+                    >
+                      {isActive(link.path) && (
+                        <motion.div
+                          layoutId="nav-pill"
+                          className={`absolute inset-0 rounded-xl z-[-1] shadow-lg ${isDashboard ? "bg-white" : "bg-[#09637E]"}`}
+                          transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                        />
+                      )}
+                      {link.name}
+                    </Link>
+                  ))}
+                </div>
+
+                {/* Right Section */}
+                <div className="flex items-center gap-5">
+                  {isDashboard && (
+                    <div className="hidden lg:flex items-center relative group">
+                      <BsSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-white transition-colors" />
+                      <input
+                        type="text"
+                        placeholder="Search..."
+                        className="pl-11 pr-4 py-2 bg-white/10 border border-white/10 rounded-full text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all w-32 xl:w-40 text-[10px] font-bold"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3">
+                    <button className={`p-2 rounded-xl transition-colors ${isDashboard ? "text-white/60 hover:text-white hover:bg-white/10" : "text-[#09637E]/40 hover:text-[#09637E] hover:bg-black/5"}`}>
+                      <BsBell size={18} />
+                    </button>
+                    <div className={`h-6 w-[1px] ${isDashboard ? "bg-white/10" : "bg-[#09637E]/10"}`} />
+                    <Link to="/user/profile" className="flex items-center pl-1 group ml-3">
+                      <div className="w-10 h-10 rounded-xl border-2 border-[#09637E]/20 overflow-hidden shadow-lg group-hover:scale-105 transition-all duration-300 flex items-center justify-center bg-[#09637E] text-white text-[11px] font-black">
+                        AM
+                      </div>
+                    </Link>
+                  </div>
+                </div>
+              </motion.div>
             )}
-          </div>
-
-          {/* Right Actions */}
-          <div className="flex items-center gap-3">
-            <Link to="/user/notifications" className={`relative transition-colors cursor-pointer p-2 ${isDashboard ? "text-[#EBF4F6] hover:text-white" : "text-[#09637E] hover:text-[#088395]"}`}>
-              <BsBell size={18} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-transparent translate-x-1/4 -translate-y-1/4"></span>
-            </Link>
-
-            <div className={`flex items-center gap-2 pl-3 border-l ${isDashboard ? "border-[#EBF4F6]/20" : "border-[#09637E]/20"}`}>
-              <div className="text-right hidden lg:block">
-                <p className={`text-xs font-bold ${isDashboard ? "text-[#EBF4F6]" : "text-[#09637E]"}`}>Alex Morgan</p>
-                <p className={`text-[10px] font-medium leading-none ${isDashboard ? "text-[#EBF4F6]/70" : "text-[#088395]"}`}>Attendee</p>
-              </div>
-              <Link to="/user/profile" className={`w-8 h-8 rounded-full border-2 shadow-sm overflow-hidden hover:scale-105 transition-transform ${isDashboard ? "border-[#EBF4F6]/50" : "border-white"}`}>
-                <img src="https://ui-avatars.com/api/?name=Alex+Morgan&background=09637E&color=EBF4F6" alt="User" />
-              </Link>
-            </div>
-
-            {/* Mobile Menu Toggle */}
-            <button
-              className={`md:hidden text-xl transition-transform duration-300 ease-in-out cursor-pointer ml-2 ${isDashboard ? "text-[#EBF4F6]" : "text-[#09637E]"}`}
-              onClick={() => setIsMobileOpen(!isMobileOpen)}
-            >
-              {isMobileOpen ? <RiCloseLargeFill /> : <GiHamburgerMenu />}
-            </button>
-          </div>
+          </AnimatePresence>
         </div>
 
-        {/* Mobile Menu Dropdown */}
+        {/* Mobile Dropdown */}
         <AnimatePresence>
-          {isMobileOpen && (
+          {isMobileOpen && showFullNav && (
             <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className={`md:hidden backdrop-blur-2xl border-t rounded-b-2xl shadow-xl ${isDashboard ? "bg-[#09637E]/95 border-[#EBF4F6]/20" : "bg-[#EBF4F6]/95 border-white/20"}`}
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="w-full bg-white/95 border-t border-gray-100 overflow-hidden"
             >
-              <div className="px-6 py-6 flex flex-col gap-3">
+              <div className="px-8 py-6 flex flex-col gap-4">
                 {navLinks.map((link) => (
-                  <Link
-                    key={link.path}
-                    to={link.path}
-                    onClick={() => setIsMobileOpen(false)}
-                    className={`relative text-sm font-black py-3 rounded-xl text-center transition-all ${isActive(link.path)
-                      ? (isDashboard ? "text-[#09637E] bg-[#EBF4F6]" : "text-white bg-[#09637E]")
-                      : (isDashboard ? "text-[#EBF4F6] hover:bg-[#EBF4F6]/10" : "text-[#09637E] hover:bg-[#7AB2B2]/20")
-                      }`}
-                  >
+                  <Link key={link.path} to={link.path} onClick={() => setIsMobileOpen(false)} className="text-[10px] font-black uppercase tracking-widest text-[#09637E] py-2">
                     {link.name}
                   </Link>
                 ))}
-                <div className={`border-t pt-3 mt-1 flex items-center justify-center gap-3 ${isDashboard ? "border-[#EBF4F6]/10" : "border-[#09637E]/10"}`}>
-                  <div className="w-10 h-10 rounded-full border-2 border-white overflow-hidden">
-                    <img src="https://ui-avatars.com/api/?name=Alex+Morgan&background=09637E&color=EBF4F6" alt="User" />
-                  </div>
-                  <div className="text-left">
-                    <p className={`text-sm font-black ${isDashboard ? "text-[#EBF4F6]" : "text-[#09637E]"}`}>Alex Morgan</p>
-                    <p className={`text-xs ${isDashboard ? "text-[#EBF4F6]/70" : "text-[#088395]"}`}>Attendee</p>
-                  </div>
-                </div>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
-      </nav>
-    </header>
+      </motion.nav>
+    </header >
   );
 };
 

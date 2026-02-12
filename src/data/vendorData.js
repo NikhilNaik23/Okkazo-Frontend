@@ -1,62 +1,229 @@
-export const dummyVendors = {
-  Venue: Array.from({ length: 10 }, (_, i) => ({
-    id: `venue-${i}`,
-    name: `Venue ${i + 1}: The Grand Hall`,
-    rating: 4.5 + (i % 5) * 0.1,
-    reviews: 120 + i * 10,
-    priceMin: (2000 + i * 500) * 83,
-    priceMax: (5000 + i * 1000) * 83,
-    image: "https://images.unsplash.com/photo-1519167758481-83f550bb49b3?q=80&w=2698&auto=format&fit=crop",
-    location: "Downtown, City"
-  })),
-  Catering: Array.from({ length: 10 }, (_, i) => ({
-    id: `catering-${i}`,
-    name: `Catering ${i + 1}: Gourmet Delights`,
-    rating: 4.2 + (i % 5) * 0.1,
-    reviews: 80 + i * 5,
-    priceMin: (50 + i * 10) * 83, // Per guest
-    priceMax: (150 + i * 20) * 83,
-    image: "https://images.unsplash.com/photo-1555244162-803834f70033?q=80&w=2670&auto=format&fit=crop",
-    type: "Italian & Continental"
-  })),
-  Photography: Array.from({ length: 10 }, (_, i) => ({
-    id: `photo-${i}`,
-    name: `Studio ${i + 1}: Lens Magic`,
-    rating: 4.8,
-    reviews: 45 + i,
-    priceMin: (1000 + i * 200) * 83,
-    priceMax: (3000 + i * 500) * 83,
-    image: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=2528&auto=format&fit=crop",
-    style: "Candid & Artistic"
-  })),
-  Decor: Array.from({ length: 10 }, (_, i) => ({
-    id: `decor-${i}`,
-    name: `Decor ${i + 1}: Elegant Themes`,
-    rating: 4.6,
-    reviews: 60 + i * 2,
-    priceMin: (1500 + i * 300) * 83,
-    priceMax: (4000 + i * 600) * 83,
-    image: "https://images.unsplash.com/photo-1478146896981-b80fe463b330?q=80&w=2670&auto=format&fit=crop",
-    theme: "Modern Vintage"
-  })),
-  Entertainment: Array.from({ length: 10 }, (_, i) => ({
-    id: `ent-${i}`,
-    name: `Band ${i + 1}: The Groovers`,
-    rating: 4.9,
-    reviews: 200 + i * 15,
-    priceMin: (800 + i * 100) * 83,
-    priceMax: (2500 + i * 300) * 83,
-    image: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=2670&auto=format&fit=crop",
-    genre: "Live Jazz"
-  })),
-  Transport: Array.from({ length: 10 }, (_, i) => ({
-    id: `trans-${i}`,
-    name: `Transport ${i + 1}: Luxury Rides`,
-    rating: 4.3,
-    reviews: 30 + i,
-    priceMin: (200 + i * 50) * 83,
-    priceMax: (1000 + i * 100) * 83,
-    image: "https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?q=80&w=2670&auto=format&fit=crop",
-    fleet: "Limousines & Vans"
-  })),
+const getRandomLocation = () => {
+    const locations = ["Premium District, Hyderabad", "Banjara Hills, Hyderabad", "Jubilee Hills, Hyderabad", "Gachibowli, Hyderabad", "Madhapur, Hyderabad", "Secunderabad", "Kukatpally, Hyderabad"];
+    return locations[Math.floor(Math.random() * locations.length)];
 };
+
+const venueNames = ["Royal Orchid Pavilion", "Celestial Gardens", "Gilded Ballroom", "Azure Sky Deck", "Marble Palace", "Emerald Woods", "Sapphire Hall", "Diamond Residency", "Golden Oasis", "Silver Lining Estate", "Pearl Banquet", "Ruby Reception", "Amethyst Arena", "Quartz Quarter", "Topaz Terrace", "Onyx Orchard", "Jade Junction", "Coral Club", "Platinium Plaza", "Titanium Tavern", "Bronze Bay", "Iron Gate Inn", "Rustique Ranch", "Modern Manor", "Classic Chateau"];
+
+const cateringNames = ["Saffron & Spice", "Epicurean Delights", "Royal Kitchen", "Velvet Plates", "Silver Spoon", "Golden Whisk", "Culinaria", "Taste of Heaven", "Elite Eats", "Gourmet Galore", "Savory Secrets", "Pristine Platters", "Majestic Meals", "Zesty Zing", "Fiesta Flavors", "Heritage Herbs", "Fusion Feast", "Continental Cloud", "Global Grub", "Dine Divine", "Bistro Bliss", "Pantry Perfection", "Chef's Choice", "Kitchen Kings", "Buffet Buddies"];
+
+const photoNames = ["Stellar Frames", "Golden Hour", "Eternal Memories", "Lens Maestro", "Pixel Perfect", "Shutter Story", "Focus Fab", "Snap Soul", "Visual Vibes", "Capture Crew", "Moment Makers", "Flash Fame", "Angle Art", "View Vivid", "Portrait Pro", "Candid Click", "Freeze Frame", "Aperture Ace", "Zoom Zeal", "Exposure Elite", "Shadow & Light", "Contrast Kings", "Iso Icons", "Raw Realness", "Edited Elegance"];
+
+const videoNames = ["Cinematic Souls", "Motion Magic", "Eternal Reels", "Frame Flow", "Visual Verse", "Dynamic Docs", "Life in Motion", "Vivid Videos", "Story Stream", "Lens Legends", "Capture Cut", "Moment Movies", "Pro Productions", "Elite Edits", "Prime Pixels"];
+
+const decorNames = ["Floral Fantasy", "Elegant Edges", "Dream Decor", "Royal Themes", "Rustic Charm", "Modern Muse", "Crystal Clear", "Velvet Vibe", "Golden Touch", "Bloom & Bliss", "Style Spectrum", "Artistic Ambience", "Divine Designs", "Enchanted Events", "Chic Celebrations"];
+
+const soundNames = ["Sonic Boom", "Clear Beats", "Echo Events", "Pulse Productions", "Vibe Audio", "Rhythm Rentals", "Harmony Hub", "Audio Ace", "Dynamic DJs", "Pure Sound", "Infinite Waves", "Crystal Audio", "Resonance Records", "Sound Spectrum", "Live Lattice"];
+
+const cakeNames = ["Sweet Surrender", "Sugar Sculpt", "Velvet Frost", "Crumb & Co", "Heavenly Bites", "Royal Crumb", "Artisan Cakes", "Sweet Symphony", "Glaze Galore", "Petite Pastries", "Tiered Treasures", "Frosting Fairy", "Confection Cloud", "Dulce Delights", "Baker's Bliss"];
+
+const itemImages = {
+    Venue: [
+        "https://images.unsplash.com/photo-1519167758481-83f550bb49b3?q=80&w=2698&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1541310592916-7fb19bf478cc?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1562663474-6cbb3fee4c77?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1517457373958-b7bdd458ad20?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?q=80&w=2669&auto=format&fit=crop"
+    ],
+    Catering: [
+        "https://images.unsplash.com/photo-1555244162-803834f70033?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1467003909585-2f8a72700288?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?q=80&w=2670&auto=format&fit=crop"
+    ],
+    Photography: [
+        "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=2528&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1542038784456-1ea8e935640e?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1554080353-a576cf803bda?q=80&w=2574&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1453060113865-9689b592457a?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1537151608828-ea2b11777ee8?q=80&w=2588&auto=format&fit=crop"
+    ],
+    Decor: [
+        "https://images.unsplash.com/photo-1478147427282-58a87a120781?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?q=80&w=2669&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1522673607200-1648832cee98?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1517457373958-b7bdd458ad20?q=80&w=2670&auto=format&fit=crop"
+    ],
+    Artists: [
+        "https://images.unsplash.com/photo-1514525253361-bee8d4a4608c?q=80&w=2574&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=2670&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1493225255756-d9584f8606e9?q=80&w=2670&auto=format&fit=crop"
+    ]
+};
+
+export const dummyVendors = {
+  "Venue": Array.from({ length: 30 }, (_, i) => ({
+    id: `venue-${i}`,
+    name: venueNames[i % venueNames.length],
+    rating: (4.2 + Math.random() * 0.8).toFixed(1),
+    reviews: 50 + Math.floor(Math.random() * 450),
+    priceMin: (100000 + (i % 10) * 25000),
+    priceMax: (100000 + (i % 10) * 25000) * 1.5,
+    image: itemImages.Venue[i % itemImages.Venue.length],
+    location: getRandomLocation(),
+    isPopular: i < 6
+  })),
+  "Catering & Drinks": Array.from({ length: 30 }, (_, i) => ({
+    id: `catering-${i}`,
+    name: cateringNames[i % cateringNames.length],
+    rating: (4.1 + Math.random() * 0.9).toFixed(1),
+    reviews: 30 + Math.floor(Math.random() * 200),
+    priceMin: (500 + (i % 5) * 200),
+    priceMax: (500 + (i % 5) * 200) * 1.5,
+    image: itemImages.Catering[i % itemImages.Catering.length],
+    location: getRandomLocation(),
+    isPopular: i < 6,
+    type: i % 2 === 0 ? "Fusion & Continental" : "Traditional Indian"
+  })),
+  "Photography": Array.from({ length: 30 }, (_, i) => ({
+    id: `photo-${i}`,
+    name: photoNames[i % photoNames.length],
+    rating: (4.5 + Math.random() * 0.5).toFixed(1),
+    reviews: 20 + Math.floor(Math.random() * 150),
+    priceMin: (30000 + (i % 4) * 15000),
+    priceMax: (30000 + (i % 4) * 15000) * 2,
+    image: itemImages.Photography[i % itemImages.Photography.length],
+    location: getRandomLocation(),
+    isPopular: i < 6,
+    style: i % 3 === 0 ? "Candid" : i % 3 === 1 ? "Traditional" : "Cinematic"
+  })),
+  "Videography": Array.from({ length: 25 }, (_, i) => ({
+    id: `video-${i}`,
+    name: videoNames[i % videoNames.length],
+    rating: (4.4 + Math.random() * 0.6).toFixed(1),
+    reviews: 15 + Math.floor(Math.random() * 100),
+    priceMin: (25000 + (i % 5) * 10000),
+    priceMax: (25000 + (i % 5) * 10000) * 1.8,
+    image: itemImages.Photography[(i + 2) % itemImages.Photography.length],
+    location: getRandomLocation(),
+    isPopular: i < 5
+  })),
+  "Decor & Styling": Array.from({ length: 25 }, (_, i) => ({
+    id: `decor-${i}`,
+    name: decorNames[i % decorNames.length],
+    rating: (4.2 + Math.random() * 0.8).toFixed(1),
+    reviews: 40 + Math.floor(Math.random() * 120),
+    priceMin: (50000 + (i % 5) * 20000),
+    priceMax: (50000 + (i % 5) * 20000) * 2,
+    image: itemImages.Decor[i % itemImages.Decor.length],
+    location: getRandomLocation(),
+    isPopular: i < 5
+  })),
+  "Entertainment & Artists": Array.from({ length: 25 }, (_, i) => ({
+    id: `ent-${i}`,
+    name: `Group ${i + 1}`,
+    rating: (4.6 + Math.random() * 0.4).toFixed(1),
+    reviews: 60 + Math.floor(Math.random() * 300),
+    priceMin: (20000 + (i % 5) * 15000),
+    priceMax: (20000 + (i % 5) * 15000) * 1.5,
+    image: itemImages.Artists[i % itemImages.Artists.length],
+    location: getRandomLocation(),
+    isPopular: i < 4
+  })),
+  "Makeup & Grooming": Array.from({ length: 20 }, (_, i) => ({
+    id: `makeup-${i}`,
+    name: `Stylist ${i + 1}`,
+    rating: (4.5 + Math.random() * 0.5).toFixed(1),
+    reviews: 25 + Math.floor(Math.random() * 80),
+    priceMin: (15000 + (i % 4) * 5000),
+    priceMax: (15000 + (i % 4) * 5000) * 1.6,
+    image: itemImages.Photography[i % itemImages.Photography.length],
+    location: getRandomLocation(),
+    isPopular: i < 3
+  })),
+  "Invitations & Printing": Array.from({ length: 20 }, (_, i) => ({
+    id: `invite-${i}`,
+    name: `Studio ${i + 1}`,
+    rating: (4.3 + Math.random() * 0.7).toFixed(1),
+    reviews: 30 + Math.floor(Math.random() * 150),
+    priceMin: (50 + (i % 5) * 50),
+    priceMax: (50 + (i % 5) * 50) * 2,
+    image: itemImages.Decor[(i + 1) % itemImages.Decor.length],
+    location: getRandomLocation(),
+    isPopular: i < 4
+  })),
+  "Sound & Lighting": Array.from({ length: 20 }, (_, i) => ({
+    id: `sound-${i}`,
+    name: soundNames[i % soundNames.length],
+    rating: (4.5 + Math.random() * 0.5).toFixed(1),
+    reviews: 20 + Math.floor(Math.random() * 110),
+    priceMin: (30000 + (i % 5) * 10000),
+    priceMax: (30000 + (i % 5) * 10000) * 1.5,
+    image: itemImages.Venue[(i + 3) % itemImages.Venue.length],
+    location: getRandomLocation(),
+    isPopular: i < 4
+  })),
+  "Equipment Rental": Array.from({ length: 15 }, (_, i) => ({
+    id: `rental-${i}`,
+    name: `Rental Service ${i + 1}`,
+    rating: (4.0 + Math.random() * 1.0).toFixed(1),
+    reviews: 10 + Math.floor(Math.random() * 50),
+    priceMin: (10000 + (i % 5) * 5000),
+    priceMax: (10000 + (i % 5) * 5000) * 1.4,
+    image: itemImages.Venue[i % itemImages.Venue.length],
+    location: getRandomLocation(),
+    isPopular: i < 3
+  })),
+  "Security & Safety": Array.from({ length: 10 }, (_, i) => ({
+    id: `security-${i}`,
+    name: `Guard Force ${i + 1}`,
+    rating: (4.8 + Math.random() * 0.2).toFixed(1),
+    reviews: 40 + Math.floor(Math.random() * 150),
+    priceMin: (20000 + (i % 3) * 10000),
+    priceMax: (20000 + (i % 3) * 10000) * 1.2,
+    image: itemImages.Artists[(i + 2) % itemImages.Artists.length],
+    location: getRandomLocation(),
+    isPopular: i < 2
+  })),
+  "Transportation": Array.from({ length: 15 }, (_, i) => ({
+    id: `transport-${i}`,
+    name: `Fleet ${i + 1}`,
+    rating: (4.4 + Math.random() * 0.6).toFixed(1),
+    reviews: 25 + Math.floor(Math.random() * 90),
+    priceMin: (5000 + (i % 5) * 2000),
+    priceMax: (5000 + (i % 5) * 2000) * 1.5,
+    image: itemImages.Venue[(i + 1) % itemImages.Venue.length],
+    location: getRandomLocation(),
+    isPopular: i < 3
+  })),
+  "Live Streaming & Media": Array.from({ length: 12 }, (_, i) => ({
+    id: `live-${i}`,
+    name: `Stream Team ${i + 1}`,
+    rating: (4.6 + Math.random() * 0.4).toFixed(1),
+    reviews: 15 + Math.floor(Math.random() * 60),
+    priceMin: (15000 + (i % 4) * 8000),
+    priceMax: (15000 + (i % 4) * 8000) * 1.7,
+    image: itemImages.Photography[(i + 4) % itemImages.Photography.length],
+    location: getRandomLocation(),
+    isPopular: i < 3
+  })),
+  "Cake & Desserts": Array.from({ length: 25 }, (_, i) => ({
+    id: `cake-${i}`,
+    name: cakeNames[i % cakeNames.length],
+    rating: (4.7 + Math.random() * 0.3).toFixed(1),
+    reviews: 35 + Math.floor(Math.random() * 180),
+    priceMin: (5000 + (i % 5) * 3000),
+    priceMax: (5000 + (i % 5) * 3000) * 2,
+    image: itemImages.Catering[(i + 2) % itemImages.Catering.length],
+    location: getRandomLocation(),
+    isPopular: i < 5
+  })),
+  "Experimental": [
+    {
+      id: "exp-1",
+      name: "Burger Eating Buffalo",
+      rating: 5.0,
+      reviews: 420,
+      priceMin: 99999,
+      priceMax: 150000,
+      image: "https://images.unsplash.com/photo-1552167909-6447ec158525?q=80&w=2670&auto=format&fit=crop",
+      location: "Dreamland",
+      isPopular: true
+    }
+  ]
+};
+

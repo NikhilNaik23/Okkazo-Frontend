@@ -144,11 +144,11 @@ const StepEventDetails = ({ formData, handleChange, setFormData, minDateString }
                         )}
                     </div>
 
-                    <LocationPicker 
-                         lat={formData.lat} 
-                         lng={formData.lng} 
-                         onLocationSelect={handleLocationSelect}
-                         className="h-64 md:h-80 w-full rounded-2xl overflow-hidden border border-gray-200 relative z-0 bg-gray-100"
+                    <LocationPicker
+                        lat={formData.lat}
+                        lng={formData.lng}
+                        onLocationSelect={handleLocationSelect}
+                        className="h-64 md:h-80 w-full rounded-2xl overflow-hidden border border-gray-200 relative z-0 bg-gray-100"
                     />
 
                     <p className="mt-3 text-[11px] text-gray-400 flex items-center gap-2">

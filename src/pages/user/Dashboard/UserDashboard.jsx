@@ -13,7 +13,7 @@ const UserDashboard = () => {
     const creativeEvents = allEvents.filter(e => ['Art', 'Arts', 'Painting', 'Photography'].includes(e.tag));
 
     return (
-        <div className="min-h-screen bg-[#EBF4F6] pb-20 overflow-x-hidden overflow-y-hidden">
+        <div className="bg-[#EBF4F6] pb-20 overflow-x-hidden overflow-y-hidden">
             {/* Hero Section */}
             <HeroSlider events={popularEvents} />
 
