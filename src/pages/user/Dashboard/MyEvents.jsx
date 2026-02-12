@@ -17,15 +17,22 @@ const MyEvents = () => {
             try {
                 // Simulated API delay
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                
+
                 // Mock Organized Events response
-                const organizedResponse = myOrganizedEvents;
+                const organizedResponse = [...myOrganizedEvents];
+
+                // Fetch Drafts from LocalStorage
+                const savedDrafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
+
+                // Combine mocked events with local drafts
+                const finalEvents = [...savedDrafts, ...organizedResponse];
 
                 // Mock Tickets response
                 const ticketsResponse = myTicketsData;
 
-                setOrganizedEvents(organizedResponse);
+                setOrganizedEvents(finalEvents);
                 setMyTickets(ticketsResponse);
+
             } catch (error) {
                 toast.error("Failed to load your events");
             } finally {
@@ -37,13 +44,13 @@ const MyEvents = () => {
     }, []);
 
     return (
-        <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
+        <div className="bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
             <Toaster position="top-center" />
 
             <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-12 pb-20">
                 {/* Header Tabs */}
                 <div className="flex items-center gap-12 border-b border-gray-200 mb-10 overflow-x-auto whitespace-nowrap scrollbar-hide">
-                    <button 
+                    <button
                         onClick={() => setActiveTab("organized")}
                         className={`flex items-center gap-3 pb-4 px-2 font-bold transition-all relative ${activeTab === "organized" ? "text-[#0b2d49]" : "text-gray-400 hover:text-gray-600"}`}
                     >
@@ -52,7 +59,7 @@ const MyEvents = () => {
                         <span className="bg-gray-100 text-[10px] px-2 py-0.5 rounded-full text-gray-400 font-black">{isLoading ? "..." : organizedEvents.length}</span>
                         {activeTab === "organized" && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#d7a444] rounded-t-full"></div>}
                     </button>
-                    <button 
+                    <button
                         onClick={() => setActiveTab("tickets")}
                         className={`flex items-center gap-3 pb-4 px-2 font-bold transition-all relative ${activeTab === "tickets" ? "text-[#0b2d49]" : "text-gray-400 hover:text-gray-600"}`}
                     >
@@ -94,18 +101,17 @@ const MyEvents = () => {
                                             </div>
                                             <div className="p-8">
                                                 <p className="text-[10px] font-black text-[#d7a444] uppercase tracking-widest mb-2">{event.date}</p>
-                                                <h3 className="text-xl font-black mb-2 group-hover:text-[#d7a444] transition-colors">{event.title}</h3>
+                                                <h3 className="text-xl font-serif-premium italic mb-2 group-hover:text-[#d7a444] transition-colors">{event.title}</h3>
                                                 <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium mb-6">
                                                     <BsGeoAlt size={14} />
                                                     {event.location}
                                                 </div>
-                                                
+
                                                 <div className="flex justify-between items-center pt-6 border-t border-gray-50">
-                                                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                                                        event.status === 'Live' ? 'bg-green-50 text-green-600' : 
-                                                        event.status === 'Draft' ? 'bg-gray-100 text-gray-500' : 
-                                                        'bg-[#fdf8ee] text-[#d7a444]'
-                                                    }`}>
+                                                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ${event.status === 'Live' ? 'bg-green-50 text-green-600' :
+                                                        event.status === 'Draft' ? 'bg-gray-100 text-gray-500' :
+                                                            'bg-[#fdf8ee] text-[#d7a444]'
+                                                        }`}>
                                                         {event.status === 'Live' && <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 mr-2 animate-pulse"></span>}
                                                         {event.status}
                                                     </span>
@@ -151,7 +157,7 @@ const MyEvents = () => {
                                                     <span className="w-1.5 h-1.5 bg-[#d7a444] rounded-full"></span>
                                                     {ticket.time}
                                                 </div>
-                                                <h3 className="text-xl font-black mb-2 group-hover:text-[#d7a444] transition-colors">{ticket.title}</h3>
+                                                <h3 className="text-xl font-serif-premium italic mb-2 group-hover:text-[#d7a444] transition-colors">{ticket.title}</h3>
                                                 <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium mb-8">
                                                     <BsGeoAlt size={14} />
                                                     {ticket.location}

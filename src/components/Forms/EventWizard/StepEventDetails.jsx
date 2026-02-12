@@ -43,12 +43,11 @@ const StepEventDetails = ({ formData, handleChange, setFormData, minDateString }
                         </div>
                     </div>
 
-                    {formData.listingType === 'Public' && (
-                        <div className="animate-in fade-in slide-in-from-top-2">
-                            <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Event Title <span className="text-red-500">*</span></label>
-                            <input type="text" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#d7a444] focus:ring-4 focus:ring-[#d7a444]/10 outline-none transition-all placeholder:text-gray-300" placeholder="e.g. Annual Tech Conference 2024" onChange={(e) => handleChange('title', e.target.value)} value={formData.title} />
-                        </div>
-                    )}
+                    <div className="animate-in fade-in slide-in-from-top-2">
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Event Title <span className="text-red-500">*</span></label>
+                        <input type="text" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#d7a444] focus:ring-4 focus:ring-[#d7a444]/10 outline-none transition-all placeholder:text-gray-300" placeholder="e.g. Annual Tech Conference 2024" onChange={(e) => handleChange('title', e.target.value)} value={formData.title} />
+                    </div>
+
 
                     <div>
                         <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Event Type</label>
@@ -144,11 +143,11 @@ const StepEventDetails = ({ formData, handleChange, setFormData, minDateString }
                         )}
                     </div>
 
-                    <LocationPicker 
-                         lat={formData.lat} 
-                         lng={formData.lng} 
-                         onLocationSelect={handleLocationSelect}
-                         className="h-64 md:h-80 w-full rounded-2xl overflow-hidden border border-gray-200 relative z-0 bg-gray-100"
+                    <LocationPicker
+                        lat={formData.lat}
+                        lng={formData.lng}
+                        onLocationSelect={handleLocationSelect}
+                        className="h-64 md:h-80 w-full rounded-2xl overflow-hidden border border-gray-200 relative z-0 bg-gray-100"
                     />
 
                     <p className="mt-3 text-[11px] text-gray-400 flex items-center gap-2">

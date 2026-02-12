@@ -110,7 +110,7 @@ const App = () => {
         }}
       />
       <AnimatePresence mode="wait">
-        <Routes location={location} key={location.pathname}>
+        <Routes location={location}>
           {/* Public Routes - Redirect authenticated users to their dashboard */}
           <Route
             path="/"
@@ -170,94 +170,94 @@ const App = () => {
               </PublicRoute>
             }
           />
-        {/* Public Routes - Redirect authenticated users to their dashboard */}
-        <Route
-          path="/"
-          element={
-            <PublicRoute restricted>
-              <Dashboard />
-            </PublicRoute>
-          }
-        />
+          {/* Public Routes - Redirect authenticated users to their dashboard */}
+          <Route
+            path="/"
+            element={
+              <PublicRoute restricted>
+                <Dashboard />
+              </PublicRoute>
+            }
+          />
 
-        {/* Auth Routes - Redirect if already logged in */}
-        <Route
-          path="/login"
-          element={
-            <PublicRoute restricted>
-              <Login />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/register"
-          element={
-            <PublicRoute restricted>
-              <Register />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/forgot-password"
-          element={
-            <PublicRoute restricted>
-              <ForgotPassword />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/reset-password"
-          element={
-            <PublicRoute restricted>
-              <ResetPassword />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/verify-email"
-          element={
-            <PublicRoute>
-              <VerifyEmail />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/resend-verification"
-          element={
-            <PublicRoute restricted>
-              <ResendVerification />
-            </PublicRoute>
-          }
-        />
+          {/* Auth Routes - Redirect if already logged in */}
+          <Route
+            path="/login"
+            element={
+              <PublicRoute restricted>
+                <Login />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              <PublicRoute restricted>
+                <Register />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              <PublicRoute restricted>
+                <ForgotPassword />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/reset-password"
+            element={
+              <PublicRoute restricted>
+                <ResetPassword />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/verify-email"
+            element={
+              <PublicRoute>
+                <VerifyEmail />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/resend-verification"
+            element={
+              <PublicRoute restricted>
+                <ResendVerification />
+              </PublicRoute>
+            }
+          />
 
-        <Route
-          path="/pricing"
-          element={
-            <PublicRoute>
-              <Pricing />
-            </PublicRoute>
-          }
-        />
+          <Route
+            path="/pricing"
+            element={
+              <PublicRoute>
+                <Pricing />
+              </PublicRoute>
+            }
+          />
 
-        <Route
-          path="/quote-success"
-          element={
-            <PublicRoute>
-              <QuoteSuccess />
-            </PublicRoute>
-          }
-        />
+          <Route
+            path="/quote-success"
+            element={
+              <PublicRoute>
+                <QuoteSuccess />
+              </PublicRoute>
+            }
+          />
 
-         
-        {/* Admin Routes - Only for ADMIN role */}
-        <Route
-          path="/admin/*"
-          element={
-            // <ProtectedRoute allowedRoles={['ADMIN']}>
+
+          {/* Admin Routes - Only for ADMIN role */}
+          <Route
+            path="/admin/*"
+            element={
+              // <ProtectedRoute allowedRoles={['ADMIN']}>
               <AdminLayout />
-            // </ProtectedRoute> 
-          } 
-        />
+              // </ProtectedRoute> 
+            }
+          />
 
           {/* Manager Routes - Only for MANAGER role */}
           <Route
@@ -281,29 +281,29 @@ const App = () => {
             <Route path="logout" element={<ManagerLogout />} />
           </Route>
 
-            
 
-        {/* User Routes - Only for USER role */}
-        <Route
-          path="/user"
-          element={
-            // <ProtectedRoute allowedRoles={['USER']}>
-            <UserLayout />
-            // </ProtectedRoute>
-          }
-        >
-          <Route index element={<Navigate to="dashboard" replace />} />
-          <Route path="dashboard" element={<UserDashboard />} />
-          <Route path="planning-wizard" element={<PlanningWizard />} />
-          <Route path="promote" element={<PromoteEvent />} />
-          <Route path="event/:eventId" element={<EventDetails />} />
-          <Route path="checkout/:eventId" element={<EventCheckout />} />
-          <Route path="my-events" element={<MyEvents />} />
-          <Route path="profile" element={<UserProfile />} />
-          <Route path="notifications" element={<Notifications />} />
-          <Route path="edit-profile" element={<EditProfile />} />
-          <Route path="account-settings" element={<AccountSettings />} />
-        </Route>
+
+          {/* User Routes - Only for USER role */}
+          <Route
+            path="/user"
+            element={
+              // <ProtectedRoute allowedRoles={['USER']}>
+              <UserLayout />
+              // </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<UserDashboard />} />
+            <Route path="planning-wizard" element={<PlanningWizard />} />
+            <Route path="promote" element={<PromoteEvent />} />
+            <Route path="event/:eventId" element={<EventDetails />} />
+            <Route path="checkout/:eventId" element={<EventCheckout />} />
+            <Route path="my-events" element={<MyEvents />} />
+            <Route path="profile" element={<UserProfile />} />
+            <Route path="notifications" element={<Notifications />} />
+            <Route path="edit-profile" element={<EditProfile />} />
+            <Route path="account-settings" element={<AccountSettings />} />
+          </Route>
 
 
           {/* Vendor Routes - For VENDOR role */}
@@ -319,7 +319,7 @@ const App = () => {
             path="/vendor"
             element={
               // <ProtectedRoute allowedRoles={['VENDOR']}>
-                <VendorLayout />
+              <VendorLayout />
               // </ProtectedRoute>
             }
           >

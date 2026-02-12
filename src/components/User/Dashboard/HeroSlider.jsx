@@ -40,10 +40,10 @@ const HeroSlider = ({ events }) => {
 
             {/* Fixed Tags Position - Top Left */}
             <div className="absolute top-28 md:top-32 left-8 md:left-16 lg:left-24 z-20 flex items-center gap-3 animate-slide-down">
-                <span className="px-3 py-1 rounded-full bg-[#09637E] text-white text-xs font-black tracking-widest uppercase shadow-lg shadow-[#09637E]/40">
+                <span className="px-3 py-1 rounded-full bg-[#09637E] text-white text-xs font-serif-premium italic tracking-widest uppercase shadow-lg shadow-[#09637E]/40">
                     Trending Now
                 </span>
-                <span className="px-3 py-1 rounded-full bg-white/20 border border-white/30 text-white text-xs font-bold tracking-wider uppercase backdrop-blur-md">
+                <span className="px-3 py-1 rounded-full bg-white/20 border border-white/30 text-white text-xs font-serif-premium italic tracking-wider uppercase backdrop-blur-md">
                     {currentEvent.tag}
                 </span>
             </div>
@@ -52,11 +52,11 @@ const HeroSlider = ({ events }) => {
             <div className="absolute top-0 right-0 w-full md:w-2/3 h-full flex flex-col justify-start items-end px-8 md:px-16 lg:px-24 z-10 pt-28 md:pt-32 pointer-events-none">
                 <div className="pointer-events-auto flex flex-col items-end space-y-6">
 
-                    <h1 className="text-5xl md:text-7xl lg:text-8xl font-black text-white leading-none tracking-tight drop-shadow-2xl animate-slide-up text-right">
+                    <h1 className="text-5xl md:text-7xl lg:text-8xl font-serif-premium italic text-white leading-none tracking-tight drop-shadow-2xl animate-slide-up text-right">
                         {currentEvent.title}
                     </h1>
 
-                    <div className="flex items-center gap-6 text-white/90 text-lg font-medium animate-fade-in delay-100 justify-end">
+                    <div className="flex items-center gap-6 text-white/90 text-lg font-serif-premium italic animate-fade-in delay-100 justify-end">
                         <div className="flex items-center gap-2">
                             <BsCalendarEvent className="text-[#7AB2B2]" />
                             <span>{currentEvent.date}</span>
@@ -68,7 +68,7 @@ const HeroSlider = ({ events }) => {
                     </div>
 
                     <div className="max-w-xl bg-black/30 backdrop-blur-md p-6 rounded-2xl border border-white/10 shadow-xl animate-fade-in delay-200 text-right">
-                        <p className="text-white text-lg md:text-xl font-light leading-relaxed drop-shadow-md">
+                        <p className="text-white text-lg md:text-xl font-serif-premium italic leading-relaxed drop-shadow-md">
                             Experience the ultimate {currentEvent.tag} event.
                             Join thousands of others for an unforgettable moment tailored just for you.
                             Tickets starting at <span className="font-bold text-[#7AB2B2]">{currentEvent.price}</span>.
