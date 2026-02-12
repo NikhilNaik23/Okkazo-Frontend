@@ -102,6 +102,35 @@ const PlanningWizard = () => {
         }));
     };
 
+    const handleSaveDraft = () => {
+        try {
+            const existingDrafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
+
+            // Create a pseudo-ID or use title if unique enough
+            const draftId = `draft_${Date.now()}`;
+            const newDraft = {
+                id: draftId,
+                title: formData.title || `Untitled ${formData.type} Draft`,
+                date: formData.date || "TBD",
+                location: formData.location || "Location TBD",
+                image: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?q=80&w=2069&auto=format&fit=crop", // Default draft image
+                status: "Draft",
+                sold: `Last edited ${new Date().toLocaleDateString()}`,
+                formData: formData, // Store full form data for restoration later
+                timestamp: Date.now()
+            };
+
+            // Limit to last 5 drafts to avoid quota issues
+            const updatedDrafts = [newDraft, ...existingDrafts].slice(0, 5);
+            localStorage.setItem('planningWizardDrafts', JSON.stringify(updatedDrafts));
+
+            return true; // Success
+        } catch (error) {
+            console.error("Failed to save draft:", error);
+            return false;
+        }
+    };
+
     if (isPreviewMode) {
         return (
             <ManifestPreview
@@ -135,6 +164,7 @@ const PlanningWizard = () => {
                                 handleChange={handleChange}
                                 setFormData={setFormData}
                                 minDateString={minDateString}
+                                onSaveDraft={handleSaveDraft}
                             />
                         )}
 

@@ -31,7 +31,7 @@ const EventCard = ({ event, rank, isTopTen }) => {
                             <span className="text-[#EBF4F6] text-xs font-bold uppercase tracking-wider">{event.date}</span>
                         </div>
 
-                        <h3 className="text-white font-black text-lg leading-snug mb-1 drop-shadow-md">{event.title}</h3>
+                        <h3 className="text-white font-serif-premium italic text-lg leading-snug mb-1 drop-shadow-md">{event.title}</h3>
 
                         <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/10">
                             <span className="text-[#7AB2B2] font-bold text-sm bg-[#09637E]/50 px-2 py-0.5 rounded">{event.price}</span>

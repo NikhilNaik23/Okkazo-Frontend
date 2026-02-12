@@ -50,8 +50,9 @@ const StepReview = ({ formData }) => {
                         <div className="space-y-6">
                             <div>
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Intent</label>
-                                <p className="text-[#0b2d49] font-black text-xl">{formData.listingType || "Private"} Manifestation</p>
+                                <p className="text-[#0b2d49] font-black text-xl">{formData.title || `${formData.listingType || "Private"} Manifestation`}</p>
                             </div>
+
                             <div>
                                 <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Category</label>
                                 <p className="text-[#0b2d49] font-bold">{formData.type || "Special Gathering"}</p>

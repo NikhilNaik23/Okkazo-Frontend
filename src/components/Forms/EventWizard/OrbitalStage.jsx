@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BsCalendar, BsClock, BsGeoAlt, BsArrowRight, BsChevronDown, BsCheck } from 'react-icons/bs';
+import { BsCalendar, BsClock, BsGeoAlt, BsArrowRight, BsChevronDown, BsCheck, BsBookmark } from 'react-icons/bs';
 import toast from 'react-hot-toast';
 import LocationPicker from './../../Map/LocationPicker';
 
-const SpinnerStage = ({ formData, handleChange, setFormData, minDateString }) => {
+const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSaveDraft }) => {
     const [activeIndex, setActiveIndex] = useState(0);
     const [isMapOpen, setIsMapOpen] = useState(false);
 
@@ -105,8 +105,9 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString }) =>
 
     const steps = [
         { id: 'listing', label: 'Event Category', hint: 'Public or Private Category?' },
-        ...(formData.listingType === 'Public' ? [{ id: 'title', label: 'Event Title', hint: 'Set the Event Title' }] : []),
+        { id: 'title', label: 'Event Title', hint: 'Set the Event Title' },
         { id: 'type', label: 'Event Type', hint: 'Nature of Event' },
+
         { id: 'date', label: 'Event Date', hint: 'Select Event Date' },
         { id: 'location', label: 'Event Location', hint: 'Set Venue Location' },
         { id: 'time', label: 'Event Time', hint: 'Set Start Time' }
@@ -183,13 +184,48 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString }) =>
             </div>
 
             {/* FIXED PROGRESS INDICATOR (Detached from rotation) */}
-            <div className="absolute left-[30px] top-1/2 -translate-y-1/2 flex flex-col items-center justify-center w-[160px] h-[160px] bg-white shadow-[0_20px_60px_rgba(9,99,126,0.1)] rounded-full z-20">
-                <p className="text-[9px] tracking-[0.2em] font-bold opacity-30 uppercase mb-1">Resonance</p>
-                <h2 className="text-4xl font-serif-premium italic text-teal-900 leading-none">
-                    {Math.round(((activeIndex + 1) / steps.length) * 100)}%
-                </h2>
-                <div className="w-6 h-[1px] bg-teal-900/10 my-3" />
-                <p className="text-[8px] tracking-widest font-bold uppercase opacity-40">Alignment</p>
+            <div className="absolute left-[30px] top-1/2 -translate-y-1/2 flex flex-col items-center z-20">
+                <div className="flex flex-col items-center justify-center w-[160px] h-[160px] bg-white shadow-[0_20px_60px_rgba(9,99,126,0.1)] rounded-full mb-6">
+                    <p className="text-[9px] tracking-[0.2em] font-bold opacity-30 uppercase mb-1">Resonance</p>
+                    <h2 className="text-4xl font-serif-premium italic text-teal-900 leading-none">
+                        {Math.round(((activeIndex + 1) / steps.length) * 100)}%
+                    </h2>
+                    <div className="w-6 h-[1px] bg-teal-900/10 my-3" />
+                    <p className="text-[8px] tracking-widest font-bold uppercase opacity-40">Alignment</p>
+                </div>
+
+                <motion.button
+                    whileHover={{ scale: 1.05, backgroundColor: '#f0fdfa' }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                        const success = onSaveDraft ? onSaveDraft() : false;
+                        if (success) {
+                            toast.success('Intent Manifested: Progress secured as draft.', {
+                                style: {
+                                    borderRadius: '15px',
+                                    background: '#0b2d49',
+                                    color: '#fff',
+                                    fontSize: '11px',
+                                    fontWeight: '600',
+                                    padding: '12px 20px',
+                                    letterSpacing: '0.1em',
+                                    textTransform: 'uppercase'
+                                },
+                                iconTheme: {
+                                    primary: '#2dd4bf',
+                                    secondary: '#fff',
+                                },
+                            });
+                        } else {
+                            toast.error('Failed to manifest intent. Please try again.');
+                        }
+                    }}
+                    className="flex items-center gap-2 group px-6 py-3 rounded-full border border-teal-900/5 bg-white/50 backdrop-blur-md shadow-sm transition-all"
+                >
+
+                    <BsBookmark className="text-teal-700 group-hover:fill-teal-700" size={12} />
+                    <span className="text-[9px] font-black tracking-[0.2em] uppercase text-teal-900/60 group-hover:text-teal-900">Save Draft</span>
+                </motion.button>
             </div>
 
             {/* PORTAL CONTAINER (STABLE LAYOUT) */}
@@ -254,7 +290,7 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString }) =>
                                         onChange={(e) => handleChange('title', e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && isStepValid() && handleNext()}
                                     />
-                                    <p className="mt-4 text-[10px] font-bold text-teal-600/30 tracking-widest uppercase">Select 'Public' to define Event Category.</p>
+                                    <p className="mt-4 text-[10px] font-bold text-teal-600/30 tracking-widest uppercase">Set a unique title for your event manifest.</p>
                                 </div>
                             )}
 
