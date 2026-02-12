@@ -319,7 +319,7 @@ const App = () => {
             path="/vendor"
             element={
               // <ProtectedRoute allowedRoles={['VENDOR']}>
-              <VendorLayout />
+                <VendorLayout />
               // </ProtectedRoute>
             }
           >

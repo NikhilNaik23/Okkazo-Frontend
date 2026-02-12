@@ -3,8 +3,11 @@ import {
     User, Mail, Phone, MapPin, Lock, Bell, Shield, Save,
     Camera, LogOut, Moon, Globe, ChevronRight
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 
 const ManagerProfile = () => {
+    const navigate = useNavigate();
     const [activeSection, setActiveSection] = useState('general');
 
     const sections = [
@@ -13,6 +16,22 @@ const ManagerProfile = () => {
         { id: 'notifications', label: 'Notifications', icon: Bell },
         { id: 'team', label: 'Team Management', icon: Shield },
     ];
+
+    const handleSave = () => {
+        toast.promise(
+            new Promise((resolve) => setTimeout(resolve, 1500)),
+            {
+                loading: 'Saving changes...',
+                success: 'Profile updated successfully!',
+                error: 'Could not save.',
+            }
+        );
+    };
+
+    const handleLogout = () => {
+        toast.success("Logged out successfully");
+        navigate('/login');
+    };
 
     return (
         <div className="p-6 lg:p-10 max-w-[1600px] mx-auto min-h-screen bg-gray-50/30">
@@ -57,7 +76,7 @@ const ManagerProfile = () => {
                     </div>
 
                     {/* Danger Zone Link */}
-                    <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 transition-colors">
+                    <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 transition-colors">
                         <LogOut className="w-4 h-4" /> Log Out
                     </button>
                 </div>
@@ -113,7 +132,7 @@ const ManagerProfile = () => {
 
                                 <div className="border-t border-gray-100 pt-8 flex items-center justify-end gap-3">
                                     <button className="px-5 py-2.5 text-gray-500 font-bold hover:text-gray-900 text-sm">Cancel</button>
-                                    <button className="px-5 py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 shadow-lg shadow-gray-900/20 flex items-center gap-2">
+                                    <button onClick={handleSave} className="px-5 py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 shadow-lg shadow-gray-900/20 flex items-center gap-2">
                                         <Save className="w-4 h-4" /> Save Changes
                                     </button>
                                 </div>
@@ -140,6 +159,22 @@ const ManagerProfile = () => {
                                         </div>
                                     ))}
                                 </div>
+                                <div className="border-t border-gray-100 pt-8 flex items-center justify-end gap-3">
+                                    <button onClick={handleSave} className="px-5 py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 shadow-lg shadow-gray-900/20 flex items-center gap-2">
+                                        <Save className="w-4 h-4" /> Save Preferences
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Placeholder for other sections */}
+                        {['security', 'team'].includes(activeSection) && (
+                            <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-center">
+                                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4 text-gray-400">
+                                    <Shield className="w-8 h-8" />
+                                </div>
+                                <h3 className="text-xl font-bold text-gray-900">Coming Soon</h3>
+                                <p className="text-gray-500 max-w-sm mt-2">This settings section is currently under development. Check back later!</p>
                             </div>
                         )}
                     </div>

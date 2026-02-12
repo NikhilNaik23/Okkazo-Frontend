@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     Search, MoreVertical, Phone, Video, Image, Paperclip,
     Send, Mic, Circle, CheckCheck, Clock, Hash, Users,
@@ -6,12 +6,14 @@ import {
     FileText, X, Menu
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'react-hot-toast';
 
 const ManagerChatPage = () => {
     const [selectedChat, setSelectedChat] = useState("dm-1");
     const [messageInput, setMessageInput] = useState('');
     const [showSidebar, setShowSidebar] = useState(true);
     const [showInfo, setShowInfo] = useState(false);
+    const messagesEndRef = useRef(null);
 
     // Mock Data
     const channels = [
@@ -27,12 +29,54 @@ const ManagerChatPage = () => {
         { id: "dm-3", name: "Mike Ross", status: "offline", avatar: "MR", role: "Logistics", lastMsg: "On my way.", time: "Yesterday", unread: 0 },
     ];
 
-    const messages = [
+    const [messages, setMessages] = useState([
         { id: 1, sender: "Epicurean Catering", senderId: "dm-1", text: "Hi! We've finalized the menu for the Gala.", time: "10:30 AM", type: "text" },
         { id: 2, sender: "You", senderId: "me", text: "That's great news! Can you send over the PDF?", time: "10:32 AM", type: "text" },
         { id: 3, sender: "Epicurean Catering", senderId: "dm-1", text: "Here it is. Let me know if you need changes.", time: "10:33 AM", type: "file", fileName: "Gala_Menu_Final_v2.pdf", fileSize: "2.4 MB" },
         { id: 4, sender: "You", senderId: "me", text: "Received. Looks perfect. I'll approve the invoice.", time: "10:35 AM", type: "text" },
-    ];
+    ]);
+
+    // Scroll to bottom on new message
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
+
+    const handleSendMessage = () => {
+        if (!messageInput.trim()) return;
+
+        const newMsg = {
+            id: messages.length + 1,
+            sender: "You",
+            senderId: "me",
+            text: messageInput,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            type: "text"
+        };
+
+        setMessages([...messages, newMsg]);
+        setMessageInput('');
+
+        // Mock Reply
+        setTimeout(() => {
+            const replyMsg = {
+                id: messages.length + 2,
+                sender: "Epicurean Catering",
+                senderId: "dm-1",
+                text: "Thanks! We'll proceed with the prep.",
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                type: "text"
+            };
+            setMessages(prev => [...prev, replyMsg]);
+            toast("New message from Epicurean Catering", { icon: '💬' });
+        }, 3000);
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSendMessage();
+        }
+    };
 
     return (
         <div className="flex h-[calc(100vh-64px)] max-h-[900px] overflow-hidden bg-white border-t border-gray-100">
@@ -138,8 +182,8 @@ const ManagerChatPage = () => {
                         </div>
                     </div>
                     <div className="flex items-center gap-1 border-l border-gray-100 pl-4">
-                        <button className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"><Phone className="w-5 h-5" /></button>
-                        <button className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"><Video className="w-5 h-5" /></button>
+                        <button onClick={() => toast.success("Calling Epicurean Catering...")} className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"><Phone className="w-5 h-5" /></button>
+                        <button onClick={() => toast.success("Starting video call...")} className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"><Video className="w-5 h-5" /></button>
                         <button
                             onClick={() => setShowInfo(!showInfo)}
                             className={`p-2 rounded-lg transition-colors ${showInfo ? 'bg-gray-100 text-gray-900' : 'text-gray-400 hover:text-gray-900 hover:bg-gray-50'}`}
@@ -176,7 +220,7 @@ const ManagerChatPage = () => {
                                     )}
 
                                     {msg.type === 'file' && (
-                                        <div className="bg-white border border-gray-200 rounded-xl p-3 flex items-center gap-3 w-64 shadow-sm hover:border-teal-500 cursor-pointer transition-colors">
+                                        <div onClick={() => toast.success("Downloading file...")} className="bg-white border border-gray-200 rounded-xl p-3 flex items-center gap-3 w-64 shadow-sm hover:border-teal-500 cursor-pointer transition-colors">
                                             <div className="w-10 h-10 bg-red-50 text-red-600 rounded-lg flex items-center justify-center">
                                                 <FileText className="w-5 h-5" />
                                             </div>
@@ -190,6 +234,7 @@ const ManagerChatPage = () => {
                             </div>
                         );
                     })}
+                    <div ref={messagesEndRef} />
                 </div>
 
                 {/* Input Area */}
@@ -210,12 +255,14 @@ const ManagerChatPage = () => {
                                 rows={1}
                                 value={messageInput}
                                 onChange={(e) => setMessageInput(e.target.value)}
+                                onKeyDown={handleKeyDown}
                             />
                             <div className="flex items-center gap-2 pb-1">
                                 <button className="p-2 text-gray-400 hover:text-teal-600 rounded-lg hover:bg-teal-50 transition-colors">
                                     <Smile className="w-5 h-5" />
                                 </button>
                                 <button
+                                    onClick={handleSendMessage}
                                     className={`p-2 rounded-lg transition-all shadow-sm flex items-center justify-center ${messageInput.trim() ? 'bg-teal-600 text-white hover:bg-teal-700 hover:scale-105' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                         }`}
                                     disabled={!messageInput.trim()}
@@ -226,7 +273,7 @@ const ManagerChatPage = () => {
                         </div>
                     </div>
                     <p className="text-center text-[10px] text-gray-400 mt-2 font-medium">
-                        <strong>Shift + Enter</strong> for new line
+                        <strong>Enter</strong> to send • <strong>Shift + Enter</strong> for new line
                     </p>
                 </div>
             </div>
@@ -249,10 +296,10 @@ const ManagerChatPage = () => {
                             <h3 className="text-xl font-extrabold text-gray-900">Epicurean Catering</h3>
                             <p className="text-sm font-medium text-gray-500">Premium Vendor</p>
                             <div className="flex gap-2 mt-4">
-                                <button className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors">
+                                <button onClick={() => toast.success("Dialing vendor...")} className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors">
                                     <Phone className="w-3 h-3" /> Call
                                 </button>
-                                <button className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors">
+                                <button onClick={() => toast("Viewing vendor profile...")} className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors">
                                     <Globe className="w-3 h-3" /> Profile
                                 </button>
                             </div>
@@ -280,7 +327,7 @@ const ManagerChatPage = () => {
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-bold text-gray-700 truncate group-hover:text-gray-900">Menu_Draft_{i}.pdf</p>
-                                                <p className="text-[10px] text-gray-400">2.4 MB • Oct 2{i}</p>
+                                                <p className="text-xs text-gray-400">2.4 MB • Oct 2{i}</p>
                                             </div>
                                         </div>
                                     ))}

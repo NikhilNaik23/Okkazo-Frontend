@@ -9,6 +9,7 @@ import {
     BarChart, Bar, Cell, PieChart, Pie, Sector, LineChart, Line
 } from 'recharts';
 import { motion } from 'framer-motion';
+import { toast } from 'react-hot-toast';
 
 // --- Custom Components ---
 
@@ -31,23 +32,11 @@ const BentoCard = ({ children, className = "", title, icon: Icon, action }) => (
     </motion.div>
 );
 
-const MetricPill = ({ label, value, trend, positive }) => (
-    <div className="flex flex-col">
-        <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">{label}</span>
-        <div className="flex items-end gap-2 mt-1">
-            <span className="text-2xl font-extrabold text-gray-900 leading-none">{value}</span>
-            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-md flex items-center ${positive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                {positive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                {trend}
-            </span>
-        </div>
-    </div>
-);
-
 // --- Main Analytics Component ---
 
 const ManagerAnalytics = () => {
     const [activeIndex, setActiveIndex] = useState(0);
+    const [dateRange, setDateRange] = useState('year'); // 'all', 'year', 'month'
 
     // Mock Data
     const revenueData = [
@@ -74,6 +63,17 @@ const ManagerAnalytics = () => {
 
     const onPieEnter = (_, index) => setActiveIndex(index);
 
+    const handleExport = () => {
+        toast.promise(
+            new Promise((resolve) => setTimeout(resolve, 2000)),
+            {
+                loading: 'Preparing export...',
+                success: 'Analytics report downloaded!',
+                error: 'Export failed.',
+            }
+        );
+    };
+
     return (
         <div className="min-h-screen bg-gray-50/50 p-6 lg:p-10 max-w-[1920px] mx-auto">
 
@@ -85,20 +85,29 @@ const ManagerAnalytics = () => {
                 </div>
 
                 <div className="bg-white p-1.5 rounded-2xl shadow-sm border border-gray-200 flex items-center gap-2">
-                    <button className="px-4 py-2 bg-gray-100 text-gray-900 rounded-xl text-sm font-bold hover:bg-gray-200 transition-colors">
+                    <button
+                        onClick={() => setDateRange('all')}
+                        className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors ${dateRange === 'all' ? 'bg-gray-100 text-gray-900' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                    >
                         All Time
                     </button>
-                    <button className="px-4 py-2 bg-white text-gray-500 rounded-xl text-sm font-bold hover:bg-gray-50 transition-colors">
+                    <button
+                        onClick={() => setDateRange('year')}
+                        className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors ${dateRange === 'year' ? 'bg-gray-100 text-gray-900' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                    >
                         Year to Date
                     </button>
-                    <button className="px-4 py-2 bg-white text-gray-500 rounded-xl text-sm font-bold hover:bg-gray-50 transition-colors">
+                    <button
+                        onClick={() => setDateRange('month')}
+                        className={`px-4 py-2 rounded-xl text-sm font-bold transition-colors ${dateRange === 'month' ? 'bg-gray-100 text-gray-900' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                    >
                         Last 30 Days
                     </button>
                     <div className="w-px h-6 bg-gray-200 mx-2"></div>
                     <button className="p-2 text-gray-500 hover:text-teal-600 rounded-lg">
                         <Calendar className="w-5 h-5" />
                     </button>
-                    <button className="px-4 py-2 bg-teal-600 text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-teal-700 shadow-lg shadow-teal-900/20">
+                    <button onClick={handleExport} className="px-4 py-2 bg-teal-600 text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-teal-700 shadow-lg shadow-teal-900/20">
                         <Download className="w-4 h-4" /> Export
                     </button>
                 </div>
@@ -157,7 +166,10 @@ const ManagerAnalytics = () => {
                             <p className="text-lg font-bold text-white">₹45,200</p>
                             <p className="text-sm text-amber-400 font-medium mt-1">3 Overdue</p>
                         </div>
-                        <div className="bg-white/10 p-4 rounded-2xl backdrop-blur-sm border border-white/5 flex flex-col justify-center items-center text-center cursor-pointer hover:bg-white/20 transition-colors">
+                        <div
+                            onClick={() => toast("Redirecting to detailed reports...", { icon: '📊' })}
+                            className="bg-white/10 p-4 rounded-2xl backdrop-blur-sm border border-white/5 flex flex-col justify-center items-center text-center cursor-pointer hover:bg-white/20 transition-colors"
+                        >
                             <div className="bg-teal-500 rounded-full p-2 mb-2 text-white shadow-lg shadow-teal-500/30">
                                 <ArrowUpRight className="w-5 h-5 block" />
                             </div>
