@@ -1,6 +1,6 @@
 import React from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { BsSearch, BsBell, BsGear } from "react-icons/bs";
+import { BsBell, BsGear } from "react-icons/bs";
 import { vendorSidebarMenus, vendorLayoutData } from "../../../data/vendorLayoutData.jsx";
 
 const VendorLayout = () => {
@@ -8,6 +8,7 @@ const VendorLayout = () => {
 
   const sidebarMenus = vendorSidebarMenus;
   const vendorData = vendorLayoutData;
+  const isMessagesPage = location.pathname === '/vendor/messages';
 
   return (
     <div className="flex min-h-screen bg-[#e9eff1] font-sans text-[#0b2d49]">
@@ -28,7 +29,7 @@ const VendorLayout = () => {
               const isActive = location.pathname === menu.path;
               return (
                 <li key={idx}>
-                  <Link 
+                  <Link
                     to={menu.path}
                     className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold transition-all duration-300 ${isActive ? 'bg-[#d7a444]/10 text-[#d7a444]' : 'text-[#708aa0] hover:bg-[#e9eff1] hover:text-[#0b2d49]'}`}
                   >
@@ -41,9 +42,18 @@ const VendorLayout = () => {
           </ul>
         </nav>
 
-        <div className="p-4 space-y-4">
-          <Link 
-            to="/vendor/settings" 
+        <div className="p-4 space-y-2">
+          <button
+            className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold transition-all text-[#708aa0] hover:bg-[#e9eff1] hover:text-[#0b2d49] relative"
+          >
+            <span className="text-xl relative">
+              <BsBell />
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#d7a444] rounded-full border-2 border-white"></span>
+            </span>
+            Notifications
+          </button>
+          <Link
+            to="/vendor/settings"
             className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold transition-all ${location.pathname === '/vendor/settings' ? 'bg-[#0b2d49] text-white shadow-lg shadow-[#0b2d49]/10' : 'text-[#708aa0] hover:bg-[#e9eff1] hover:text-[#0b2d49]'}`}
           >
             <span className="text-xl"><BsGear /></span>
@@ -61,29 +71,11 @@ const VendorLayout = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-h-screen">
-        {/* Top Navbar */}
-        <header className="h-24 px-10 flex justify-between items-center bg-transparent shrink-0">
-          <div className="flex items-center gap-4">
-            {/* dynamic title could go here */}
-          </div>
-          <div className="flex items-center gap-6">
-            <div className="relative group">
-              <BsSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-[#708aa0]" />
-              <input 
-                type="text" 
-                placeholder="Search..." 
-                className="pl-12 pr-6 py-3 bg-white rounded-2xl border-none focus:ring-2 focus:ring-[#d7a444]/20 transition-all w-72 placeholder:text-[#708aa0] font-medium shadow-sm"
-              />
-            </div>
-            <button className="relative p-3 bg-white rounded-xl shadow-sm hover:shadow-md transition-all text-[#708aa0] hover:text-[#0b2d49] border border-[#708aa0]/10">
-              <BsBell size={20} />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-[#d7a444] rounded-full border-2 border-white"></span>
-            </button>
-          </div>
-        </header>
+        {/* Top Spacer - hidden on messages page */}
+        {!isMessagesPage && <div className="h-10 shrink-0"></div>}
 
         {/* Dynamic Page Content */}
-        <main className="flex-1 p-10 pt-0 overflow-y-auto">
+        <main className={`flex-1 overflow-y-auto ${isMessagesPage ? 'p-0' : 'p-10 pt-0'}`}>
           <Outlet />
         </main>
       </div>
