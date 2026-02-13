@@ -383,6 +383,16 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                                     ))}
                                                     {renderCalendar()}
                                                 </div>
+                                                <div className="mt-3 pt-3 border-t border-teal-900/5 flex items-center justify-center gap-6">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-red-500 shadow-sm" />
+                                                        <span className="text-[8px] font-bold text-teal-900/60 uppercase tracking-widest">High Demand</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-teal-900 shadow-sm" />
+                                                        <span className="text-[8px] font-bold text-teal-900/60 uppercase tracking-widest">Normal</span>
+                                                    </div>
+                                                </div>
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
