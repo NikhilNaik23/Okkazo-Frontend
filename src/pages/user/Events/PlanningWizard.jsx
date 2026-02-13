@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BsArrowRight } from "react-icons/bs";
 import SidebarProgress from "../../../components/Forms/EventWizard/SidebarProgress";
+import SidebarOverview from "../../../components/Forms/EventWizard/SidebarOverview";
 import OrbitalStage from "../../../components/Forms/EventWizard/OrbitalStage";
 import StepEventDetails from "../../../components/Forms/EventWizard/StepEventDetails";
 import StepVendorSelection from "../../../components/Forms/EventWizard/StepVendorSelection";
@@ -113,7 +114,7 @@ const PlanningWizard = () => {
                 title: formData.title || `Untitled ${formData.type} Draft`,
                 date: formData.date || "TBD",
                 location: formData.location || "Location TBD",
-                image: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?q=80&w=2069&auto=format&fit=crop", // Default draft image
+                image: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=2069&auto=format&fit=crop", // Default draft image
                 status: "Draft",
                 sold: `Last edited ${new Date().toLocaleDateString()}`,
                 formData: formData, // Store full form data for restoration later
@@ -131,6 +132,36 @@ const PlanningWizard = () => {
         }
     };
 
+    const [isAtBottom, setIsAtBottom] = useState(false);
+
+    useEffect(() => {
+        window.scrollTo(0, 0);
+
+        const handleScroll = () => {
+            const buffer = 50;
+            const isBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - buffer;
+            setIsAtBottom(isBottom);
+        };
+
+        window.addEventListener('scroll', handleScroll);
+        // Check initial position in case content is short
+        handleScroll();
+
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, [currentStep]);
+
+    const handleRemoveVendor = (service) => {
+        setFormData(prev => {
+            const vendors = { ...prev.vendors };
+            delete vendors[service];
+            return { ...prev, vendors };
+        });
+    };
+
+    const isNextDisabled = (currentStep === 2 && formData.services.length === 0) ||
+        (currentStep === 3 && Object.keys(formData.vendors).length < formData.services.length) ||
+        (currentStep === 4 && !isAtBottom);
+
     if (isPreviewMode) {
         return (
             <ManifestPreview
@@ -143,16 +174,16 @@ const PlanningWizard = () => {
 
     return (
         <div className={`flex flex-col flex-1 font-sans transition-colors duration-700 ${isImmersiveStep ? 'bg-[#eff6f7]' : (currentStep === 3 ? 'bg-white' : 'bg-gray-50')} min-h-screen`}>
-            <main className={`flex-1 w-full mx-auto flex transition-all duration-700 ${isImmersiveStep ? 'max-w-none relative px-6' : (currentStep === 3 ? 'max-w-none px-0 pt-0' : 'max-w-7xl px-6 pt-8 gap-8')}`}>
+            <main className={`flex-1 w-full mx-auto flex transition-all duration-700 ${isImmersiveStep ? 'max-w-none relative px-6' : ((currentStep === 3 || currentStep === 4) ? 'max-w-none px-0 pt-0' : 'max-w-7xl px-6 pt-8 gap-8')}`}>
 
-                {!isImmersiveStep && currentStep !== 3 && <SidebarProgress currentStep={currentStep} steps={steps} />}
+                {!isImmersiveStep && currentStep !== 3 && currentStep !== 4 && <SidebarProgress currentStep={currentStep} steps={steps} />}
 
                 {/* Main Content Area */}
                 <div className="flex-1 relative h-full min-h-0">
-                    {/* Header - Only for non-immersive steps, hide for Step 3 */}
-                    {!isImmersiveStep && currentStep !== 3 && (
+                    {/* Header - Only for non-immersive steps, hide for Step 3 & 4 */}
+                    {!isImmersiveStep && currentStep !== 3 && currentStep !== 4 && (
                         <div className="mb-8 animate-fade-in text-center lg:text-left">
-                            <h1 className="text-4xl font-black text-[#0b2d49] tracking-tight mb-2">Manifest Your Event</h1>
+                            <h1 className="text-4xl font-black text-primary tracking-tight mb-2">Manifest Your Event</h1>
                             <p className="text-teal-900/40 font-bold uppercase tracking-widest text-[10px]">Step {currentStep}: {steps[currentStep - 1]?.title || 'Done'}</p>
                         </div>
                     )}
@@ -188,7 +219,7 @@ const PlanningWizard = () => {
                         )}
 
                         {currentStep === 4 && (
-                            <StepReview formData={formData} />
+                            <StepReview formData={formData} onRemoveVendor={handleRemoveVendor} />
                         )}
 
                         {currentStep === 5 && (
@@ -210,7 +241,7 @@ const PlanningWizard = () => {
                                     <button
                                         onClick={handleBack}
                                         disabled={currentStep === 1}
-                                        className={`font-bold flex items-center gap-4 transition-all hover:text-[#0b2d49] disabled:opacity-0 disabled:pointer-events-none pointer-events-auto 
+                                        className={`font-bold flex items-center gap-4 transition-all hover:text-primary disabled:opacity-0 disabled:pointer-events-none pointer-events-auto 
                                             ${isImmersiveStep ? 'text-teal-900/40 group' : 'text-gray-500'}`}
                                     >
                                         <div className={`w-12 h-12 rounded-full border border-teal-900/10 flex items-center justify-center transition-all 
@@ -234,14 +265,14 @@ const PlanningWizard = () => {
                                                 animate={{ opacity: 1, x: 0 }}
                                                 exit={{ opacity: 0, x: 20 }}
                                                 onClick={handleNext}
-                                                disabled={
-                                                    (currentStep === 2 && formData.services.length === 0) ||
-                                                    (currentStep === 3 && Object.keys(formData.vendors).length < formData.services.length)
-                                                }
-                                                className={`transition-all active:scale-95 group flex items-center gap-6 cursor-pointer pointer-events-auto 
+                                                disabled={isNextDisabled}
+                                                className={`transition-all active:scale-95 group flex items-center gap-6 pointer-events-auto 
                                                     ${isImmersiveStep
-                                                        ? (currentStep === 1 ? 'pb-12 bg-transparent' : 'pb-2 bg-transparent')
-                                                        : 'px-8 py-3 bg-[#0b2d49] hover:bg-[#163a5a] text-white font-bold rounded-xl shadow-lg shadow-blue-900/10'}`}
+                                                        ? (currentStep === 1 ? 'pb-12 bg-transparent cursor-pointer' : 'pb-2 bg-transparent cursor-pointer')
+                                                        : `px-8 py-3 text-white font-bold rounded-xl shadow-lg shadow-blue-900/10 
+                                                           ${isNextDisabled
+                                                            ? 'bg-gray-400 cursor-not-allowed opacity-80'
+                                                            : 'bg-primary hover:bg-secondary cursor-pointer'}`}`}
                                             >
                                                 {isImmersiveStep ? (
                                                     <>

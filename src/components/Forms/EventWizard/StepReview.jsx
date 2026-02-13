@@ -1,152 +1,175 @@
 import React from 'react';
-import { motion } from 'framer-motion';
-import { BsCheck2Circle, BsInfoCircle, BsTagFill, BsCalendarEvent } from "react-icons/bs";
+import { motion, AnimatePresence } from 'framer-motion';
+import { BsStars, BsX, BsTagFill, BsArrowRight } from "react-icons/bs";
 
-const StepReview = ({ formData }) => {
+const StepReview = ({ formData, onRemoveVendor }) => {
     const totalMin = Object.values(formData.vendors).reduce((acc, v) => acc + (v.priceMin || 0), 0);
     const totalMax = Object.values(formData.vendors).reduce((acc, v) => acc + (v.priceMax || 0), 0);
 
-    const containerVariants = {
-        hidden: { opacity: 0, y: 30 },
-        visible: {
-            opacity: 1,
-            y: 0,
-            transition: { duration: 0.8, ease: "easeOut" }
-        }
-    };
+    const categories = ['Venue', 'Catering', 'Florals', 'Photography', 'Music', 'Decor'];
 
     return (
-        <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-            className="max-w-4xl mx-auto pb-32"
-        >
-            {/* Header Section */}
-            <div className="text-center mb-16">
-                <div className="inline-flex items-center gap-2 px-4 py-2 bg-teal-50 text-teal-700 rounded-full text-[10px] font-black tracking-[0.2em] uppercase mb-4 border border-teal-100">
-                    <BsCheck2Circle size={14} />
-                    Final Curation Review
+        <div className="w-full pb-40">
+            {/* Header */}
+            <div className="text-center mb-8 pt-40">
+                <h1 className="text-5xl md:text-7xl font-serif-premium italic text-primary mb-6">Finalized Selections</h1>
+
+                {/* Visual Navigation */}
+                <div className="flex justify-center">
+                    <span className="text-2xl font-black tracking-[0.2em] uppercase text-gray-400">
+                        Overview
+                    </span>
                 </div>
-                <h2 className="text-5xl font-black text-[#0b2d49] tracking-tight mb-4">
-                    The Essence of <span className="text-teal-600">Your Vision</span>
-                </h2>
-                <p className="text-gray-500 font-medium text-lg max-w-xl mx-auto">
-                    Review your curated selections. These premium partners are poised to manifest your intent into reality.
-                </p>
             </div>
 
-            {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+            {/* Event Details & Summary */}
+            <div className="max-w-4xl mx-auto px-6 mb-32">
+                <div className="bg-white/50 backdrop-blur-sm rounded-3xl p-8 md:p-12 border border-blue-50/50 shadow-sm relative overflow-hidden">
 
-                {/* Left: Event Quick Info */}
-                <div className="lg:col-span-1 space-y-6">
-                    <div className="bg-white/50 backdrop-blur-xl border border-white p-8 rounded-[40px] shadow-sm">
-                        <h4 className="text-[10px] font-black tracking-[0.2em] text-teal-900/40 uppercase mb-6 flex items-center gap-2">
-                            <BsCalendarEvent />
-                            Event Metadata
-                        </h4>
+                    {/* Centered Title */}
+                    <div className="text-center mb-12 relative z-10">
+                        <p className="text-[10px] font-black tracking-[0.3em] text-gray-400 uppercase mb-4">Manifesting</p>
+                        <h2 className="font-serif-premium text-4xl md:text-5xl text-primary">{formData.title}</h2>
+                    </div>
 
-                        <div className="space-y-6">
-                            <div>
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Intent</label>
-                                <p className="text-[#0b2d49] font-black text-xl">{formData.title || `${formData.listingType || "Private"} Manifestation`}</p>
-                            </div>
-
-                            <div>
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Category</label>
-                                <p className="text-[#0b2d49] font-bold">{formData.type || "Special Gathering"}</p>
-                            </div>
-                            <div>
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Timeline</label>
-                                <p className="text-[#0b2d49] font-bold">{formData.date || "TBD"}</p>
-                            </div>
+                    {/* Event Info Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12 border-y border-gray-100 py-12">
+                        <div className="text-center md:text-left">
+                            <p className="text-[10px] font-black tracking-[0.2em] text-gray-400 uppercase mb-2">Date</p>
+                            <p className="font-serif-premium text-xl text-primary">{formData.date}</p>
+                        </div>
+                        <div className="text-center md:text-left">
+                            <p className="text-[10px] font-black tracking-[0.2em] text-gray-400 uppercase mb-2">Time</p>
+                            <p className="font-serif-premium text-xl text-primary">{formData.startTime}</p>
+                        </div>
+                        <div className="text-center md:text-left">
+                            <p className="text-[10px] font-black tracking-[0.2em] text-gray-400 uppercase mb-2">Location</p>
+                            <p className="font-serif-premium text-lg text-primary truncate" title={formData.location}>{formData.location}</p>
                         </div>
                     </div>
 
-                    <div className="bg-[#0b2d49] p-8 rounded-[40px] text-white shadow-2xl shadow-blue-900/40 relative overflow-hidden">
-                        <div className="relative z-10">
-                            <h4 className="text-[10px] font-black tracking-[0.2em] text-white/40 uppercase mb-4">Estimated Value</h4>
-                            <p className="text-4xl font-black mb-2">₹{totalMin.toLocaleString()}</p>
-                            <p className="text-white/40 text-xs font-medium italic">Base curation value across {Object.keys(formData.vendors).length} services.</p>
-                        </div>
-                        <div className="absolute -right-4 -bottom-4 opacity-10 rotate-12">
-                            <BsTagFill size={100} />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Right: Selected Partners */}
-                <div className="lg:col-span-2">
-                    <div className="bg-white rounded-[48px] p-10 shadow-xl shadow-teal-900/5 border border-teal-900/5">
-                        <div className="flex justify-between items-center mb-10 border-b border-gray-100 pb-8">
-                            <h4 className="text-[10px] font-black tracking-[0.2em] text-teal-900/40 uppercase">Curated Partners</h4>
-                            <span className="bg-teal-50 text-teal-700 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border border-teal-100 italic">
-                                Finalizing Selection
-                            </span>
-                        </div>
-
-                        <div className="space-y-8">
-                            {Object.keys(formData.vendors).length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-20 text-center">
-                                    <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-4 text-gray-300">
-                                        <BsInfoCircle size={30} />
-                                    </div>
-                                    <p className="text-gray-400 font-black italic">No partners curated yet.</p>
+                    {/* Quick Vendor Summary */}
+                    <div>
+                        <p className="text-[10px] font-black tracking-[0.2em] text-gray-400 uppercase mb-6 text-center">Curated Artisans</p>
+                        <div className="flex flex-wrap justify-center gap-4">
+                            {Object.entries(formData.vendors).map(([service, vendor]) => (
+                                <div key={service} className="flex items-center gap-3 bg-white px-4 py-2 rounded-full border border-gray-100 shadow-sm">
+                                    <div className="w-2 h-2 rounded-full bg-primary" />
+                                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{service}:</span>
+                                    <span className="text-sm font-serif-premium text-primary">{vendor.name}</span>
                                 </div>
-                            ) : Object.entries(formData.vendors).map(([service, vendor], idx) => (
-                                <motion.div
-                                    key={service}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: 0.2 + idx * 0.1 }}
-                                    className="flex items-center justify-between group"
-                                >
-                                    <div className="flex items-center gap-6">
-                                        <div className="relative">
-                                            <img
-                                                src={vendor.image}
-                                                alt={vendor.name}
-                                                className="w-20 h-20 rounded-[24px] object-cover bg-gray-100 shadow-lg group-hover:scale-105 transition-transform duration-500"
-                                            />
-                                            <div className="absolute -top-2 -right-2 w-6 h-6 bg-teal-500 text-white rounded-full flex items-center justify-center border-2 border-white shadow-md">
-                                                <BsCheck2Circle size={12} />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] font-black tracking-[0.3em] text-teal-600 uppercase mb-1">{service}</p>
-                                            <h5 className="text-lg font-black text-[#0b2d49] transition-colors group-hover:text-teal-900">{vendor.name}</h5>
-                                            <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">{vendor.location || "Verified Premium"}</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-[10px] font-black tracking-[0.2em] text-gray-300 uppercase mb-1">Partner Value</p>
-                                        <p className="text-[#0b2d49] font-black text-lg">₹{vendor.priceMin.toLocaleString()}</p>
-                                    </div>
-                                </motion.div>
                             ))}
                         </div>
-
-                        {/* Grand Total Footer */}
-                        {Object.keys(formData.vendors).length > 0 && (
-                            <div className="mt-16 pt-10 border-t-2 border-dashed border-gray-100">
-                                <div className="flex justify-between items-end">
-                                    <div>
-                                        <h3 className="text-[10px] font-black tracking-[0.3em] text-teal-900/40 uppercase mb-2">Total Curation Manifest</h3>
-                                        <p className="text-xs text-gray-400 font-medium italic">*Final cost curated based on specific event parameters.</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-4xl font-black text-[#0b2d49]">
-                                            ₹{totalMin.toLocaleString()} <span className="text-gray-300 font-medium text-xl">—</span> ₹{totalMax.toLocaleString()}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
             </div>
-        </motion.div>
+
+            {/* Vendor Sections */}
+            <div className="max-w-6xl mx-auto px-4 md:px-6 space-y-32">
+                <AnimatePresence>
+                    {Object.entries(formData.vendors).map(([service, vendor], idx) => (
+                        <motion.div
+                            key={service}
+                            initial={{ opacity: 0, y: 50 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            viewport={{ once: true, margin: "-100px" }}
+                            exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}
+                            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                            className={`flex flex-col ${idx % 2 === 0 ? 'md:flex-row' : 'md:flex-row-reverse'} gap-12 md:gap-24 items-center`}
+                        >
+                            {/* Visual Side */}
+                            <div className="w-full md:w-1/2 relative group">
+                                {/* "Reservea" branding removed */}
+                                <div className="relative aspect-[3/4] rounded-[2rem] overflow-hidden shadow-2xl">
+                                    <div className="absolute inset-0 bg-primary/10 group-hover:bg-transparent transition-colors duration-700" />
+                                    <img
+                                        src={vendor.image}
+                                        alt={vendor.name}
+                                        className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-1000 ease-out"
+                                    />
+
+                                    {/* Floating Price Card */}
+                                    <div className={`absolute ${idx % 2 === 0 ? 'bottom-8 right-8' : 'bottom-8 left-8'} bg-white/90 backdrop-blur-md p-6 rounded-2xl shadow-xl max-w-[240px]`}>
+                                        <p className="text-[9px] font-black tracking-[0.2em] text-primary uppercase mb-2">Lead Artisan</p>
+                                        <h4 className="font-serif-premium text-xl text-primary italic leading-tight mb-4">{vendor.name}</h4>
+                                        <div className="flex justify-between items-end border-t border-gray-200 pt-3">
+                                            <p className="font-black text-lg text-primary">₹{vendor.priceMin.toLocaleString()}</p>
+                                            {onRemoveVendor && (
+                                                <button
+                                                    onClick={() => onRemoveVendor(service)}
+                                                    className="text-[8px] font-black uppercase tracking-widest text-red-400 hover:text-red-600 transition-colors"
+                                                >
+                                                    Release Selection
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Content Side */}
+                            <div className="w-full md:w-1/2 text-center md:text-left space-y-8">
+                                <BsStars className="text-primary text-3xl mx-auto md:mx-0 opacity-60" />
+
+                                <div>
+                                    <p className="text-[11px] font-black tracking-[0.3em] text-gray-400 uppercase mb-4">
+                                        Artisan {service} Collective
+                                    </p>
+                                    <h2 className="text-4xl md:text-5xl font-serif-premium text-primary leading-tight mb-6">
+                                        {vendor.name}
+                                    </h2>
+                                    <p className="text-gray-500 font-medium leading-relaxed max-w-md mx-auto md:mx-0">
+                                        Each partner in our curated hub is hand-selected based on their commitment to artisanal excellence and bespoke service. Your journey through this gallery is designed to be as effortless as it is inspiring.
+                                    </p>
+                                </div>
+
+                                <div className="flex flex-col md:flex-row items-center gap-6 pt-4 justify-center md:justify-start">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Organic Sourcing</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Custom Menus</span>
+                                    </div>
+                                </div>
+
+                                <button className="mt-8 text-xs font-black tracking-[0.2em] uppercase text-primary border-b border-primary pb-1 hover:opacity-70 transition-opacity">
+                                    Scroll to Explore
+                                </button>
+                            </div>
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
+
+                {Object.keys(formData.vendors).length === 0 && (
+                    <div className="text-center py-32 opacity-40">
+                        <h3 className="text-3xl font-serif-premium italic text-primary">Your canvas awaits selection...</h3>
+                    </div>
+                )}
+            </div>
+
+            {/* Total Footer */}
+            {Object.keys(formData.vendors).length > 0 && (
+                <div className="max-w-4xl mx-auto mt-32 px-6">
+                    <div className="bg-surface rounded-[3rem] p-12 relative overflow-hidden text-center">
+                        <div className="relative z-10">
+                            <p className="text-[10px] font-black tracking-[0.3em] text-primary uppercase mb-4">Estimated Total Investment</p>
+                            <div className="text-5xl md:text-6xl font-black text-primary mb-4 font-serif-premium">
+                                ₹{totalMin.toLocaleString()}
+                            </div>
+                            <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-8">
+                                Across {Object.keys(formData.vendors).length} Artisan Partners
+                            </p>
+                            <p className="text-xs text-gray-400 font-medium italic max-w-lg mx-auto">
+                                *Final curation value subject to seasonal availability and specific custom requirements defined in the next phase.
+                            </p>
+                        </div>
+                        <BsTagFill className="absolute -bottom-12 -right-12 text-primary/5 text-[200px] rotate-12" />
+                    </div>
+                </div>
+            )}
+        </div>
     );
 };
 

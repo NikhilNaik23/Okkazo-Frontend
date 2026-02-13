@@ -38,13 +38,13 @@ const Navbar = () => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const textColor = isOverDarkSection ? "text-[#EBF4F6]" : "text-[#088395]";
-  const hoverColor = isOverDarkSection ? "hover:text-white" : "hover:text-[#09637E]";
+  const textColor = isOverDarkSection ? "text-surface" : "text-secondary";
+  const hoverColor = isOverDarkSection ? "hover:text-white" : "hover:text-primary";
 
   return (
     <>
       <header className="fixed top-6 left-0 right-0 z-50 flex justify-center px-4 md:px-10">
-        <nav className="w-full max-w-7xl bg-[#7AB2B2]/40 backdrop-blur-xl rounded-2xl border border-white/30 shadow-xl transition-all duration-300 ring-1 ring-white/10">
+        <nav className="w-full max-w-7xl bg-accent/40 backdrop-blur-xl rounded-2xl border border-white/30 shadow-xl transition-all duration-300 ring-1 ring-white/10">
           <div className="hidden md:flex justify-between max-w-7xl mx-auto px-10 h-20 items-center">
             <div className="flex justify-center items-center gap-12">
               <Link to="/">
@@ -72,7 +72,7 @@ const Navbar = () => {
               <Link to="/register">
                 <button
                   type="button"
-                  className="bg-[#09637E] text-white py-2 px-6 rounded-lg text-sm font-bold hover:bg-[#08556d] transition-colors shadow-sm"
+                  className="bg-primary text-white py-2 px-6 rounded-lg text-sm font-bold hover:bg-[#08556d] transition-colors shadow-sm"
                 >
                   Get Started
                 </button>
@@ -98,7 +98,7 @@ const Navbar = () => {
                 <ul className="flex flex-col gap-5 p-5">
                   {menus.map((menu, index) => (
                     <Link to={menu.path} key={index} onClick={handleHamburger}>
-                      <li className="cursor-pointer text-[#EBF4F6] font-bold hover:text-white">
+                      <li className="cursor-pointer text-surface font-bold hover:text-white">
                         {menu.name}
                       </li>
                     </Link>
@@ -108,7 +108,7 @@ const Navbar = () => {
                   <Link to="/login" onClick={handleHamburger}>
                     <button
                       type="button"
-                      className="text-md font-bold text-[#EBF4F6] hover:text-white py-2 w-full text-left"
+                      className="text-md font-bold text-surface hover:text-white py-2 w-full text-left"
                     >
                       Login
                     </button>
@@ -116,7 +116,7 @@ const Navbar = () => {
                   <Link to="/register" onClick={handleHamburger}>
                     <button
                       type="button"
-                      className="bg-[#09637E] text-white py-2 px-6 rounded-lg text-md font-bold hover:bg-[#08556d] transition-colors w-full"
+                      className="bg-primary text-white py-2 px-6 rounded-lg text-md font-bold hover:bg-[#08556d] transition-colors w-full"
                     >
                       Get Started
                     </button>

@@ -2,14 +2,21 @@
 
 @import "tailwindcss";
 
+@theme {
+    --color-primary: #09637E;
+    --color-secondary: #088395;
+    --color-accent: #7AB2B2;
+    --color-surface: #EBF4F6;
+}
+
 :root {
     --color-gold: #d7a444;
     --color-gold-light: #d0a862;
-    --color-dark-blue: #0b2d49;
-    --color-bg-light: #eff6f7;
+    --color-dark-blue: #09637E;
+    --color-bg-light: var(--color-surface);
     /* Slightly more teal/white background */
-    --color-teal-deep: #09637E;
-    --color-teal-light: #7AB2B2;
+    --color-teal-deep: var(--color-primary);
+    --color-teal-light: var(--color-accent);
 }
 
 html,
