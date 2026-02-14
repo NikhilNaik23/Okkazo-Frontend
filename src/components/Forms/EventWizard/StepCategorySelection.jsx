@@ -40,12 +40,13 @@ const StepCategorySelection = ({ selectedServices, onToggleService, onUpdateServ
         <div className="relative w-full h-[85vh] flex items-start animate-fade-in text-teal-900 pt-20">
             {/* AMBIENT BACKGROUND ELEMENTS (Orbital Paths) */}
             <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 orbital-path w-[1600px] h-[1600px] opacity-[0.02]" />
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 orbital-path w-[1200px] h-[1200px] opacity-[0.04]" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 orbital-path opacity-[0.02]" style={{ width: '150vh', height: '150vh' }} />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 orbital-path opacity-[0.04]" style={{ width: '110vh', height: '110vh' }} />
             </div>
 
             {/* PROGRESS INDICATOR (LEFT) - Matching OrbitalStage */}
-            <div className="fixed left-12 top-1/2 -translate-y-1/2 flex flex-col items-center justify-center w-[140px] h-[140px] bg-white/80 backdrop-blur-xl shadow-[0_20px_60px_rgba(9,99,126,0.08)] rounded-full z-40 border border-teal-500/5">
+            <div className="fixed top-1/2 -translate-y-1/2 flex flex-col items-center justify-center bg-white/80 backdrop-blur-xl shadow-[0_20px_60px_rgba(9,99,126,0.08)] rounded-full z-40 border border-teal-500/5"
+                style={{ left: '4vh', width: '14vh', height: '14vh' }}>
                 <p className="text-[8px] tracking-[0.2em] font-bold opacity-30 uppercase mb-1">Curation</p>
                 <h2 className="text-4xl font-serif-premium italic text-teal-900 leading-none">
                     {selectedServices.length}
@@ -97,7 +98,7 @@ const StepCategorySelection = ({ selectedServices, onToggleService, onUpdateServ
                                     whileHover={{ scale: 1.02, y: -4 }}
                                     whileTap={{ scale: 0.98 }}
                                     onClick={() => onToggleService(category)}
-                                    className={`relative h-36 rounded-[32px] border transition-all flex flex-col items-center justify-center gap-4 p-4 overflow-hidden group
+                                    className={`relative rounded-[32px] border transition-all flex flex-col items-center justify-center gap-4 p-4 overflow-hidden group aspect-square
                                         ${isSelected
                                             ? 'border-teal-700/30 bg-white shadow-[0_20px_40px_rgba(15,118,110,0.08)]'
                                             : 'border-teal-900/5 bg-white/20 backdrop-blur-md hover:bg-white hover:border-teal-900/20'}`}
@@ -155,7 +156,7 @@ const StepCategorySelection = ({ selectedServices, onToggleService, onUpdateServ
                                 whileHover={{ scale: 1.02, y: -4 }}
                                 whileTap={{ scale: 0.98 }}
                                 onClick={() => setIsOthersOpen(!isOthersOpen)}
-                                className={`relative w-full h-36 rounded-[32px] border transition-all flex flex-col items-center justify-center gap-4 p-4 overflow-hidden group
+                                className={`relative w-full rounded-[32px] border transition-all flex flex-col items-center justify-center gap-4 p-4 overflow-hidden group aspect-square
                                     ${totalHiddenSelected > 0
                                         ? 'border-teal-700/30 bg-white shadow-[0_20px_40px_rgba(15,118,110,0.08)]'
                                         : 'border-teal-900/5 bg-white/20 backdrop-blur-md hover:bg-white hover:border-teal-900/20'}`}
@@ -194,7 +195,8 @@ const StepCategorySelection = ({ selectedServices, onToggleService, onUpdateServ
                                         animate={{ opacity: 1, scale: 1, y: 0 }}
                                         exit={{ opacity: 0, scale: 0.9, y: 20 }}
                                         onClick={(e) => e.stopPropagation()}
-                                        className="fixed bottom-40 right-10 w-[320px] h-[400px] bg-white/98 backdrop-blur-2xl border border-teal-900/10 rounded-[42px] shadow-2xl z-[120] flex flex-col p-6"
+                                        className="fixed bottom-40 right-10 h-[50vh] bg-white/98 backdrop-blur-2xl border border-teal-900/10 rounded-[42px] shadow-2xl z-[120] flex flex-col p-6 min-w-[300px]"
+                                        style={{ width: '25vw' }}
                                     >
                                         <div className="flex items-center justify-between mb-4 px-2">
                                             <span className="text-[10px] font-black tracking-[0.2em] text-teal-900/40 uppercase">Additional Choices</span>

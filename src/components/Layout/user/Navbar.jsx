@@ -21,7 +21,6 @@ const Navbar = () => {
 
   const isActive = (path) => location.pathname === path;
   const isDashboard = ["/user/dashboard", "/user/my-events"].includes(location.pathname);
-  const isWizard = location.pathname === "/user/planning-wizard";
 
   // Scroll Detection logic
   useLayoutEffect(() => {
@@ -41,17 +40,16 @@ const Navbar = () => {
   }, []);
 
   const showFullNav = isAtTop || isHovered;
-  const isExpandingOnHover = isWizard && !isAtTop && isHovered;
 
   return (
-    <header className="fixed top-6 left-0 right-0 z-[100] flex justify-start px-8 pointer-events-none transition-all duration-500" style={{ paddingRight: isWizard ? 'calc(var(--sidebar-width, 0px) + 32px)' : '32px' }}>
+    <header className="fixed top-6 left-0 right-0 z-[100] flex justify-start px-8 pointer-events-none transition-all duration-500" style={{ paddingRight: '32px' }}>
       <motion.nav
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         initial={false}
         animate={{
-          width: showFullNav ? (isExpandingOnHover ? "calc(100% - 380px)" : "100%") : "70px",
-          maxWidth: showFullNav ? (isExpandingOnHover ? "calc(100% - 380px)" : "100%") : "70px",
+          width: showFullNav ? "100%" : "70px",
+          maxWidth: showFullNav ? "100%" : "70px",
           height: "70px",
           borderRadius: showFullNav ? "24px" : "35px",
         }}
@@ -93,9 +91,9 @@ const Navbar = () => {
           <AnimatePresence>
             {showFullNav && (
               <motion.div
-                initial={{ opacity: 0, x: isWizard ? -20 : 0 }}
+                initial={{ opacity: 0, x: 0 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: isWizard ? -20 : 0 }}
+                exit={{ opacity: 0, x: 0 }}
                 className="flex-1 flex items-center justify-between ml-10"
               >
                 {/* Desktop Links */}

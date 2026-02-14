@@ -174,14 +174,14 @@ const PlanningWizard = () => {
 
     return (
         <div className={`flex flex-col flex-1 font-sans transition-colors duration-700 ${isImmersiveStep ? 'bg-[#eff6f7]' : (currentStep === 3 ? 'bg-white' : 'bg-gray-50')} min-h-screen`}>
-            <main className={`flex-1 w-full mx-auto flex transition-all duration-700 ${isImmersiveStep ? 'max-w-none relative px-6' : ((currentStep === 3 || currentStep === 4) ? 'max-w-none px-0 pt-0' : 'max-w-7xl px-6 pt-8 gap-8')}`}>
+            <main className={`flex-1 w-full mx-auto flex transition-all duration-700 ${isImmersiveStep ? 'max-w-none relative px-6' : ((currentStep >= 3) ? 'max-w-none px-0 pt-0' : 'max-w-7xl px-6 pt-8 gap-8')}`}>
 
-                {!isImmersiveStep && currentStep !== 3 && currentStep !== 4 && <SidebarProgress currentStep={currentStep} steps={steps} />}
+                {!isImmersiveStep && currentStep !== 3 && currentStep !== 4 && currentStep !== 5 && <SidebarProgress currentStep={currentStep} steps={steps} />}
 
                 {/* Main Content Area */}
                 <div className="flex-1 relative h-full min-h-0">
-                    {/* Header - Only for non-immersive steps, hide for Step 3 & 4 */}
-                    {!isImmersiveStep && currentStep !== 3 && currentStep !== 4 && (
+                    {/* Header - Only for non-immersive steps, hide for Step 3 & 4 & 5 */}
+                    {!isImmersiveStep && currentStep !== 3 && currentStep !== 4 && currentStep !== 5 && (
                         <div className="mb-8 animate-fade-in text-center lg:text-left">
                             <h1 className="text-4xl font-black text-primary tracking-tight mb-2">Manifest Your Event</h1>
                             <p className="text-teal-900/40 font-bold uppercase tracking-widest text-[10px]">Step {currentStep}: {steps[currentStep - 1]?.title || 'Done'}</p>
@@ -215,6 +215,7 @@ const PlanningWizard = () => {
                                 handleSelectVendor={handleSelectVendor}
                                 handleNext={handleNext}
                                 handleBack={handleBack}
+                                handleChange={handleChange}
                             />
                         )}
 

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import Navbar from "../../../components/Layout/user/Navbar";
 import { toast, Toaster } from "react-hot-toast";
 import EventDetailsForm from "../../../components/Forms/PromoteEvent/EventDetailsForm";
 import VenueLocation from "../../../components/Forms/PromoteEvent/VenueLocation";
@@ -48,9 +47,9 @@ const PromoteEvent = () => {
         } catch (error) {
             console.error(error);
             if (error.name === 'QuotaExceededError') {
-                 toast.error("Draft too large to save (Limit your banner image size)");
+                toast.error("Draft too large to save (Limit your banner image size)");
             } else {
-                 toast.error("Failed to save draft");
+                toast.error("Failed to save draft");
             }
         }
     };
@@ -79,7 +78,7 @@ const PromoteEvent = () => {
     const handleTicketChange = (id, field, value) => {
         // Prevent negative values for price and quantity
         if ((field === 'price' || field === 'quantity') && value < 0) return;
-        
+
         setFormData({
             ...formData,
             tickets: formData.tickets.map(t => t.id === id ? { ...t, [field]: value } : t)
@@ -117,11 +116,11 @@ const PromoteEvent = () => {
         }
 
         const totalCategoryQty = formData.tickets.reduce((acc, t) => acc + (parseInt(t.quantity) || 0), 0);
-        
+
         // Validation: Ticket categories sum must match total tickets
         if (totalCategoryQty !== parseInt(formData.totalTickets || 0)) {
-             toast.error(`Total tickets (${formData.totalTickets || 0}) must match sum of category quantities (${totalCategoryQty})`);
-             return;
+            toast.error(`Total tickets (${formData.totalTickets || 0}) must match sum of category quantities (${totalCategoryQty})`);
+            return;
         }
 
         // Validation: No negative quantities (redundant check)
@@ -143,27 +142,27 @@ const PromoteEvent = () => {
 
     return (
         <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
-             <Navbar />
-             <Toaster position="top-center" />
-             
-             <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-32 pb-20">
-                 {/* Page Header */}
-                 <div className="mb-8">
-                     <h1 className="text-3xl font-extrabold mb-2">Public Event Promotion Form</h1>
-                     <p className="text-gray-500 text-sm">Configure your event details, tickets, and publishing options.</p>
-                 </div>
- 
-                 {currentStep === 1 && (
+            <Toaster position="top-center" />
+
+
+            <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-32 pb-20">
+                {/* Page Header */}
+                <div className="mb-8">
+                    <h1 className="text-3xl font-extrabold mb-2">Public Event Promotion Form</h1>
+                    <p className="text-gray-500 text-sm">Configure your event details, tickets, and publishing options.</p>
+                </div>
+
+                {currentStep === 1 && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         {/* Left Content (Form) */}
                         <div className="lg:col-span-2 space-y-8">
                             <EventDetailsForm formData={formData} setFormData={setFormData} />
                             <VenueLocation formData={formData} setFormData={setFormData} />
-                            <TicketCategories 
-                                formData={formData} 
-                                handleTicketChange={handleTicketChange} 
-                                handleRemoveTicket={handleRemoveTicket} 
-                                handleAddTicket={handleAddTicket} 
+                            <TicketCategories
+                                formData={formData}
+                                handleTicketChange={handleTicketChange}
+                                handleRemoveTicket={handleRemoveTicket}
+                                handleAddTicket={handleAddTicket}
                             />
                         </div>
 
@@ -174,7 +173,7 @@ const PromoteEvent = () => {
 
                             <BannerUpload formData={formData} setFormData={setFormData} />
 
-                            <RevenueCard 
+                            <RevenueCard
                                 projectedRevenue={projectedRevenue}
                                 totalTicketValue={totalTicketValue}
                                 serviceCharge={serviceCharge}
@@ -182,7 +181,7 @@ const PromoteEvent = () => {
                             />
 
                             {/* Action Buttons */}
-                            <ActionButtons 
+                            <ActionButtons
                                 isFormComplete={isFormComplete()}
                                 handleNext={handleNext}
                                 handleSaveDraft={handleSaveDraft}
@@ -193,7 +192,7 @@ const PromoteEvent = () => {
                 )}
 
                 {currentStep === 2 && (
-                    <PaymentConfirmation 
+                    <PaymentConfirmation
                         formData={formData}
                         platformFee={platformFee}
                         setCurrentStep={setCurrentStep}
@@ -203,7 +202,7 @@ const PromoteEvent = () => {
 
                 {currentStep === 3 && <SuccessConfirmation />}
             </main>
-            
+
         </div>
     );
 };
