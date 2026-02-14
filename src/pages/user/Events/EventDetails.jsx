@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { BsArrowLeft, BsCheckCircleFill } from "react-icons/bs";
+import { BsArrowLeft, BsCheckCircleFill, BsBookmarkHeart, BsBookmarkHeartFill } from "react-icons/bs";
 import { allEvents, popularEvents } from "../../../data/eventsData";
 import { toast, Toaster } from "react-hot-toast";
 import EventInfoGrid from "../../../components/User/Events/EventInfoGrid";
@@ -10,28 +10,51 @@ const EventDetails = () => {
     const { eventId } = useParams();
     const navigate = useNavigate();
     const [event, setEvent] = useState(null);
-    const [selectedCategory, setSelectedCategory] = useState(null);
-    const [bookingQty, setBookingQty] = useState(1);
+    const [ticketSelection, setTicketSelection] = useState({}); // { "Category A": 2, "Category B": 0 }
+    const [isSaved, setIsSaved] = useState(false);
 
     useEffect(() => {
         const combinedEvents = [...allEvents, ...popularEvents];
         const foundEvent = combinedEvents.find(e => e.id === parseInt(eventId));
         if (foundEvent) {
             setEvent(foundEvent);
-            // Default to first category if available
-            if (foundEvent.categories && foundEvent.categories.length > 0) {
-                setSelectedCategory(foundEvent.categories[0].name);
-            }
+            // Check if saved
+            const savedItems = JSON.parse(localStorage.getItem('saved') || '[]');
+            setIsSaved(savedItems.some(item => item.id === foundEvent.id));
         } else {
             toast.error("Event not found");
             navigate("/user/dashboard");
         }
     }, [eventId, navigate]);
 
+    const toggleSave = () => {
+        const savedItems = JSON.parse(localStorage.getItem('saved') || '[]');
+        if (isSaved) {
+            const newSaved = savedItems.filter(item => item.id !== event.id);
+            localStorage.setItem('saved', JSON.stringify(newSaved));
+            setIsSaved(false);
+            toast.success("Removed from collection");
+        } else {
+            const itemToSave = {
+                id: event.id,
+                title: event.title,
+                location: event.eventLocation || "Venue TBD",
+                date: event.date,
+                price: event.price,
+                image: event.image,
+                status: "Saved"
+            };
+            localStorage.setItem('saved', JSON.stringify([...savedItems, itemToSave]));
+            setIsSaved(true);
+            toast.success("Saved to collection");
+        }
+        window.dispatchEvent(new Event('savedUpdated'));
+    };
+
     if (!event) return null;
 
     // Simulate available tickets logic
-    const availableTickets = event.id > 100 ? 50 : 150; 
+    const availableTickets = event.id > 100 ? 50 : 150;
 
     // Helper to parse price reliably
     const getNumericPrice = (p) => {
@@ -40,107 +63,143 @@ const EventDetails = () => {
         return numeric ? parseFloat(numeric) : 0;
     };
 
-    const getCurrentPrice = () => {
-        if (selectedCategory && event.categories) {
-            const cat = event.categories.find(c => c.name === selectedCategory);
-            return cat ? cat.price : event.price;
-        }
-        return event.price;
+    const handleQuantityChange = (categoryName, delta) => {
+        setTicketSelection(prev => {
+            const currentQty = prev[categoryName] || 0;
+            const newQty = Math.max(0, currentQty + delta);
+
+            // Optional: Check total available tickets limit if needed
+            // const totalSelected = Object.values(prev).reduce((a, b) => a + b, 0) - currentQty + newQty;
+            // if (totalSelected > availableTickets) return prev;
+
+            return { ...prev, [categoryName]: newQty };
+        });
+    };
+
+    const calculateTotal = () => {
+        if (!event.categories) return 0;
+        return event.categories.reduce((total, cat) => {
+            const qty = ticketSelection[cat.name] || 0;
+            const price = getNumericPrice(cat.price);
+            return total + (price * qty);
+        }, 0);
+    };
+
+    const getTotalTickets = () => {
+        return Object.values(ticketSelection).reduce((a, b) => a + b, 0);
     };
 
     const handleProceed = () => {
-        const queryParams = new URLSearchParams({
-            qty: bookingQty,
-            category: selectedCategory || "General"
-        });
-        navigate(`/user/checkout/${event.id}?${queryParams.toString()}`);
+        const totalTickets = getTotalTickets();
+        if (totalTickets === 0) {
+            toast.error("Please select at least one ticket");
+            return;
+        }
+
+        // Pass selection state to checkout (could use location state or query params)
+        // For query params, we might need a serialized format if complex
+        const selectionParam = JSON.stringify(ticketSelection);
+        navigate(`/user/checkout/${event.id}?selection=${encodeURIComponent(selectionParam)}`);
     };
 
     return (
-        <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
+        <div className="min-h-screen bg-[#EBF4F6] flex flex-col font-sans text-[#0b2d49] pt-28">
             <Toaster position="top-center" />
 
             <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-12 pb-20">
-                {/* Back Button */}
-                <Link to="/user/dashboard" className="flex items-center gap-2 text-gray-400 hover:text-[#0b2d49] font-bold transition-all group mb-8 w-fit">
+                {/* Back Link */}
+                <Link to="/user/dashboard" className="inline-flex items-center gap-2 text-[#09637E]/60 hover:text-[#09637E] font-bold text-xs uppercase tracking-widest mb-8 transition-colors group">
                     <BsArrowLeft className="group-hover:-translate-x-1 transition-transform" />
                     Back to Selection
                 </Link>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-                    {/* Left: Event Content */}
-                    <div className="lg:col-span-2 space-y-10">
-                        {/* Banner */}
-                        <div className="relative h-[450px] rounded-[3rem] overflow-hidden shadow-2xl group">
-                            <img src={event.image} alt={event.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-[#0b2d49]/80 via-transparent to-transparent"></div>
-                            
-                            <div className="absolute bottom-10 left-10 right-10 text-white">
-                                <span className="px-5 py-2 bg-[#d7a444] text-[#0b2d49] text-xs font-black rounded-full uppercase tracking-widest mb-4 inline-block shadow-lg">
-                                    {event.tag}
-                                </span>
-                                <h1 className="text-5xl md:text-6xl font-black mb-4 tracking-tight drop-shadow-lg">{event.title}</h1>
-                            </div>
-                        </div>
+                {/* Hero Section */}
+                <div className="relative h-[600px] rounded-[3rem] overflow-hidden shadow-2xl mb-16 group">
+                    <img src={event.image} alt={event.title} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#09637E]/90 via-[#09637E]/20 to-transparent"></div>
 
-                        {/* Description & Details */}
-                        <div className="bg-white rounded-[2.5rem] p-10 shadow-sm border border-gray-100 space-y-8">
-                            <div>
-                                <h2 className="text-3xl font-black mb-6 flex items-center gap-3">
-                                    <span className="w-1.5 h-8 bg-[#d7a444] rounded-full"></span>
-                                    About the Event
-                                </h2>
-                                <p className="text-gray-500 leading-relaxed text-lg">
-                                    Join us for an unforgettable experience at the {event.title}. This event brings together the best in {event.tag} for a day of inspiration, entertainment, and networking. Whether you're a professional looking to expand your horizons or simply looking for a fun time, this is the place to be. 
-                                    <br/><br/>
-                                    Don't miss out on this opportunity to witness spectacular performances and engage with like-minded individuals in an amazing atmosphere.
+                    {/* Save Button */}
+                    <button
+                        onClick={toggleSave}
+                        className="absolute top-10 right-10 w-14 h-14 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 hover:bg-white hover:text-[#09637E] text-white transition-all shadow-lg active:scale-95 z-20 group/save"
+                    >
+                        {isSaved ? <BsBookmarkHeartFill size={24} className="text-[#09637E]" /> : <BsBookmarkHeart size={24} />}
+                    </button>
+
+                    <div className="absolute bottom-12 left-12 right-12 text-white">
+                        <span className="px-4 py-2 bg-white/20 backdrop-blur-md border border-white/30 text-white text-[10px] font-black rounded-full uppercase tracking-widest mb-6 inline-block">
+                            Bespoke Experience
+                        </span>
+                        <h1 className="text-6xl md:text-8xl font-serif-premium italic mb-2 tracking-tight drop-shadow-lg leading-none">{event.title}</h1>
+                        <p className="text-xl font-light opacity-90 max-w-2xl mt-4">{event.description || "A curated experience designed for the modern connoisseur."}</p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
+                    {/* Left: Content */}
+                    <div className="lg:col-span-2 space-y-16">
+                        {/* About Section */}
+                        <div>
+                            <p className="text-[#09637E] font-black text-xs uppercase tracking-widest mb-6">About The Event</p>
+                            <div className="text-[#0b2d49]/80 leading-loose text-lg font-serif-premium">
+                                <span className="float-left text-7xl font-serif-premium text-[#09637E] mr-4 mt-[-10px] leading-none">
+                                    {event.title.charAt(0)}
+                                </span>
+                                <p>
+                                    Experience an unparalleled night of elegance at the {event.title}. This isn't just a performance; it's a curated sensory journey designed for the most discerning connoisseurs of modern art and sound.
+                                    <br /><br />
+                                    Set within the architectural marvel of the {event.eventLocation || "Downtown Arena"}, the evening unfolds through a series of immersive installations that dance in perfect harmony with a hand-selected lineup of global virtuosos.
                                 </p>
                             </div>
 
-                            <EventInfoGrid event={event} />
+                            <div className="mt-12 space-y-6">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-[1px] bg-[#09637E]"></div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]">Private Lounge Access</p>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-[1px] bg-[#09637E]"></div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]">Curated Gastronomy</p>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-[1px] bg-[#09637E]"></div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]">Artisan Mixology</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Venue Section */}
+                        <div>
+                            <p className="text-[#09637E] font-black text-xs uppercase tracking-widest mb-8">The Venue</p>
+                            <div className="flex justify-between items-end border-b border-[#09637E]/20 pb-8">
+                                <div>
+                                    <h3 className="text-4xl font-serif-premium text-[#0b2d49] italic mb-2">{event.eventLocation || "Downtown Arena"}</h3>
+                                    <p className="text-sm text-[#09637E]/60 font-medium">123 Music Ave, Metropolis</p>
+                                </div>
+                                <div className="text-right">
+                                    <h3 className="text-4xl font-serif-premium text-[#0b2d49] italic mb-2">{event.date}</h3>
+                                    <p className="text-sm text-[#09637E]/60 font-medium">{event.eventTime || "Doors open at 8:00 PM"}</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Right: Booking Sidebar (Sticky Container) */}
+                    {/* Right: Booking Sidebar */}
                     <div className="lg:sticky lg:top-32 space-y-8 h-fit">
                         <TicketSelector
                             event={event}
-                            selectedCategory={selectedCategory}
-                            setSelectedCategory={setSelectedCategory}
-                            bookingQty={bookingQty}
-                            setBookingQty={setBookingQty}
+                            ticketSelection={ticketSelection}
+                            handleQuantityChange={handleQuantityChange}
                             availableTickets={availableTickets}
-                            getCurrentPrice={getCurrentPrice}
+                            totalPrice={calculateTotal()}
                         />
 
-                        <button 
+                        <button
                             onClick={handleProceed}
-                            className="w-full py-5 bg-[#0b2d49] text-white font-black rounded-[1.5rem] shadow-xl shadow-blue-900/10 hover:bg-[#d7a444] hover:-translate-y-1 transition-all active:scale-[0.98] text-lg uppercase tracking-tight"
+                            className="w-full py-5 bg-[#09637E] text-white font-black rounded-[1.5rem] shadow-xl shadow-[#09637E]/20 hover:bg-[#074d63] hover:-translate-y-1 transition-all active:scale-[0.98] text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3"
                         >
-                            Proceed to Booking
+                            Proceed to Booking <BsArrowLeft className="rotate-180" size={16} />
                         </button>
-
-                        <div className="pt-6 mt-4 border-t border-gray-50 bg-white rounded-[2rem] p-6">
-                            <div className="flex justify-between text-sm mb-2">
-                                <span className="text-gray-400 font-bold">Total Price</span>
-                                <span className="text-[#0b2d49] font-black text-xl">₹{(getNumericPrice(getCurrentPrice()) * bookingQty * 83).toFixed(2)}</span>
-                            </div>
-                            <p className="text-[10px] text-gray-400 text-center font-medium">Extra platform and service fees will be added at checkout.</p>
-                        </div>
-
-                        {/* Guarantee Card - Inside the Same Column Stacking */}
-                        <div className="bg-gradient-to-br from-[#d7a444] to-[#c59333] rounded-[2rem] p-6 text-white shadow-lg overflow-hidden relative">
-                            <div className="relative z-10 flex items-center gap-4">
-                                <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/30">
-                                    <BsCheckCircleFill size={20} />
-                                </div>
-                                <div>
-                                    <p className="font-black text-lg">Verified Event</p>
-                                    <p className="text-white/80 text-xs font-medium">100% Refundable up to 24h before event.</p>
-                                </div>
-                            </div>
-                            <div className="absolute -right-4 -bottom-4 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
-                        </div>
                     </div>
                 </div>
             </main>

@@ -1,80 +1,87 @@
 import React from "react";
-import { BsPeople } from "react-icons/bs";
+import { BsCheckCircleFill, BsDash, BsPlus } from "react-icons/bs";
 
-const TicketSelector = ({ 
-    event, 
-    selectedCategory, 
-    setSelectedCategory, 
-    bookingQty, 
-    setBookingQty, 
-    availableTickets, 
-    getCurrentPrice 
+const TicketSelector = ({
+    event,
+    ticketSelection,
+    handleQuantityChange,
+    availableTickets,
+    totalPrice
 }) => {
+    // Helper to get numeric price for calculation/display if needed
+    const getNumericPrice = (p) => {
+        if (!p || typeof p !== 'string') return 0;
+        const numeric = p.replace(/[^0-9.]/g, '');
+        return numeric ? parseFloat(numeric) : 0;
+    };
+
     return (
-        <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-gray-100">
-            <h3 className="text-2xl font-black mb-8">Ticket Booking</h3>
-            
-            <div className="space-y-8">
-                {/* Category Selection */}
+        <div className="bg-white rounded-[2.5rem] p-8 shadow-xl border border-gray-100 relative overflow-hidden">
+            {/* Header */}
+            <div className="mb-8">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#09637E]/60 mb-2">Reservation</p>
+                <h3 className="text-4xl font-serif-premium text-[#0b2d49] italic">Ticket Categories</h3>
+                <div className="flex justify-end mt-2">
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest border border-gray-200 px-2 py-0.5 rounded-md">Limited Availability</span>
+                </div>
+            </div>
+
+            <div className="space-y-6">
+                {/* Category Selection List */}
                 {event.categories && (
-                    <div className="space-y-4">
-                        <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Select Ticket Category</p>
-                        <div className="grid gap-3">
-                            {event.categories.map((cat) => (
-                                <button 
+                    <div className="space-y-3">
+                        {event.categories.map((cat) => {
+                            const qty = ticketSelection[cat.name] || 0;
+                            return (
+                                <div
                                     key={cat.name}
-                                    onClick={() => setSelectedCategory(cat.name)}
-                                    className={`p-4 rounded-2xl border-2 transition-all flex justify-between items-center ${
-                                        selectedCategory === cat.name 
-                                        ? "border-[#d7a444] bg-[#fdf8ee] shadow-sm" 
-                                        : "border-gray-50 bg-gray-50/50 hover:bg-gray-100"
-                                    }`}
+                                    className={`group flex items-center justify-between p-4 rounded-2xl transition-all ${qty > 0
+                                            ? "bg-gray-50 border border-gray-100 shadow-inner"
+                                            : "hover:bg-gray-50 border border-transparent"
+                                        }`}
                                 >
-                                    <span className={`font-black uppercase text-xs tracking-wider ${selectedCategory === cat.name ? "text-[#d7a444]" : "text-gray-400"}`}>
-                                        {cat.name}
-                                    </span>
-                                    <span className="font-extrabold text-[#0b2d49]">{cat.price}</span>
-                                </button>
-                            ))}
-                        </div>
+                                    <div>
+                                        <p className="font-black uppercase text-xs tracking-widest text-[#0b2d49] mb-1">{cat.name}</p>
+                                        <p className="text-[10px] font-bold text-[#09637E]">{cat.price}</p>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                        <button
+                                            onClick={() => handleQuantityChange(cat.name, -1)}
+                                            disabled={qty === 0}
+                                            className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${qty > 0 ? "bg-white shadow-sm text-[#09637E] hover:bg-gray-100" : "bg-gray-100 text-gray-300 cursor-not-allowed"
+                                                }`}
+                                        >
+                                            <BsDash />
+                                        </button>
+                                        <span className={`w-4 text-center font-black text-sm ${qty > 0 ? "text-[#0b2d49]" : "text-gray-300"}`}>
+                                            {qty}
+                                        </span>
+                                        <button
+                                            onClick={() => handleQuantityChange(cat.name, 1)}
+                                            className="w-8 h-8 rounded-full flex items-center justify-center transition-all bg-white shadow-sm text-[#09637E] hover:bg-[#09637E] hover:text-white"
+                                        >
+                                            <BsPlus />
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
 
-                <div className="flex justify-between items-center py-4 border-b border-gray-50">
-                    <div>
-                        <p className="font-black text-[#0b2d49] text-xl">{getCurrentPrice()}</p>
-                        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">
-                            {selectedCategory ? `${selectedCategory} Ticket` : "Single Entry Ticket"}
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-4 bg-gray-50 p-2 rounded-2xl border border-gray-100">
-                        <button 
-                            onClick={() => setBookingQty(q => Math.max(1, q - 1))}
-                            className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center font-bold text-[#0b2d49] hover:bg-[#0b2d49] hover:text-white transition-all active:scale-95"
-                        >
-                            -
-                        </button>
-                        <span className="w-8 text-center font-black text-[#0b2d49]">{bookingQty}</span>
-                        <button 
-                            onClick={() => setBookingQty(q => Math.min(availableTickets, q + 1))}
-                            className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center font-bold text-[#0b2d49] hover:bg-[#0b2d49] hover:text-white transition-all active:scale-95"
-                        >
-                            +
-                        </button>
+                {/* Total */}
+                <div className="pt-8 border-t border-gray-100 mt-2">
+                    <div className="flex justify-between items-end">
+                        <span className="font-serif-premium text-xl text-[#0b2d49] italic">Total Price</span>
+                        <span className="text-3xl font-serif-premium text-[#09637E]">₹{totalPrice.toLocaleString()}</span>
                     </div>
                 </div>
+            </div>
 
-                <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                        <span className="px-3 py-1 bg-green-50 text-green-600 text-[10px] font-black rounded-lg uppercase tracking-wider">
-                            Available: {availableTickets} Tickets
-                        </span>
-                        <div className="flex items-center gap-1.5 text-[#0b2d49]">
-                            <BsPeople />
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{bookingQty} Selected</span>
-                        </div>
-                    </div>
-                </div>
+            {/* Authenticity Guarantee Footer */}
+            <div className="mt-8 pt-6 border-t border-gray-50 flex items-center justify-center gap-2 text-gray-300">
+                <BsCheckCircleFill className="text-[#09637E]/40" size={12} />
+                <span className="text-[9px] font-black uppercase tracking-widest">100% Authentic Ticketing Guarantee</span>
             </div>
         </div>
     );
