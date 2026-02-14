@@ -140,19 +140,26 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
     };
 
     return (
-        <div className="relative w-full h-[800px] flex items-center overflow-hidden animate-fade-in text-teal-900">
+        <div className="relative w-full h-screen min-h-[600px] flex items-center overflow-hidden animate-fade-in text-teal-900">
             {/* SPINNER SECTION (LEFT) - STATIC BACKGROUND */}
-            <div className="spinner-semicircle">
+            <div className="spinner-semicircle" style={{
+                width: '120vh',
+                height: '120vh',
+                left: '-60vh'
+            }}>
                 {/* Orbital Paths within spinner */}
-                <div className="orbital-path w-[1400px] h-[1400px] opacity-10" />
-                <div className="orbital-path w-[1100px] h-[1100px] opacity-10" />
+                <div className="orbital-path opacity-10" style={{ width: '150vh', height: '150vh' }} />
+                <div className="orbital-path opacity-10" style={{ width: '120vh', height: '120vh' }} />
 
                 {/* Step Labels along the curve - NO OVERLAP, FIXED DOT POSITION */}
                 <motion.div
-                    className="absolute right-[120px] top-1/2 w-1"
+                    className="absolute top-1/2 w-1"
+                    style={{
+                        right: '15vh',
+                        transformOrigin: '-45vh center'
+                    }}
                     animate={{ rotate: activeIndex * -15 }}
                     transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                    style={{ transformOrigin: '-430px center' }}
                 >
                     {steps.map((step, idx) => (
                         <div
@@ -161,7 +168,7 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                 position: 'absolute',
                                 right: 0,
                                 top: '50%',
-                                transformOrigin: '-430px center',
+                                transformOrigin: '-45vh center',
                                 transform: `translateY(-50%) rotate(${idx * 15}deg)`,
                             }}
                             className="flex items-center gap-6 text-right justify-end whitespace-nowrap"
@@ -175,8 +182,8 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                 transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                                 className="flex items-center gap-6"
                             >
-                                <span className="text-[11px] font-black tracking-[0.3em] uppercase">{step.label}</span>
-                                <div className={`w-3 h-3 rounded-full transition-all duration-500 ${activeIndex === idx ? 'bg-teal-700 shadow-[0_0_20px_#0f766e]' : 'bg-teal-900/20'}`} />
+                                <span className="text-[1.2vh] font-black tracking-[0.3em] uppercase">{step.label}</span>
+                                <div className={`w-[1.2vh] h-[1.2vh] rounded-full transition-all duration-500 ${activeIndex === idx ? 'bg-teal-700 shadow-[0_0_20px_#0f766e]' : 'bg-teal-900/20'}`} />
                             </motion.div>
                         </div>
                     ))}
@@ -184,8 +191,8 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
             </div>
 
             {/* FIXED PROGRESS INDICATOR (Detached from rotation) */}
-            <div className="absolute left-[30px] top-1/2 -translate-y-1/2 flex flex-col items-center z-20">
-                <div className="flex flex-col items-center justify-center w-[160px] h-[160px] bg-white shadow-[0_20px_60px_rgba(9,99,126,0.1)] rounded-full mb-6">
+            <div className="absolute left-[4vh] top-1/2 -translate-y-1/2 flex flex-col items-center z-20">
+                <div className="flex flex-col items-center justify-center w-[16vh] h-[16vh] bg-white shadow-[0_20px_60px_rgba(9,99,126,0.1)] rounded-full mb-6">
                     <p className="text-[9px] tracking-[0.2em] font-bold opacity-30 uppercase mb-1">Resonance</p>
                     <h2 className="text-4xl font-serif-premium italic text-teal-900 leading-none">
                         {Math.round(((activeIndex + 1) / steps.length) * 100)}%
@@ -229,8 +236,8 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
             </div>
 
             {/* PORTAL CONTAINER (STABLE LAYOUT) */}
-            <div className="portal-container flex flex-col h-[500px]">
-                <div className="flex-1 overflow-visible flex flex-col justify-center">
+            <div className="portal-container flex flex-col h-[70vh] justify-center z-30 pointer-events-none" style={{ position: 'absolute', left: '45vw', top: '50%', transform: 'translateY(-50%)', width: '45vw', minWidth: '400px' }}>
+                <div className="flex-1 overflow-visible flex flex-col justify-center pointer-events-auto">
                     <AnimatePresence mode="wait">
                         <motion.div
                             key={currentStep.id}
@@ -253,11 +260,11 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                             setFormData(prev => ({ ...prev, listingType: 'Public', type: 'Concert' }));
                                             setTimeout(handleNext, 600);
                                         }}
-                                        className={`group relative w-48 h-64 rounded-[40px] overflow-hidden transition-all ${formData.listingType === 'Public' ? 'ring-2 ring-teal-700 ring-offset-4 shadow-xl' : 'opacity-40 grayscale hover:opacity-100'}`}
+                                        className={`group relative w-[28vh] h-[38vh] min-w-[200px] min-h-[280px] rounded-[40px] overflow-hidden transition-all ${formData.listingType === 'Public' ? 'ring-2 ring-teal-700 ring-offset-4 shadow-xl' : 'opacity-40 grayscale hover:opacity-100'}`}
                                     >
                                         <img src="https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&h=600&fit=crop" className="w-full h-full object-cover" alt="Public" />
                                         <div className="absolute inset-0 bg-teal-900/40 hidden group-hover:block" />
-                                        <h3 className="absolute bottom-6 left-6 text-xl font-serif-premium italic text-white">Public</h3>
+                                        <h3 className="absolute bottom-6 left-6 text-2xl font-serif-premium italic text-white">Public</h3>
                                         {formData.listingType === 'Public' && <BsCheck className="absolute top-4 right-4 text-2xl text-white bg-teal-700 rounded-full" />}
                                     </motion.button>
 
@@ -268,11 +275,11 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                             setFormData(prev => ({ ...prev, listingType: 'Private', type: 'Birthday' }));
                                             setTimeout(handleNext, 600);
                                         }}
-                                        className={`group relative w-48 h-64 rounded-[40px] overflow-hidden transition-all ${formData.listingType === 'Private' ? 'ring-2 ring-teal-700 ring-offset-4 shadow-xl' : 'opacity-40 grayscale hover:opacity-100'}`}
+                                        className={`group relative w-[28vh] h-[38vh] min-w-[200px] min-h-[280px] rounded-[40px] overflow-hidden transition-all ${formData.listingType === 'Private' ? 'ring-2 ring-teal-700 ring-offset-4 shadow-xl' : 'opacity-40 grayscale hover:opacity-100'}`}
                                     >
                                         <img src="https://images.unsplash.com/photo-1530103043960-ef38714abb15?w=400&h=600&fit=crop" className="w-full h-full object-cover" alt="Private" />
                                         <div className="absolute inset-0 bg-teal-900/40 hidden group-hover:block" />
-                                        <h3 className="absolute bottom-6 left-6 text-xl font-serif-premium italic text-white">Private</h3>
+                                        <h3 className="absolute bottom-6 left-6 text-2xl font-serif-premium italic text-white">Private</h3>
                                         {formData.listingType === 'Private' && <BsCheck className="absolute top-4 right-4 text-2xl text-white bg-teal-700 rounded-full" />}
                                     </motion.button>
                                 </div>
@@ -405,7 +412,7 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                     <motion.button
                                         whileHover={{ scale: 1.02 }}
                                         onClick={() => setIsMapOpen(true)}
-                                        className="w-full max-w-md h-32 rounded-[30px] border border-teal-900/10 bg-white/40 backdrop-blur-md px-8 flex items-center justify-between group hover:border-teal-700 transition-all"
+                                        className="w-full h-[15vh] rounded-[30px] border border-teal-900/10 bg-white/40 backdrop-blur-md px-8 flex items-center justify-between group hover:border-teal-700 transition-all"
                                     >
                                         <div className="flex items-center gap-6">
                                             <BsGeoAlt className="text-2xl text-teal-900/20 group-hover:text-teal-700 transition-colors" size={24} />

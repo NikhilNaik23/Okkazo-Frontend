@@ -4,9 +4,11 @@ import { BsStars, BsX, BsTagFill, BsArrowRight } from "react-icons/bs";
 
 const StepReview = ({ formData, onRemoveVendor }) => {
     const totalMin = Object.values(formData.vendors).reduce((acc, v) => acc + (v.priceMin || 0), 0);
-    const totalMax = Object.values(formData.vendors).reduce((acc, v) => acc + (v.priceMax || 0), 0);
+    const totalMax = Object.values(formData.vendors).reduce(
+        (acc, v) => acc + (v.priceMax || Math.round((v.priceMin || 0) * 1.5)),
+        0
+    );
 
-    const categories = ['Venue', 'Catering', 'Florals', 'Photography', 'Music', 'Decor'];
 
     return (
         <div className="w-full pb-40">
@@ -93,7 +95,9 @@ const StepReview = ({ formData, onRemoveVendor }) => {
                                         <p className="text-[9px] font-black tracking-[0.2em] text-primary uppercase mb-2">Lead Artisan</p>
                                         <h4 className="font-serif-premium text-xl text-primary italic leading-tight mb-4">{vendor.name}</h4>
                                         <div className="flex justify-between items-end border-t border-gray-200 pt-3">
-                                            <p className="font-black text-lg text-primary">₹{vendor.priceMin.toLocaleString()}</p>
+                                            <p className="font-black text-lg text-primary">
+                                                ₹{(vendor.priceMin || 0).toLocaleString()} - ₹{(vendor.priceMax || Math.round((vendor.priceMin || 0) * 1.5)).toLocaleString()}
+                                            </p>
                                             {onRemoveVendor && (
                                                 <button
                                                     onClick={() => onRemoveVendor(service)}
@@ -158,6 +162,9 @@ const StepReview = ({ formData, onRemoveVendor }) => {
                             <div className="text-5xl md:text-6xl font-black text-primary mb-4 font-serif-premium">
                                 ₹{totalMin.toLocaleString()}
                             </div>
+                            <div className="text-sm md:text-xl font-bold text-primary/60 uppercase tracking-widest mb-4">
+                                – ₹{totalMax.toLocaleString()}
+                            </div>
                             <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-8">
                                 Across {Object.keys(formData.vendors).length} Artisan Partners
                             </p>
@@ -165,7 +172,7 @@ const StepReview = ({ formData, onRemoveVendor }) => {
                                 *Final curation value subject to seasonal availability and specific custom requirements defined in the next phase.
                             </p>
                         </div>
-                        <BsTagFill className="absolute -bottom-12 -right-12 text-primary/5 text-[200px] rotate-12" />
+                        <BsTagFill className="absolute -bottom-12 -right-12 text-primary/5 text-[15vmax] rotate-12" />
                     </div>
                 </div>
             )}
