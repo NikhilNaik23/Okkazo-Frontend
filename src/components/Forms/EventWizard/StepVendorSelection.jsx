@@ -12,13 +12,99 @@ import {
     BsCalendarEvent,
     BsFilter,
     BsHeart,
-    BsHeartFill
+    BsHeartFill,
+    BsPlus,
+    BsX
 } from "react-icons/bs";
 import { MdRestaurant, MdCameraAlt, MdPalette, MdLocationOn, MdVideocam, MdMusicNote, MdFace, MdSort } from 'react-icons/md';
 import { dummyVendors } from "../../../data/vendorData";
+import { vendorServiceCategories } from "../../../data/planningWizardData";
 import { BsGlobe, BsTelephone, BsEnvelope, BsInstagram } from 'react-icons/bs';
 
 // --- Helper Components ---
+
+const ReviewsTab = ({ vendor }) => {
+    const [page, setPage] = useState(1);
+    const PER_PAGE = 3;
+
+    // Mock Reviews Data
+    const reviews = useMemo(() => Array.from({ length: 42 }).map((_, i) => ({
+        id: i,
+        user: `User ${i + 1}`,
+        rating: 4 + Math.random(),
+        date: new Date(2025, 0, 15 - i).toLocaleDateString(),
+        text: "Absolutely stunning experience! The attention to detail was immaculate and the team went above and beyond to ensure our day was perfect. Highly recommended for anyone looking for luxury service."
+    })), []);
+
+    const totalPages = Math.ceil(reviews.length / PER_PAGE);
+    const currentReviews = reviews.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+
+    return (
+        <motion.div
+            key="Reviews"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute inset-0 flex flex-col p-10"
+        >
+            <div className="flex items-center justify-between mb-8">
+                <div>
+                    <h3 className="text-2xl font-serif-premium text-primary">Client Experiences</h3>
+                    <p className="text-gray-400 text-xs font-bold mt-2">Total Reviews: <span className="text-primary">{reviews.length}</span></p>
+                </div>
+                <div className="flex items-center gap-2 text-amber-400 bg-amber-50 px-4 py-2 rounded-full">
+                    <span className="text-lg font-bold text-primary">{vendor.rating}</span>
+                    <div className="flex text-xs"><BsStarFill /><BsStarFill /><BsStarFill /><BsStarFill /><BsStarFill className="text-amber-200" /></div>
+                </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pr-2 space-y-6 scrollbar-thin scrollbar-thumb-gray-200">
+                {currentReviews.map(review => (
+                    <div key={review.id} className="p-6 bg-gray-50 rounded-2xl border border-gray-100">
+                        <div className="flex justify-between items-start mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold uppercase">
+                                    {review.user.substring(0, 1)}
+                                </div>
+                                <div>
+                                    <h5 className="text-xs font-bold text-primary uppercase tracking-wider">{review.user}</h5>
+                                    <span className="text-[10px] text-gray-400">{review.date}</span>
+                                </div>
+                            </div>
+                            <div className="flex text-amber-400 text-[9px] gap-0.5">
+                                {[...Array(5)].map((_, i) => (
+                                    <BsStarFill key={i} className={i < Math.floor(review.rating) ? "" : "text-gray-200"} />
+                                ))}
+                            </div>
+                        </div>
+                        <p className="text-gray-500 text-sm leading-relaxed font-light">"{review.text}"</p>
+                    </div>
+                ))}
+            </div>
+
+            {/* Pagination */}
+            <div className="pt-6 border-t border-gray-100 flex items-center justify-between mt-auto">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Page {page} of {totalPages}</span>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-200 text-primary hover:bg-primary hover:text-white disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-primary transition-all"
+                    >
+                        <BsChevronLeft size={10} />
+                    </button>
+                    <button
+                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                        disabled={page === totalPages}
+                        className="w-8 h-8 flex items-center justify-center rounded-full border border-gray-200 text-primary hover:bg-primary hover:text-white disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-primary transition-all"
+                    >
+                        <BsChevronRight size={10} />
+                    </button>
+                </div>
+            </div>
+        </motion.div>
+    );
+};
 
 const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected }) => {
     const [activeTab, setActiveTab] = React.useState('Overview');
@@ -167,16 +253,46 @@ const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected }) => {
                                 </motion.div>
                             )}
                             {/* Placeholder for other tabs */}
-                            {activeTab !== 'Overview' && (
+                            {activeTab === 'Services' && (
                                 <motion.div
-                                    key="Other"
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    className="absolute inset-0 flex items-center justify-center text-gray-300"
+                                    key="Services"
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -10 }}
+                                    className="absolute inset-0 overflow-y-auto p-10 space-y-8 scrollbar-thin scrollbar-thumb-gray-200"
                                 >
-                                    <p className="uppercase tracking-widest text-xs font-bold">Content coming soon</p>
+                                    <div className="space-y-6">
+                                        <h3 className="text-2xl font-serif-premium text-primary">Offered Services</h3>
+                                        <p className="text-gray-400 text-xs uppercase tracking-widest font-bold">Standard Packages</p>
+
+                                        <div className="grid grid-cols-1 gap-4">
+                                            {[
+                                                { name: "Full Day Coverage", price: "₹85,000", desc: "Up to 12 hours of coverage with 2 photographers" },
+                                                { name: "Cinematic Film", price: "₹60,000", desc: "5-7 minute highlight reel and full ceremony edit" },
+                                                { name: "Pre-Wedding Shoot", price: "₹25,000", desc: "4 hour session at location of choice" },
+                                                { name: "Drone Coverage", price: "₹15,000", desc: "Aerial shots for venue and entry" },
+                                                { name: "Express Editing", price: "₹10,000", desc: "Same day edit slideshow for reception" }
+                                            ].map((service, i) => (
+                                                <div key={i} className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-primary/20 hover:bg-gray-50 transition-all group">
+                                                    <div className="flex items-start gap-4">
+                                                        <div className="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-primary mt-1">
+                                                            <BsCheck />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-sm font-bold text-primary group-hover:text-secondary transition-colors">{service.name}</h4>
+                                                            <p className="text-xs text-gray-400 mt-1">{service.desc}</p>
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-sm font-bold text-primary">{service.price}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </motion.div>
+                            )}
+
+                            {activeTab === 'Reviews' && (
+                                <ReviewsTab vendor={vendor} />
                             )}
                         </AnimatePresence>
                     </div>
@@ -313,8 +429,49 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     const [sortOption, setSortOption] = useState("Recommended");
     const [showPriceFilter, setShowPriceFilter] = useState(false);
     const [priceRange, setPriceRange] = useState({ min: 0, max: 200000 });
+    const [showAddServiceDropdown, setShowAddServiceDropdown] = useState(false);
 
     const ITEMS_PER_PAGE = 9;
+
+    const handleAddService = (service) => {
+        const newServices = [...formData.services, service];
+        handleChange('services', newServices);
+        // Automatically switch to the new tab
+        setActiveServiceTab(newServices.length - 1);
+        setShowAddServiceDropdown(false);
+    };
+
+    const handleRemoveService = (index) => {
+        const serviceToRemove = formData.services[index];
+        const newServices = formData.services.filter((_, i) => i !== index);
+
+        // Remove the vendor selection for this service if it exists
+        if (formData.vendors[serviceToRemove]) {
+            const newVendors = { ...formData.vendors };
+            delete newVendors[serviceToRemove];
+            handleChange('vendors', newVendors);
+
+            // Defer the second update to ensure state consistency
+            setTimeout(() => {
+                handleChange('services', newServices);
+            }, 50);
+        } else {
+            handleChange('services', newServices);
+        }
+
+        // Adjust active tab safely
+        if (activeServiceTab >= index && activeServiceTab > 0) {
+            setActiveServiceTab(prev => prev - 1);
+        } else if (newServices.length <= activeServiceTab) {
+            setActiveServiceTab(Math.max(0, newServices.length - 1));
+        }
+    };
+
+    const handleRemoveVendorSelection = (category) => {
+        const newVendors = { ...formData.vendors };
+        delete newVendors[category];
+        handleChange('vendors', newVendors);
+    };
 
     // Reset filters when changing category
     React.useEffect(() => {
@@ -378,6 +535,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
 
     // Sidebar Logic
     const selectedCount = Object.keys(formData.vendors).length;
+    const allServicesSelected = formData.services?.every(service => formData.vendors[service]);
     // const currentSelection = formData.vendors[activeCategory];
 
     // Calculate Total Estimated
@@ -426,29 +584,81 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                         <div className="sticky top-24 z-40 -mx-8 px-8 md:-mx-16 md:px-16 bg-surface/95 backdrop-blur-xl border-b border-primary/5 shadow-[0_10px_30px_-10px_rgba(9,99,126,0.05)] transition-all duration-300 py-6 mb-8">
 
                             {/* Service Category Tabs - "Rolling" Navbar */}
-                            <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide mb-6 pb-2">
-                                {formData.services.map((service, idx) => {
-                                    const isSelected = !!formData.vendors[service];
-                                    const isActive = activeServiceTab === idx;
+                            <div className="flex items-center gap-3 mb-6 pb-2">
+                                <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide flex-1">
+                                    {formData.services.map((service, idx) => {
+                                        const isSelected = !!formData.vendors[service];
+                                        const isActive = activeServiceTab === idx;
 
-                                    return (
-                                        <button
-                                            key={service}
-                                            onClick={() => setActiveServiceTab(idx)}
-                                            className={`shrink-0 px-5 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 border
-                                            ${isActive
-                                                    ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-105'
-                                                    : 'bg-white text-primary/60 border-primary/10 hover:border-primary/30 hover:text-primary'}`}
-                                        >
-                                            {service}
-                                            {isSelected && (
-                                                <span className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[8px] shadow-sm">
-                                                    <BsCheck size={12} strokeWidth={1} />
-                                                </span>
-                                            )}
-                                        </button>
-                                    );
-                                })}
+                                        return (
+                                            <div key={service} className="relative group/tab shrink-0">
+                                                <button
+                                                    onClick={() => setActiveServiceTab(idx)}
+                                                    className={`px-5 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 border pr-8
+                                                    ${isActive
+                                                            ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-105'
+                                                            : 'bg-white text-primary/60 border-primary/10 hover:border-primary/30 hover:text-primary'}`}
+                                                >
+                                                    {service}
+                                                    {isSelected && (
+                                                        <span className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[8px] shadow-sm">
+                                                            <BsCheck size={12} strokeWidth={1} />
+                                                        </span>
+                                                    )}
+                                                </button>
+                                                {formData.services.length > 1 && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRemoveService(idx);
+                                                        }}
+                                                        className={`absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center transition-colors
+                                                        ${isActive ? 'text-white/60 hover:text-white hover:bg-white/20' : 'text-primary/20 hover:text-red-500 hover:bg-red-50'}`}
+                                                    >
+                                                        <BsX size={14} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Add Service Button */}
+                                <div className="relative shrink-0">
+                                    <button
+                                        onClick={() => setShowAddServiceDropdown(!showAddServiceDropdown)}
+                                        className="w-10 h-10 rounded-full bg-white border border-dashed border-primary/20 text-primary/40 flex items-center justify-center hover:border-primary hover:text-primary transition-all shadow-sm"
+                                        title="Add Service"
+                                    >
+                                        <BsPlus size={24} className={showAddServiceDropdown ? "rotate-45 transition-transform" : "transition-transform"} />
+                                    </button>
+
+                                    {showAddServiceDropdown && (
+                                        <>
+                                            <div className="fixed inset-0 z-[60]" onClick={() => setShowAddServiceDropdown(false)} />
+                                            <div className="absolute right-0 top-full mt-2 w-64 max-h-80 overflow-y-auto bg-white rounded-2xl shadow-xl border border-primary/10 p-2 z-[70] animate-fade-in-up scrollbar-thin scrollbar-thumb-gray-200">
+                                                <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-primary/40 border-b border-gray-100 mb-1">
+                                                    Add Service
+                                                </div>
+                                                {vendorServiceCategories.filter(s => !formData.services.includes(s) && s !== 'Other').map(service => (
+                                                    <button
+                                                        key={service}
+                                                        onClick={() => handleAddService(service)}
+                                                        className="w-full text-left px-4 py-3 rounded-lg text-xs font-bold text-primary hover:bg-primary/5 transition-colors flex items-center justify-between group"
+                                                    >
+                                                        {service}
+                                                        <BsPlus className="opacity-0 group-hover:opacity-100 text-primary" />
+                                                    </button>
+                                                ))}
+                                                {vendorServiceCategories.filter(s => !formData.services.includes(s) && s !== 'Other').length === 0 && (
+                                                    <div className="px-4 py-4 text-center text-[10px] text-gray-400">
+                                                        All services added
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="flex flex-col gap-5">
@@ -650,6 +860,13 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                                             <h4 className="text-sm font-serif-premium font-bold text-primary truncate">{vendor.name}</h4>
                                             <span className="text-xs font-bold text-secondary">₹{(vendor.priceMin >= 1000 ? (vendor.priceMin / 1000).toFixed(0) + 'k' : vendor.priceMin)} - ₹{(vendor.priceMax ? (vendor.priceMax / 1000).toFixed(0) + 'k' : (vendor.priceMin * 1.5 / 1000).toFixed(0) + 'k')}</span>
                                         </div>
+                                        <button
+                                            onClick={() => handleRemoveVendorSelection(category)}
+                                            className="w-6 h-6 rounded-full border border-gray-100 flex items-center justify-center text-gray-300 hover:bg-red-50 hover:text-red-500 hover:border-red-100 transition-colors shrink-0"
+                                            title="Remove Selection"
+                                        >
+                                            <BsX size={14} />
+                                        </button>
                                     </motion.div>
                                 ))
                             )}
@@ -679,9 +896,9 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
 
                             <button
                                 onClick={handleNext}
-                                disabled={selectedCount === 0}
+                                disabled={!allServicesSelected}
                                 className={`w-full py-4 rounded-xl text-xs font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl
-                                ${selectedCount > 0
+                                ${allServicesSelected
                                         ? 'bg-primary text-white hover:bg-secondary hover:scale-[1.02] active:scale-95 shadow-primary/20'
                                         : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
                             >
