@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { BsCalendarEvent, BsGeoAlt, BsQrCode, BsCheckCircleFill, BsThreeDotsVertical, BsPlusLg, BsArrowRight, BsClock, BsTicketPerforated } from "react-icons/bs";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast, Toaster } from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { myOrganizedEvents, myTickets as myTicketsData } from "../../../data/myEventsData";
@@ -11,6 +11,8 @@ const MyEvents = () => {
     const [organizedEvents, setOrganizedEvents] = useState([]);
     const [myTickets, setMyTickets] = useState([]);
     const [savedEvents, setSavedEvents] = useState([]);
+    const [searchParams] = useSearchParams();
+    const searchQuery = searchParams.get("search")?.toLowerCase() || "";
 
     // Mock Promoted Campaigns
     const promotedCampaigns = [
@@ -99,6 +101,28 @@ const MyEvents = () => {
         };
     }, []);
 
+    // Filter Logic
+    const filteredOrganized = organizedEvents.filter(e =>
+        e.title.toLowerCase().includes(searchQuery) ||
+        e.location.toLowerCase().includes(searchQuery)
+    );
+
+    const filteredCampaigns = promotedCampaigns.filter(c =>
+        c.title.toLowerCase().includes(searchQuery) ||
+        c.subtitle.toLowerCase().includes(searchQuery)
+    );
+
+    const filteredTickets = myTickets.filter(t =>
+        t.title.toLowerCase().includes(searchQuery) ||
+        t.location.toLowerCase().includes(searchQuery)
+    );
+
+    const filteredSaved = savedEvents.filter(s =>
+        s.title.toLowerCase().includes(searchQuery) ||
+        (s.location && s.location.toLowerCase().includes(searchQuery))
+    );
+
+
     const TabButton = ({ id, label }) => (
         <button
             onClick={() => setActiveTab(id)}
@@ -152,7 +176,7 @@ const MyEvents = () => {
                                     <div>
                                         <h1 className="text-5xl md:text-6xl font-serif-premium text-[#09637E] mb-4">Creative Studio</h1>
                                         <p className="text-[#088395] text-lg max-w-xl font-light">
-                                            Curating {organizedEvents.length} master experiences this season.
+                                            Curating {filteredOrganized.length} master experiences this season.
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-4">
@@ -169,74 +193,81 @@ const MyEvents = () => {
                                 </div>
 
                                 {/* Events Grid */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                    {organizedEvents.map((event, idx) => (
-                                        <div key={event.id} className="group relative h-[500px] bg-white rounded-[40px] overflow-hidden shadow-sm hover:shadow-[0_20px_40px_-12px_rgba(9,99,126,0.2)] transition-all duration-500 border border-[#7AB2B2]/10">
-                                            {/* Image & Gradient */}
-                                            <div className="absolute inset-0">
-                                                <img src={event.image} alt={event.title} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" />
-                                                <div className={`absolute inset-0 transition-opacity duration-500 ${
-                                                    // Revised Gradients: Much clearer top to reveal image (opacity-95 to transparent)
-                                                    idx === 0 ? 'bg-gradient-to-t from-[#09637E]/95 via-[#09637E]/20 to-transparent' :
-                                                        idx === 1 ? 'bg-gradient-to-t from-[#088395]/95 via-[#088395]/20 to-transparent' :
-                                                            'bg-gradient-to-t from-[#2d5c58]/95 via-[#2d5c58]/20 to-transparent'
-                                                    }`} />
-                                            </div>
-
-                                            {/* Content Overlay */}
-                                            <div className="absolute inset-0 p-8 flex flex-col justify-between text-white z-10">
-                                                {/* Top Actions - Added subtle drop shadow for readability against image */}
-                                                <div className="flex justify-between items-start">
-                                                    <span className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm ${event.status === 'Live' ? 'bg-[#7AB2B2] text-[#09637E]' :
-                                                        event.status === 'Pending Approval' ? 'bg-[#EBF4F6] text-[#09637E]' : 'bg-slate-500/50 backdrop-blur-md text-white'
-                                                        }`}>
-                                                        {event.status === 'Live' && <span className="w-1.5 h-1.5 bg-[#09637E] rounded-full animate-pulse" />}
-                                                        {event.status === 'Live' ? 'Live Event' : event.status}
-                                                    </span>
-                                                    <button className="w-10 h-10 flex items-center justify-center rounded-full bg-black/20 backdrop-blur-md hover:bg-white/20 text-white transition-all">
-                                                        <BsThreeDotsVertical />
-                                                    </button>
+                                {filteredOrganized.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                        {filteredOrganized.map((event, idx) => (
+                                            <div key={event.id} className="group relative h-[500px] bg-white rounded-[40px] overflow-hidden shadow-sm hover:shadow-[0_20px_40px_-12px_rgba(9,99,126,0.2)] transition-all duration-500 border border-[#7AB2B2]/10">
+                                                {/* Image & Gradient */}
+                                                <div className="absolute inset-0">
+                                                    <img src={event.image} alt={event.title} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" />
+                                                    <div className={`absolute inset-0 transition-opacity duration-500 ${
+                                                        // Revised Gradients: Much clearer top to reveal image (opacity-95 to transparent)
+                                                        idx === 0 ? 'bg-gradient-to-t from-[#09637E]/95 via-[#09637E]/20 to-transparent' :
+                                                            idx === 1 ? 'bg-gradient-to-t from-[#088395]/95 via-[#088395]/20 to-transparent' :
+                                                                'bg-gradient-to-t from-[#2d5c58]/95 via-[#2d5c58]/20 to-transparent'
+                                                        }`} />
                                                 </div>
 
-                                                {/* Center/Bottom Info */}
-                                                <div className="mb-4 drop-shadow-md">
-                                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#EBF4F6] mb-2 opacity-90">{event.date}</p>
-                                                    <h3 className="text-3xl font-serif-premium italic mb-4 leading-[1.1] text-white">{event.title}</h3>
-                                                    <div className="flex items-center gap-2 text-xs text-white/90 font-medium">
-                                                        <BsGeoAlt /> {event.location}
+                                                {/* Content Overlay */}
+                                                <div className="absolute inset-0 p-8 flex flex-col justify-between text-white z-10">
+                                                    {/* Top Actions - Added subtle drop shadow for readability against image */}
+                                                    <div className="flex justify-between items-start">
+                                                        <span className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm ${event.status === 'Live' ? 'bg-[#7AB2B2] text-[#09637E]' :
+                                                            event.status === 'Pending Approval' ? 'bg-[#EBF4F6] text-[#09637E]' : 'bg-slate-500/50 backdrop-blur-md text-white'
+                                                            }`}>
+                                                            {event.status === 'Live' && <span className="w-1.5 h-1.5 bg-[#09637E] rounded-full animate-pulse" />}
+                                                            {event.status === 'Live' ? 'Live Event' : event.status}
+                                                        </span>
+                                                        <button className="w-10 h-10 flex items-center justify-center rounded-full bg-black/20 backdrop-blur-md hover:bg-white/20 text-white transition-all">
+                                                            <BsThreeDotsVertical />
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Center/Bottom Info */}
+                                                    <div className="mb-4 drop-shadow-md">
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-[#EBF4F6] mb-2 opacity-90">{event.date}</p>
+                                                        <h3 className="text-3xl font-serif-premium italic mb-4 leading-[1.1] text-white">{event.title}</h3>
+                                                        <div className="flex items-center gap-2 text-xs text-white/90 font-medium">
+                                                            <BsGeoAlt /> {event.location}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Bottom Action Area */}
+                                                    <div className="pt-6 border-t border-white/20 flex items-center justify-between">
+                                                        <div className="drop-shadow-sm">
+                                                            <p className="text-[9px] font-black uppercase tracking-widest text-white/60 mb-1">Tickets Sold</p>
+                                                            <p className="text-lg font-bold text-white">{event.sold}</p>
+                                                        </div>
+                                                        <button className="px-6 py-2.5 bg-[#EBF4F6] text-[#09637E] rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-[#7AB2B2] hover:text-white transition-colors shadow-lg">
+                                                            Manage
+                                                        </button>
                                                     </div>
                                                 </div>
-
-                                                {/* Bottom Action Area */}
-                                                <div className="pt-6 border-t border-white/20 flex items-center justify-between">
-                                                    <div className="drop-shadow-sm">
-                                                        <p className="text-[9px] font-black uppercase tracking-widest text-white/60 mb-1">Tickets Sold</p>
-                                                        <p className="text-lg font-bold text-white">{event.sold}</p>
-                                                    </div>
-                                                    <button className="px-6 py-2.5 bg-[#EBF4F6] text-[#09637E] rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-[#7AB2B2] hover:text-white transition-colors shadow-lg">
-                                                        Manage
-                                                    </button>
-                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="py-20 text-center opacity-40">
+                                        <p className="font-serif-premium text-2xl">No curated events found.</p>
+                                    </div>
+                                )}
 
                                 {/* Example Small Card Sidebar Implementation */}
-                                <div className="mt-12 p-8 bg-gradient-to-r from-[#7AB2B2] to-[#088395] rounded-[40px] flex items-center justify-between relative overflow-hidden group shadow-lg">
-                                    <div className="absolute inset-0 bg-white/10 opacity-30 mix-blend-overlay" />
-                                    <div className="relative z-10 p-4">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-white/80 mb-2">Tonight • 8:00 PM</p>
-                                        <h3 className="text-4xl font-serif-premium italic text-white mb-2">Neon Lights Concert</h3>
-                                        <p className="text-xs text-white/90 font-medium">Downtown Arena • 2 Tickets</p>
+                                {searchQuery === "" && (
+                                    <div className="mt-12 p-8 bg-gradient-to-r from-[#7AB2B2] to-[#088395] rounded-[40px] flex items-center justify-between relative overflow-hidden group shadow-lg">
+                                        <div className="absolute inset-0 bg-white/10 opacity-30 mix-blend-overlay" />
+                                        <div className="relative z-10 p-4">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-white/80 mb-2">Tonight • 8:00 PM</p>
+                                            <h3 className="text-4xl font-serif-premium italic text-white mb-2">Neon Lights Concert</h3>
+                                            <p className="text-xs text-white/90 font-medium">Downtown Arena • 2 Tickets</p>
+                                        </div>
+                                        <div className="relative z-10">
+                                            <button className="bg-[#EBF4F6] text-[#09637E] px-8 py-3 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-white transition-all">
+                                                View
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div className="relative z-10">
-                                        <button className="bg-[#EBF4F6] text-[#09637E] px-8 py-3 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-white transition-all">
-                                            View
-                                        </button>
-                                    </div>
-                                </div>
-
+                                )}
                             </motion.div>
                         )}
 
@@ -265,31 +296,33 @@ const MyEvents = () => {
                                 {/* Campaigns Grid - 4 Columns */}
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 min-h-[600px]">
 
-                                    {/* Card 1: Dedicated Strategy Lead */}
-                                    <div className="relative bg-gradient-to-br from-[#7AB2B2]/20 to-[#EBF4F6] rounded-[40px] p-8 flex flex-col justify-between overflow-hidden border border-[#09637E]/5">
-                                        <div>
-                                            <div className="w-12 h-12 rounded-full border-2 border-[#09637E] flex items-center justify-center text-[#09637E] mb-8">
-                                                <BsClock size={20} />
-                                            </div>
-                                            <h3 className="text-3xl font-serif-premium text-[#09637E] mb-4 leading-tight">Your Dedicated Strategy Lead</h3>
-                                            <p className="text-xs text-[#09637E]/60 leading-relaxed font-medium">
-                                                Direct access to your assigned account manager for high-tier campaign optimizations and bespoke requests.
-                                            </p>
-                                        </div>
-                                        <div className="flex items-center gap-4 bg-white/50 p-4 rounded-3xl backdrop-blur-sm border border-white/40">
-                                            <div className="w-12 h-12 bg-[#0b2d49] rounded-xl flex items-center justify-center text-white shadow-lg">
-                                                {/* Placeholder Avatar */}
-                                                <span className="font-bold text-xs">SM</span>
-                                            </div>
+                                    {/* Card 1: Dedicated Strategy Lead (Always show unless strict filter hides it? Let's keep it visible for now or filterable by 'strategy') */}
+                                    {searchQuery === "" && (
+                                        <div className="relative bg-gradient-to-br from-[#7AB2B2]/20 to-[#EBF4F6] rounded-[40px] p-8 flex flex-col justify-between overflow-hidden border border-[#09637E]/5">
                                             <div>
-                                                <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]">Sarah Miller</p>
-                                                <p className="text-[9px] font-bold text-[#09637E]/50 uppercase tracking-wider">Senior Strategist</p>
+                                                <div className="w-12 h-12 rounded-full border-2 border-[#09637E] flex items-center justify-center text-[#09637E] mb-8">
+                                                    <BsClock size={20} />
+                                                </div>
+                                                <h3 className="text-3xl font-serif-premium text-[#09637E] mb-4 leading-tight">Your Dedicated Strategy Lead</h3>
+                                                <p className="text-xs text-[#09637E]/60 leading-relaxed font-medium">
+                                                    Direct access to your assigned account manager for high-tier campaign optimizations and bespoke requests.
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-4 bg-white/50 p-4 rounded-3xl backdrop-blur-sm border border-white/40">
+                                                <div className="w-12 h-12 bg-[#0b2d49] rounded-xl flex items-center justify-center text-white shadow-lg">
+                                                    {/* Placeholder Avatar */}
+                                                    <span className="font-bold text-xs">SM</span>
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]">Sarah Miller</p>
+                                                    <p className="text-[9px] font-bold text-[#09637E]/50 uppercase tracking-wider">Senior Strategist</p>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
+                                    )}
 
                                     {/* Campaign Cards Loop */}
-                                    {promotedCampaigns.map((camp) => (
+                                    {filteredCampaigns.map((camp) => (
                                         <div key={camp.id} className={`relative rounded-[40px] p-8 flex flex-col justify-between overflow-hidden text-white ${camp.gradient} shadow-lg hover:-translate-y-2 transition-transform duration-500`}>
                                             {/* Status Pill */}
                                             <div className="flex justify-start">
@@ -350,6 +383,12 @@ const MyEvents = () => {
                                             </div>
                                         </div>
                                     ))}
+
+                                    {filteredCampaigns.length === 0 && searchQuery !== "" && (
+                                        <div className="col-span-4 text-center py-20 opacity-40">
+                                            <p className="font-serif-premium text-2xl">No campaigns match your search.</p>
+                                        </div>
+                                    )}
                                 </div>
                             </motion.div>
                         )}
@@ -372,49 +411,55 @@ const MyEvents = () => {
                                 </div>
 
                                 {/* Tickets Grid */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-24">
-                                    {myTickets.map((ticket, idx) => (
-                                        <div key={ticket.id} className="group relative h-[520px] rounded-[40px] overflow-hidden hover:-translate-y-2 transition-transform duration-500 shadow-xl cursor-pointer">
-                                            {/* Background Image & Overlay */}
-                                            <img src={ticket.image} alt={ticket.title} className="absolute inset-0 w-full h-full object-cover" />
-                                            <div className={`absolute inset-0 transition-opacity duration-300 ${
-                                                // Improved Gradients that fade to transparency at top
-                                                idx === 0 ? 'bg-gradient-to-t from-[#09637E]/95 via-[#09637E]/20 to-transparent' :
-                                                    idx === 1 ? 'bg-gradient-to-t from-[#09637E]/95 via-[#09637E]/20 to-transparent' :
-                                                        'bg-gradient-to-t from-[#09637E]/95 via-[#09637E]/20 to-transparent'
-                                                }`} />
+                                {filteredTickets.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-24">
+                                        {filteredTickets.map((ticket, idx) => (
+                                            <div key={ticket.id} className="group relative h-[520px] rounded-[40px] overflow-hidden hover:-translate-y-2 transition-transform duration-500 shadow-xl cursor-pointer">
+                                                {/* Background Image & Overlay */}
+                                                <img src={ticket.image} alt={ticket.title} className="absolute inset-0 w-full h-full object-cover" />
+                                                <div className={`absolute inset-0 transition-opacity duration-300 ${
+                                                    // Improved Gradients that fade to transparency at top
+                                                    idx === 0 ? 'bg-gradient-to-t from-[#09637E]/95 via-[#09637E]/20 to-transparent' :
+                                                        idx === 1 ? 'bg-gradient-to-t from-[#09637E]/95 via-[#09637E]/20 to-transparent' :
+                                                            'bg-gradient-to-t from-[#09637E]/95 via-[#09637E]/20 to-transparent'
+                                                    }`} />
 
-                                            <div className="absolute inset-0 p-8 flex flex-col justify-between z-10">
-                                                {/* Date Badge */}
-                                                <div className="flex justify-between items-start">
-                                                    <div className="bg-white/20 backdrop-blur-md border border-white/30 rounded-2xl p-4 text-center min-w-[70px]">
-                                                        <p className="text-[10px] font-black text-white/80 uppercase mb-0.5">{ticket.month}</p>
-                                                        <p className="text-3xl font-serif-premium text-white leading-none">{ticket.day}</p>
-                                                    </div>
-                                                    {/* Stub element for layout balance */}
-                                                    <div className="w-8" />
-                                                </div>
-
-                                                {/* Content */}
-                                                <div className="text-white drop-shadow-md">
-                                                    <p className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest opacity-80 mb-3">
-                                                        <span className="w-1.5 h-1.5 bg-white rounded-full" />
-                                                        {ticket.statusTag}
-                                                    </p>
-                                                    <h3 className="text-3xl font-serif-premium italic mb-4 leading-tight">{ticket.title}</h3>
-                                                    <div className="flex items-center gap-2 text-xs opacity-80 mb-8">
-                                                        <BsGeoAlt /> {ticket.location}
+                                                <div className="absolute inset-0 p-8 flex flex-col justify-between z-10">
+                                                    {/* Date Badge */}
+                                                    <div className="flex justify-between items-start">
+                                                        <div className="bg-white/20 backdrop-blur-md border border-white/30 rounded-2xl p-4 text-center min-w-[70px]">
+                                                            <p className="text-[10px] font-black text-white/80 uppercase mb-0.5">{ticket.month}</p>
+                                                            <p className="text-3xl font-serif-premium text-white leading-none">{ticket.day}</p>
+                                                        </div>
+                                                        {/* Stub element for layout balance */}
+                                                        <div className="w-8" />
                                                     </div>
 
-                                                    <button className="w-full bg-[#EBF4F6] text-[#09637E] py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-[#7AB2B2] hover:text-white transition-all flex items-center justify-center gap-3 shadow-lg">
-                                                        <BsQrCode size={16} />
-                                                        View Ticket
-                                                    </button>
+                                                    {/* Content */}
+                                                    <div className="text-white drop-shadow-md">
+                                                        <p className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest opacity-80 mb-3">
+                                                            <span className="w-1.5 h-1.5 bg-white rounded-full" />
+                                                            {ticket.statusTag}
+                                                        </p>
+                                                        <h3 className="text-3xl font-serif-premium italic mb-4 leading-tight">{ticket.title}</h3>
+                                                        <div className="flex items-center gap-2 text-xs opacity-80 mb-8">
+                                                            <BsGeoAlt /> {ticket.location}
+                                                        </div>
+
+                                                        <button className="w-full bg-[#EBF4F6] text-[#09637E] py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-[#7AB2B2] hover:text-white transition-all flex items-center justify-center gap-3 shadow-lg">
+                                                            <BsQrCode size={16} />
+                                                            View Ticket
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="py-20 text-center opacity-40">
+                                        <p className="font-serif-premium text-2xl">No upcoming journeys match your search.</p>
+                                    </div>
+                                )}
 
                                 {/* PENDING INSPIRATIONS SECTION */}
                                 <div className="mb-20">
@@ -423,13 +468,15 @@ const MyEvents = () => {
                                         <span className="text-[10px] font-black uppercase tracking-widest text-[#09637E]">Saved</span>
                                     </div>
 
-                                    {savedEvents.length === 0 ? (
+                                    {filteredSaved.length === 0 ? (
                                         <div className="text-center py-12 bg-white rounded-[30px] border border-[#09637E]/5">
-                                            <p className="text-[#09637E]/40 font-bold uppercase tracking-widest text-xs">No saved events yet.</p>
+                                            <p className="text-[#09637E]/40 font-bold uppercase tracking-widest text-xs">
+                                                {searchQuery ? "No saved events match your search." : "No saved events yet."}
+                                            </p>
                                         </div>
                                     ) : (
                                         <div className="space-y-4">
-                                            {savedEvents.map((item) => (
+                                            {filteredSaved.map((item) => (
                                                 <div key={item.id} className="flex flex-col md:flex-row items-center gap-6 p-6 bg-white rounded-[30px] shadow-sm hover:shadow-lg transition-all group border border-[#09637E]/5">
                                                     {/* Image Circle */}
                                                     <div className="relative w-24 h-24 shrink-0">

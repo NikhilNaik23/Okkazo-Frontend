@@ -1,5 +1,5 @@
 import React, { useState, useRef, useLayoutEffect, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { BsBell, BsPersonCircle, BsSearch, BsBookmarkHeart } from "react-icons/bs";
 import { GiHamburgerMenu } from "react-icons/gi";
 import { RiCloseLargeFill } from "react-icons/ri";
@@ -23,9 +23,10 @@ const Navbar = () => {
   const [isSavedOpen, setIsSavedOpen] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const isActive = (path) => location.pathname === path;
-  const isDashboard = ["/user/dashboard", "/user/my-events"].includes(location.pathname);
+  const isDashboard = ["/user/dashboard", "/user/my-events", "/user/notifications"].includes(location.pathname);
 
   useEffect(() => {
     const updateSavedCount = () => {
@@ -65,6 +66,15 @@ const Navbar = () => {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  const handleSearchChange = (e) => {
+    const query = e.target.value;
+    if (query) {
+      setSearchParams({ search: query });
+    } else {
+      setSearchParams({});
+    }
+  };
 
   const showFullNav = isAtTop || isHovered;
 
@@ -159,6 +169,8 @@ const Navbar = () => {
                         <input
                           type="text"
                           placeholder="Search..."
+                          value={searchParams.get("search") || ""}
+                          onChange={handleSearchChange}
                           className="pl-11 pr-4 py-2 bg-white/10 border border-white/10 rounded-full text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all w-32 xl:w-40 text-[10px] font-bold"
                         />
                       </div>
