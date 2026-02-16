@@ -54,10 +54,10 @@ const UserEventManagement = () => {
 
     // Roadmap Status Logic
     const steps = [
-        { id: 1, label: "Submission", status: "completed" },
-        { id: 2, label: "Admin Review", status: event.status === 'Pending Approval' ? 'current' : event.status !== 'Draft' ? 'completed' : 'pending' },
-        { id: 3, label: "Manager Sync", status: (event.status !== 'Draft' && event.status !== 'Pending Approval') ? 'current' : 'pending' },
-        { id: 4, label: "Go Live", status: event.status === 'Live' ? 'completed' : 'pending' }
+        { id: 1, label: "Application Received", status: "completed" },
+        { id: 2, label: "Manager Assigned", status: event.status === 'Pending Approval' ? 'current' : 'completed' },
+        { id: 3, label: "Application in Review", status: (event.status === 'Pending Approval') ? 'pending' : (event.status === 'Live' || event.status === 'Rejected') ? 'completed' : 'current' },
+        { id: 4, label: event.status === 'Rejected' ? "Refund Processed" : "Success / Live", status: (event.status === 'Live' || event.status === 'Rejected') ? 'completed' : 'pending' }
     ];
 
     const StepIcon = ({ status }) => {
@@ -108,7 +108,14 @@ const UserEventManagement = () => {
                         {/* Roadmap Card */}
                         <div className="bg-white rounded-[32px] p-10 shadow-sm border border-[#09637E]/5 relative overflow-hidden">
                             <div className="flex justify-between items-start mb-12">
-                                <h2 className="text-xl font-serif-premium text-[#0b2d49]">Live Promotion Roadmap</h2>
+                                <div>
+                                    <h2 className="text-xl font-serif-premium text-[#0b2d49] mb-1">Event Planning Roadmap</h2>
+                                    {event.status === 'Rejected' && (
+                                        <Link to="/refund-policy" className="text-[10px] font-bold uppercase tracking-widest text-[#09637E]/50 hover:text-[#09637E] transition-colors">
+                                            Refer Refund Policy details
+                                        </Link>
+                                    )}
+                                </div>
                                 <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/40">Tracking Status: {event.status}</p>
                             </div>
 
@@ -205,25 +212,32 @@ const UserEventManagement = () => {
 
                                         <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60 mb-2">Consultation</p>
                                         <h3 className="text-2xl font-serif-premium italic mb-4">
-                                            {event.status === 'Pending Approval' ? 'Manager Selection' : 'Manager Connected'}
+                                            {event.status === 'Pending Approval'
+                                                ? 'Manager Selection'
+                                                : event.status === 'Rejected'
+                                                    ? 'Application Closed'
+                                                    : 'Manager Connected'
+                                            }
                                         </h3>
                                         <p className="text-xs opacity-80 leading-relaxed max-w-[250px]">
                                             {event.status === 'Pending Approval'
                                                 ? "A dedicated manager will be assigned to optimize your experience once your event is approved."
-                                                : "Sarah Jenkins is assigned to your event. Sync up for strategy and execution details."
+                                                : event.status === 'Rejected'
+                                                    ? "Your application was not approved. A refund has been processed according to our policy."
+                                                    : "Sarah Jenkins is assigned to your event. Sync up for strategy and execution details."
                                             }
                                         </p>
                                     </div>
 
                                     <button
-                                        onClick={() => event.status !== 'Pending Approval' && setActiveTab("chat")}
-                                        disabled={event.status === 'Pending Approval'}
-                                        className={`mt-8 w-full py-4 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${event.status === 'Pending Approval'
+                                        onClick={() => event.status !== 'Pending Approval' && event.status !== 'Rejected' && setActiveTab("chat")}
+                                        disabled={event.status === 'Pending Approval' || event.status === 'Rejected'}
+                                        className={`mt-8 w-full py-4 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${event.status === 'Pending Approval' || event.status === 'Rejected'
                                             ? 'bg-white/10 text-white/50 cursor-not-allowed'
                                             : 'bg-white text-[#09637E] hover:bg-white/90'
                                             }`}
                                     >
-                                        {event.status === 'Pending Approval' ? 'Assignment Pending' : 'Chat with Manager'}
+                                        {event.status === 'Pending Approval' ? 'Assignment Pending' : event.status === 'Rejected' ? 'Refund Processed' : 'Chat with Manager'}
                                     </button>
                                 </div>
 

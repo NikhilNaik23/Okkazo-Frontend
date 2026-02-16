@@ -372,7 +372,7 @@ const PlanningWizard = () => {
                         )}
 
                         {currentStep === 6 && (
-                            <StepConfirmation />
+                            <StepConfirmation eventId={formData.id} />
                         )}
                     </div>
 
