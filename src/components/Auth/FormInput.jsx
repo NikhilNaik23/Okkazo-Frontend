@@ -1,6 +1,6 @@
 import React from 'react';
 import { BsEye, BsEyeSlash } from 'react-icons/bs';
-import { inputIcons } from '../../../data/registerData';
+import { inputIcons } from '../../data/registerData';
 
 const FormInput = ({
     type = "text",

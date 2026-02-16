@@ -6,7 +6,7 @@ import { BsCalendar, BsClock, BsGeoAlt, BsArrowRight, BsCheck } from 'react-icon
 import { steps, publicTypes, privateTypes } from '../../../data/orbitalStageData';
 
 // Components
-import { DatePicker, TimePicker, ProgressIndicator, MapModal } from './OrbitalStage';
+import { DatePicker, TimePicker, ProgressIndicator, MapModal } from './OrbitalStage/index';
 
 const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSaveDraft }) => {
     const [activeIndex, setActiveIndex] = useState(0);
