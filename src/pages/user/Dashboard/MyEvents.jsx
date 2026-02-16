@@ -17,6 +17,13 @@ const MyEvents = () => {
     const navigate = useNavigate();
     const searchQuery = searchParams.get("search")?.toLowerCase() || "";
 
+    // Filter States
+    const [showFilters, setShowFilters] = useState(false);
+    const [filterStatus, setFilterStatus] = useState("All");
+    const [filterType, setFilterType] = useState("All");
+    const [filterDate, setFilterDate] = useState("");
+    const [filterLocation, setFilterLocation] = useState("");
+
     // Mock Promoted Campaigns
     const promotedCampaigns = [
         {
@@ -114,10 +121,25 @@ const MyEvents = () => {
 
     // Filter Logic
     const allOrganized = [...draftEvents, ...createdEvents, ...organizedEvents];
-    const filteredOrganized = allOrganized.filter(e =>
-        e.title.toLowerCase().includes(searchQuery) ||
-        e.location.toLowerCase().includes(searchQuery)
-    );
+    const filteredOrganized = allOrganized.filter(e => {
+        const matchesSearch = e.title.toLowerCase().includes(searchQuery) || e.location.toLowerCase().includes(searchQuery);
+
+        // Extended Filters
+        const matchesStatus = filterStatus === "All" || e.status === filterStatus;
+
+        // Handle listing type (check formData or fallback)
+        const type = e.formData?.listingType || "Public";
+        const matchesType = filterType === "All" || type === filterType;
+
+        // Handle simple date string match
+        const dateStr = e.date || "";
+        const matchesDate = !filterDate || dateStr.toLowerCase().includes(filterDate.toLowerCase());
+
+        // Handle specific location filter
+        const matchesLocation = !filterLocation || e.location.toLowerCase().includes(filterLocation.toLowerCase());
+
+        return matchesSearch && matchesStatus && matchesType && matchesDate && matchesLocation;
+    });
 
     const filteredCampaigns = promotedCampaigns.filter(c =>
         c.title.toLowerCase().includes(searchQuery) ||
@@ -192,17 +214,95 @@ const MyEvents = () => {
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-4">
-                                        <div className="hidden md:flex items-center gap-2 bg-white px-4 py-3 rounded-xl border border-[#7AB2B2]/30 text-xs font-bold text-[#09637E]/60">
-                                            <span>Filter By:</span>
-                                            <span className="text-[#09637E]">By Date</span>
-                                            <BsArrowRight className="rotate-90 ml-2" />
-                                        </div>
+                                        <button
+                                            onClick={() => setShowFilters(!showFilters)}
+                                            className={`hidden md:flex items-center gap-2 px-6 py-3 rounded-xl border transition-all text-xs font-bold uppercase tracking-widest ${showFilters ? "bg-[#09637E] text-white border-[#09637E]" : "bg-white text-[#09637E]/60 border-[#7AB2B2]/30 hover:border-[#09637E]"}`}
+                                        >
+                                            <BsThreeDotsVertical className="rotate-90" />
+                                            Filters
+                                        </button>
                                         <Link to="/user/planning-wizard" className="flex items-center gap-3 bg-[#09637E] text-white px-8 py-4 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-[#088395] transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">
                                             <BsPlusLg />
                                             Create New Event
                                         </Link>
                                     </div>
                                 </div>
+
+                                {/* Filter Panel */}
+                                <AnimatePresence>
+                                    {showFilters && (
+                                        <motion.div
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: "auto", opacity: 1 }}
+                                            exit={{ height: 0, opacity: 0 }}
+                                            className="overflow-hidden mb-8"
+                                        >
+                                            <div className="bg-white p-6 rounded-[30px] shadow-sm border border-[#09637E]/10 grid grid-cols-1 md:grid-cols-4 gap-6">
+                                                {/* Status Filter */}
+                                                <div>
+                                                    <label className="block text-[9px] font-black uppercase tracking-widest text-[#09637E]/60 mb-2">Status</label>
+                                                    <select
+                                                        value={filterStatus}
+                                                        onChange={(e) => setFilterStatus(e.target.value)}
+                                                        className="w-full bg-[#EBF4F6] border-none rounded-xl px-4 py-3 text-xs font-bold text-[#09637E] focus:ring-2 focus:ring-[#09637E]/20 cursor-pointer"
+                                                    >
+                                                        <option value="All">All Statuses</option>
+                                                        <option value="Draft">Draft</option>
+                                                        <option value="Immediate Action">Immediate Action</option>
+                                                        <option value="Pending Approval">Pending Approval</option>
+                                                        <option value="Approved">Approved</option>
+                                                        <option value="Live">Live</option>
+                                                        <option value="Rejected">Rejected</option>
+                                                    </select>
+                                                </div>
+
+                                                {/* Type Filter */}
+                                                <div>
+                                                    <label className="block text-[9px] font-black uppercase tracking-widest text-[#09637E]/60 mb-2">Listing Type</label>
+                                                    <select
+                                                        value={filterType}
+                                                        onChange={(e) => setFilterType(e.target.value)}
+                                                        className="w-full bg-[#EBF4F6] border-none rounded-xl px-4 py-3 text-xs font-bold text-[#09637E] focus:ring-2 focus:ring-[#09637E]/20 cursor-pointer"
+                                                    >
+                                                        <option value="All">All Types</option>
+                                                        <option value="Public">Public</option>
+                                                        <option value="Private">Private</option>
+                                                    </select>
+                                                </div>
+
+                                                {/* Date Filter */}
+                                                <div>
+                                                    <label className="block text-[9px] font-black uppercase tracking-widest text-[#09637E]/60 mb-2">Date (Month/Year)</label>
+                                                    <div className="relative">
+                                                        <BsCalendarEvent className="absolute left-4 top-1/2 -translate-y-1/2 text-[#09637E]/40" />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="e.g. NOV, 2026"
+                                                            value={filterDate}
+                                                            onChange={(e) => setFilterDate(e.target.value)}
+                                                            className="w-full bg-[#EBF4F6] border-none rounded-xl pl-10 pr-4 py-3 text-xs font-bold text-[#09637E] placeholder:text-[#09637E]/30 focus:ring-2 focus:ring-[#09637E]/20"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {/* Location Filter */}
+                                                <div>
+                                                    <label className="block text-[9px] font-black uppercase tracking-widest text-[#09637E]/60 mb-2">Location</label>
+                                                    <div className="relative">
+                                                        <BsGeoAlt className="absolute left-4 top-1/2 -translate-y-1/2 text-[#09637E]/40" />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Search location..."
+                                                            value={filterLocation}
+                                                            onChange={(e) => setFilterLocation(e.target.value)}
+                                                            className="w-full bg-[#EBF4F6] border-none rounded-xl pl-10 pr-4 py-3 text-xs font-bold text-[#09637E] placeholder:text-[#09637E]/30 focus:ring-2 focus:ring-[#09637E]/20"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
 
                                 {/* Events Grid */}
                                 {filteredOrganized.length > 0 ? (

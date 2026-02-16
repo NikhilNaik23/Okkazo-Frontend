@@ -153,42 +153,60 @@ const PlanningWizard = () => {
 
     const handleSaveDraft = () => {
         try {
-            const existingDrafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
-            const eventId = searchParams.get('eventId'); // Check if we are editing an existing draft/event
-
-            // Create a pseudo-ID or use title if unique enough
-            // Create a pseudo-ID or use title if unique enough
+            // 1. Identification
+            const eventId = searchParams.get('eventId');
             let draftId = eventId || formData.id;
 
             if (!draftId) {
                 draftId = `draft_${Date.now()}`;
-                // Update state so subsequent saves use the same ID
                 setFormData(prev => ({ ...prev, id: draftId }));
             }
+
+            // 2. Check 'my_organized_events' (Immediate Action / Paid events)
+            const myEvents = JSON.parse(localStorage.getItem('my_organized_events') || '[]');
+            const existingEventIndex = myEvents.findIndex(e => e.id === draftId || e.id === Number(draftId));
+
+            if (existingEventIndex !== -1) {
+                // Update existing event in 'my_organized_events'
+                const updatedEvent = {
+                    ...myEvents[existingEventIndex],
+                    title: formData.title || myEvents[existingEventIndex].title,
+                    date: formData.date || myEvents[existingEventIndex].date,
+                    location: formData.location || myEvents[existingEventIndex].location,
+                    // valid to update other fields?
+                    formData: { ...formData, id: draftId },
+                    timestamp: Date.now()
+                };
+
+                myEvents[existingEventIndex] = updatedEvent;
+                localStorage.setItem('my_organized_events', JSON.stringify(myEvents));
+
+                // Dispatch update
+                window.dispatchEvent(new Event('savedUpdated'));
+                return true;
+            }
+
+            // 3. Fallback to 'planningWizardDrafts' (Drafts)
+            const existingDrafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
 
             const newDraft = {
                 id: draftId,
                 title: formData.title || `Untitled ${formData.type} Draft`,
                 date: formData.date || "TBD",
                 location: formData.location || "Location TBD",
-                image: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=2069&auto=format&fit=crop", // Default draft image
+                image: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=2069&auto=format&fit=crop",
                 status: "Draft",
                 sold: `Last edited ${new Date().toLocaleDateString()}`,
-                formData: { ...formData, id: draftId }, // Store full form data for restoration later
+                formData: { ...formData, id: draftId },
                 timestamp: Date.now()
             };
 
-            // Remove existing draft with same ID if it exists to "replace" it
             const filteredDrafts = existingDrafts.filter(d => d.id !== draftId);
-
-            // Add updated draft to top
             const updatedDrafts = [newDraft, ...filteredDrafts].slice(0, 5);
             localStorage.setItem('planningWizardDrafts', JSON.stringify(updatedDrafts));
 
-            // Dispatch event for dashboard updates
             window.dispatchEvent(new Event('savedUpdated'));
-
-            return true; // Success
+            return true;
         } catch (error) {
             console.error("Failed to save draft:", error);
             return false;
