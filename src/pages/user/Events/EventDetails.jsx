@@ -17,7 +17,17 @@ const EventDetails = () => {
         const combinedEvents = [...allEvents, ...popularEvents];
         const foundEvent = combinedEvents.find(e => e.id === parseInt(eventId));
         if (foundEvent) {
-            setEvent(foundEvent);
+            // Normalize event data
+            const eventWithCategories = { ...foundEvent };
+            if (!eventWithCategories.categories || eventWithCategories.categories.length === 0) {
+                eventWithCategories.categories = [
+                    {
+                        name: "General Admission",
+                        price: eventWithCategories.price || "Free"
+                    }
+                ];
+            }
+            setEvent(eventWithCategories);
             // Check if saved
             const savedItems = JSON.parse(localStorage.getItem('saved') || '[]');
             setIsSaved(savedItems.some(item => item.id === foundEvent.id));
@@ -99,7 +109,7 @@ const EventDetails = () => {
         // Pass selection state to checkout (could use location state or query params)
         // For query params, we might need a serialized format if complex
         const selectionParam = JSON.stringify(ticketSelection);
-        navigate(`/user/checkout/${event.id}?selection=${encodeURIComponent(selectionParam)}`);
+        navigate(`/user/checkout/${event.id}?qty=${totalTickets}&category=${encodeURIComponent(Object.keys(ticketSelection)[0] || 'General')}`);
     };
 
     return (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { BsArrowRight } from "react-icons/bs";
 import SidebarProgress from "../../../components/Forms/EventWizard/SidebarProgress";
@@ -13,9 +13,11 @@ import { planningWizardSteps } from "../../../data/planningWizardData";
 import ManifestPreview from "../../../components/Forms/EventWizard/ManifestPreview";
 import StepCategorySelection from "../../../components/Forms/EventWizard/StepCategorySelection";
 import StepPayment from "../../../components/Forms/EventWizard/StepPayment";
+import { myOrganizedEvents } from "../../../data/myEventsData";
 
 const PlanningWizard = () => {
     const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
     const [currentStep, setCurrentStep] = useState(1);
     const [isPreviewMode, setIsPreviewMode] = useState(false);
     const [activeServiceTab, setActiveServiceTab] = useState(0); // Index of active service tab
@@ -61,29 +63,78 @@ const PlanningWizard = () => {
                 const myEvents = JSON.parse(localStorage.getItem('my_organized_events') || '[]');
                 const foundEvent = myEvents.find(e => e.id === eventId || e.id === Number(eventId));
 
-                if (foundEvent && foundEvent.formData) {
-                    setFormData(foundEvent.formData);
+                const handleStepLogic = (data) => {
+                    const defaultData = {
+                        title: "",
+                        type: "Birthday",
+                        listingType: "Private",
+                        location: "",
+                        lat: null,
+                        lng: null,
+                        locationValid: false,
+                        date: "",
+                        startTime: "",
+                        endTime: "",
+                        services: [],
+                        vendors: {},
+                        isPaid: false
+                    };
+
+                    const mergedData = { ...defaultData, ...data };
+                    // Ensure critical arrays/objects are safe
+                    if (!mergedData.services) mergedData.services = [];
+                    if (!mergedData.vendors) mergedData.vendors = {};
+
+                    setFormData(mergedData);
+
                     // If it is paid/Immediate Action, go to Vendor Selection (Step 4)
                     let targetStep = 1;
 
-                    if (foundEvent.status === "Immediate Action" || foundEvent.formData.isPaid) {
+                    if (mergedData.isPaid) {
                         targetStep = 4; // Vendor Selection
-                    } else if (foundEvent.formData.services && foundEvent.formData.services.length > 0) {
+                    } else if (mergedData.services && mergedData.services.length > 0) {
                         targetStep = 3; // Payment
-                    } else if (foundEvent.formData.date && foundEvent.formData.location) {
+                    } else if (mergedData.date && mergedData.location) {
                         targetStep = 2; // Preview / Service Selection
                     }
 
+                    // Override with URL params if present
+                    const urlStep = searchParams.get('step');
+                    if (urlStep) {
+                        targetStep = parseInt(urlStep);
+                    }
+
+                    const urlTab = searchParams.get('activeServiceTab');
+                    if (urlTab) {
+                        setActiveServiceTab(parseInt(urlTab));
+                    }
+
                     setCurrentStep(targetStep);
-                    // Force update in case of race conditions
-                    setTimeout(() => setCurrentStep(targetStep), 100);
+                    setIsPreviewMode(false);
+                };
+
+                if (foundEvent && foundEvent.formData) {
+                    handleStepLogic(foundEvent.formData);
                 } else {
-                    // Fallback: Check drafts if we implement full draft editing later
+                    // Fallback to checking drafts
                     const drafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
-                    const foundDraft = drafts.find(d => d.id === eventId);
+                    const foundDraft = drafts.find(d => d.id === eventId || d.id === Number(eventId));
+
                     if (foundDraft && foundDraft.formData) {
-                        setFormData(foundDraft.formData);
-                        // Drafts usually start at step 1 or last saved step (if we tracked it)
+                        // Ensure ID is persisted in state
+                        const draftData = { ...foundDraft.formData, id: foundDraft.id };
+                        handleStepLogic(draftData);
+                    } else {
+                        // Fallback to Dummy Data (for Immediate Action mocks)
+                        const foundDummy = myOrganizedEvents.find(e => e.id === Number(eventId) || e.id === eventId);
+                        if (foundDummy && foundDummy.formData) {
+                            const dummyData = { ...foundDummy.formData, id: foundDummy.id };
+                            // Ensure isPaid matches status
+                            if (foundDummy.status === 'Immediate Action') {
+                                dummyData.isPaid = true;
+                            }
+                            handleStepLogic(dummyData);
+                        }
                     }
                 }
             } catch (e) {
@@ -106,6 +157,12 @@ const PlanningWizard = () => {
     };
 
     const handleBack = () => {
+        const returnTo = searchParams.get('returnTo');
+        if (returnTo) {
+            navigate(`/user/${returnTo}`);
+            return;
+        }
+
         if (isPreviewMode) {
             setIsPreviewMode(false);
         } else {
@@ -153,35 +210,60 @@ const PlanningWizard = () => {
 
     const handleSaveDraft = () => {
         try {
-            const existingDrafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
-            const eventId = searchParams.get('eventId'); // Check if we are editing an existing draft/event
+            // 1. Identification
+            const eventId = searchParams.get('eventId');
+            let draftId = eventId || formData.id;
 
-            // Create a pseudo-ID or use title if unique enough
-            const draftId = eventId || formData.id || `draft_${Date.now()}`;
+            if (!draftId) {
+                draftId = `draft_${Date.now()}`;
+                setFormData(prev => ({ ...prev, id: draftId }));
+            }
+
+            // 2. Check 'my_organized_events' (Immediate Action / Paid events)
+            const myEvents = JSON.parse(localStorage.getItem('my_organized_events') || '[]');
+            const existingEventIndex = myEvents.findIndex(e => e.id === draftId || e.id === Number(draftId));
+
+            if (existingEventIndex !== -1) {
+                // Update existing event in 'my_organized_events'
+                const updatedEvent = {
+                    ...myEvents[existingEventIndex],
+                    title: formData.title || myEvents[existingEventIndex].title,
+                    date: formData.date || myEvents[existingEventIndex].date,
+                    location: formData.location || myEvents[existingEventIndex].location,
+                    // valid to update other fields?
+                    formData: { ...formData, id: draftId },
+                    timestamp: Date.now()
+                };
+
+                myEvents[existingEventIndex] = updatedEvent;
+                localStorage.setItem('my_organized_events', JSON.stringify(myEvents));
+
+                // Dispatch update
+                window.dispatchEvent(new Event('savedUpdated'));
+                return true;
+            }
+
+            // 3. Fallback to 'planningWizardDrafts' (Drafts)
+            const existingDrafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
 
             const newDraft = {
                 id: draftId,
                 title: formData.title || `Untitled ${formData.type} Draft`,
                 date: formData.date || "TBD",
                 location: formData.location || "Location TBD",
-                image: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=2069&auto=format&fit=crop", // Default draft image
+                image: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=2069&auto=format&fit=crop",
                 status: "Draft",
                 sold: `Last edited ${new Date().toLocaleDateString()}`,
-                formData: { ...formData, id: draftId }, // Store full form data for restoration later
+                formData: { ...formData, id: draftId },
                 timestamp: Date.now()
             };
 
-            // Remove existing draft with same ID if it exists to "replace" it
             const filteredDrafts = existingDrafts.filter(d => d.id !== draftId);
-
-            // Add updated draft to top
             const updatedDrafts = [newDraft, ...filteredDrafts].slice(0, 5);
             localStorage.setItem('planningWizardDrafts', JSON.stringify(updatedDrafts));
 
-            // Dispatch event for dashboard updates
             window.dispatchEvent(new Event('savedUpdated'));
-
-            return true; // Success
+            return true;
         } catch (error) {
             console.error("Failed to save draft:", error);
             return false;

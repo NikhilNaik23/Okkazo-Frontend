@@ -587,6 +587,14 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
 
                         {/* Header Section */}
                         <div className="mb-16">
+                            <button
+                                onClick={handleBack}
+                                className="mb-8 flex items-center gap-2 text-primary/40 hover:text-primary transition-colors text-[10px] uppercase tracking-widest font-bold group"
+                            >
+                                <BsArrowRight className="rotate-180 group-hover:-translate-x-1 transition-transform" />
+                                Back
+                            </button>
+
                             <div className="inline-block px-4 py-1.5 rounded-full border border-primary/20 bg-white/40 backdrop-blur-sm mb-6">
                                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary">Curated Selection</span>
                             </div>

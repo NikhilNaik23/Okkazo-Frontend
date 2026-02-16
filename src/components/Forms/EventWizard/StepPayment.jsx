@@ -115,31 +115,30 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
             handleChange('isPaid', true);
             handleChange('transactionId', tempTransactionId); // Persist the ID
 
-            // Save Event to LocalStorage for "My Events" Dashboard
+            // Update Draft with Dummy Payment Data (Backend will handle "Immediate Action" creation)
             try {
-                const existingEvents = JSON.parse(localStorage.getItem('my_organized_events') || '[]');
+                const existingDrafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
+                const draftId = formData.id;
 
-                // Check if this specific event (by temporary ID or title/date combo) already exists to avoid dupes on re-renders
-                // Since this is a simple flow, we'll just append. refactor for robust ID check if needed.
-                const newEvent = {
-                    id: `evt-${Date.now()}`,
-                    title: formData.title || `${formData.type} Planning`,
-                    date: formData.date || "Date Pending",
-                    location: formData.location || "Location TBD",
-                    status: "Immediate Action",
-                    formData: { ...formData, isPaid: true, transactionId: tempTransactionId }, // Save full state
-                    image: "https://images.unsplash.com/photo-1540317580384-e5d43616b9aa?q=80&w=2574&auto=format&fit=crop", // Default event image
-                    sold: "0"
-                };
-
-                const updatedEvents = [newEvent, ...existingEvents];
-                localStorage.setItem('my_organized_events', JSON.stringify(updatedEvents));
-
-                // Dispatch event so other tabs/windows can update if needed (MyEvents listens to 'storage' and 'savedUpdated')
-                window.dispatchEvent(new Event('savedUpdated'));
-
+                if (draftId) {
+                    const draftIndex = existingDrafts.findIndex(d => d.id === draftId);
+                    if (draftIndex !== -1) {
+                        const updatedDraft = {
+                            ...existingDrafts[draftIndex],
+                            formData: {
+                                ...existingDrafts[draftIndex].formData,
+                                isPaid: true,
+                                transactionId: tempTransactionId
+                            },
+                            sold: "Processing..."
+                        };
+                        existingDrafts[draftIndex] = updatedDraft;
+                        localStorage.setItem('planningWizardDrafts', JSON.stringify(existingDrafts));
+                        window.dispatchEvent(new Event('savedUpdated'));
+                    }
+                }
             } catch (err) {
-                console.error("Failed to save event to local storage", err);
+                console.error("Failed to update draft payment status", err);
             }
 
             // Auto redirect handled by useEffect

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
-import { BsCalendarEvent, BsGeoAlt, BsQrCode, BsCheckCircleFill, BsThreeDotsVertical, BsPlusLg, BsArrowRight, BsClock, BsTicketPerforated } from "react-icons/bs";
+import React, { useState, useEffect, useRef } from "react";
+import { BsCalendarEvent, BsGeoAlt, BsQrCode, BsCheckCircleFill, BsThreeDotsVertical, BsPlusLg, BsArrowRight, BsClock, BsTicketPerforated, BsChevronDown } from "react-icons/bs";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { toast, Toaster } from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { createPortal } from "react-dom";
 import { myOrganizedEvents, myTickets as myTicketsData } from "../../../data/myEventsData";
 
 const MyEvents = () => {
@@ -16,6 +17,13 @@ const MyEvents = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const searchQuery = searchParams.get("search")?.toLowerCase() || "";
+
+    // Filter States
+    const [showFilters, setShowFilters] = useState(false);
+    const [filterStatus, setFilterStatus] = useState("All");
+    const [filterType, setFilterType] = useState("All");
+    const [filterDate, setFilterDate] = useState("");
+    const [filterLocation, setFilterLocation] = useState("");
 
     // Mock Promoted Campaigns
     const promotedCampaigns = [
@@ -114,10 +122,25 @@ const MyEvents = () => {
 
     // Filter Logic
     const allOrganized = [...draftEvents, ...createdEvents, ...organizedEvents];
-    const filteredOrganized = allOrganized.filter(e =>
-        e.title.toLowerCase().includes(searchQuery) ||
-        e.location.toLowerCase().includes(searchQuery)
-    );
+    const filteredOrganized = allOrganized.filter(e => {
+        const matchesSearch = e.title.toLowerCase().includes(searchQuery) || e.location.toLowerCase().includes(searchQuery);
+
+        // Extended Filters
+        const matchesStatus = filterStatus === "All" || e.status === filterStatus;
+
+        // Handle listing type (check formData or fallback)
+        const type = e.formData?.listingType || "Public";
+        const matchesType = filterType === "All" || type === filterType;
+
+        // Handle simple date string match
+        const dateStr = e.date || "";
+        const matchesDate = !filterDate || dateStr.toLowerCase().includes(filterDate.toLowerCase());
+
+        // Handle specific location filter
+        const matchesLocation = !filterLocation || e.location.toLowerCase().includes(filterLocation.toLowerCase());
+
+        return matchesSearch && matchesStatus && matchesType && matchesDate && matchesLocation;
+    });
 
     const filteredCampaigns = promotedCampaigns.filter(c =>
         c.title.toLowerCase().includes(searchQuery) ||
@@ -135,11 +158,28 @@ const MyEvents = () => {
     );
 
 
+    const [activeMenuId, setActiveMenuId] = useState(null);
+
+    // Handle Deleting a Draft (promotedCampaigns is already defined above)
+    const handleDeleteDraft = (draftId) => {
+        try {
+            const drafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
+            const updatedDrafts = drafts.filter(d => d.id !== draftId);
+            localStorage.setItem('planningWizardDrafts', JSON.stringify(updatedDrafts));
+
+            // Dispatch update to refresh the list
+            window.dispatchEvent(new Event('savedUpdated'));
+            toast.success("Draft deleted successfully");
+        } catch (error) {
+            console.error("Failed to delete draft:", error);
+            toast.error("Could not delete draft");
+        }
+    };
+
     const TabButton = ({ id, label }) => (
         <button
             onClick={() => setActiveTab(id)}
-            className={`relative px-8 py-2 rounded-full text-[10px] font-black tracking-widest uppercase transition-colors z-10 ${activeTab === id ? "text-white" : "text-[#7AB2B2] hover:text-[#09637E]"
-                }`}
+            className={`relative px-8 py-2 rounded-full text-[10px] font-black tracking-widest uppercase transition-colors z-10 ${activeTab === id ? "text-white" : "text-[#7AB2B2] hover:text-[#09637E]"}`}
         >
             {activeTab === id && (
                 <motion.div
@@ -151,6 +191,84 @@ const MyEvents = () => {
             {label}
         </button>
     );
+
+    const FilterDropdown = ({ label, value, options, onChange }) => {
+        const [isOpen, setIsOpen] = useState(false);
+        const buttonRef = useRef(null);
+        const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
+
+        useEffect(() => {
+            if (isOpen && buttonRef.current) {
+                const rect = buttonRef.current.getBoundingClientRect();
+                setCoords({
+                    top: rect.bottom + window.scrollY + 8,
+                    left: rect.left + window.scrollX,
+                    width: rect.width
+                });
+            }
+        }, [isOpen]);
+
+        // Handle clicks outside
+        useEffect(() => {
+            if (!isOpen) return;
+            const handleClick = (e) => {
+                if (buttonRef.current && !buttonRef.current.contains(e.target) && !e.target.closest('.dropdown-portal')) {
+                    setIsOpen(false);
+                }
+            };
+            window.addEventListener('click', handleClick);
+            return () => window.removeEventListener('click', handleClick);
+        }, [isOpen]);
+
+        return (
+            <div className="relative">
+                <label className="block text-[9px] font-black uppercase tracking-widest text-[#09637E]/60 mb-2">{label}</label>
+                <button
+                    ref={buttonRef}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setIsOpen(!isOpen);
+                    }}
+                    className="w-full bg-[#EBF4F6] rounded-xl px-4 py-3 text-xs font-bold text-[#09637E] flex items-center justify-between hover:bg-[#EBF4F6]/80 transition-colors focus:ring-2 focus:ring-[#09637E]/20"
+                >
+                    {value}
+                    <BsChevronDown className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {isOpen && createPortal(
+                    <AnimatePresence>
+                        <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            style={{
+                                top: coords.top,
+                                left: coords.left,
+                                width: coords.width,
+                                zIndex: 9999
+                            }}
+                            className="absolute bg-white/90 backdrop-blur-xl rounded-xl shadow-[0_20px_40px_-5px_rgba(9,99,126,0.15)] overflow-hidden border border-[#09637E]/10 dropdown-portal"
+                        >
+                            {options.map((opt) => (
+                                <button
+                                    key={opt}
+                                    onClick={() => {
+                                        onChange(opt);
+                                        setIsOpen(false);
+                                    }}
+                                    className={`w-full text-left px-4 py-3 text-xs font-bold transition-all border-b border-[#09637E]/5 last:border-none ${value === opt
+                                        ? 'bg-[#09637E] text-white'
+                                        : 'text-[#09637E]/70 hover:bg-[#09637E]/5 hover:text-[#09637E] hover:pl-6'}`}
+                                >
+                                    {opt}
+                                </button>
+                            ))}
+                        </motion.div>
+                    </AnimatePresence>,
+                    document.body
+                )}
+            </div>
+        );
+    };
 
     return (
         <div className="bg-[#EBF4F6] min-h-screen font-sans text-[#09637E] selection:bg-[#7AB2B2] selection:text-white pt-28">
@@ -192,17 +310,79 @@ const MyEvents = () => {
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-4">
-                                        <div className="hidden md:flex items-center gap-2 bg-white px-4 py-3 rounded-xl border border-[#7AB2B2]/30 text-xs font-bold text-[#09637E]/60">
-                                            <span>Filter By:</span>
-                                            <span className="text-[#09637E]">By Date</span>
-                                            <BsArrowRight className="rotate-90 ml-2" />
-                                        </div>
+                                        <button
+                                            onClick={() => setShowFilters(!showFilters)}
+                                            className={`hidden md:flex items-center gap-2 px-6 py-3 rounded-xl border transition-all text-xs font-bold uppercase tracking-widest ${showFilters ? "bg-[#09637E] text-white border-[#09637E]" : "bg-white text-[#09637E]/60 border-[#7AB2B2]/30 hover:border-[#09637E]"}`}
+                                        >
+                                            <BsThreeDotsVertical className="rotate-90" />
+                                            Filters
+                                        </button>
                                         <Link to="/user/planning-wizard" className="flex items-center gap-3 bg-[#09637E] text-white px-8 py-4 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-[#088395] transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">
                                             <BsPlusLg />
                                             Create New Event
                                         </Link>
                                     </div>
                                 </div>
+
+                                {/* Filter Panel */}
+                                <AnimatePresence>
+                                    {showFilters && (
+                                        <motion.div
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: "auto", opacity: 1 }}
+                                            exit={{ height: 0, opacity: 0 }}
+                                            className="overflow-hidden mb-8"
+                                        >
+                                            <div className="bg-white p-6 rounded-[30px] shadow-sm border border-[#09637E]/10 grid grid-cols-1 md:grid-cols-4 gap-6 z-20 relative">
+                                                {/* Status Filter */}
+                                                <FilterDropdown
+                                                    label="Status"
+                                                    value={filterStatus}
+                                                    options={["All", "Draft", "Immediate Action", "Pending Approval", "Approved", "Live", "Rejected"]}
+                                                    onChange={setFilterStatus}
+                                                />
+
+                                                {/* Type Filter */}
+                                                <FilterDropdown
+                                                    label="Listing Type"
+                                                    value={filterType}
+                                                    options={["All", "Public", "Private"]}
+                                                    onChange={setFilterType}
+                                                />
+
+                                                {/* Date Filter */}
+                                                <div>
+                                                    <label className="block text-[9px] font-black uppercase tracking-widest text-[#09637E]/60 mb-2">Date (Month/Year)</label>
+                                                    <div className="relative">
+                                                        <BsCalendarEvent className="absolute left-4 top-1/2 -translate-y-1/2 text-[#09637E]/40" />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="e.g. NOV, 2026"
+                                                            value={filterDate}
+                                                            onChange={(e) => setFilterDate(e.target.value)}
+                                                            className="w-full bg-[#EBF4F6] border-none rounded-xl pl-10 pr-4 py-3 text-xs font-bold text-[#09637E] placeholder:text-[#09637E]/30 focus:ring-2 focus:ring-[#09637E]/20"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {/* Location Filter */}
+                                                <div>
+                                                    <label className="block text-[9px] font-black uppercase tracking-widest text-[#09637E]/60 mb-2">Location</label>
+                                                    <div className="relative">
+                                                        <BsGeoAlt className="absolute left-4 top-1/2 -translate-y-1/2 text-[#09637E]/40" />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Search location..."
+                                                            value={filterLocation}
+                                                            onChange={(e) => setFilterLocation(e.target.value)}
+                                                            className="w-full bg-[#EBF4F6] border-none rounded-xl pl-10 pr-4 py-3 text-xs font-bold text-[#09637E] placeholder:text-[#09637E]/30 focus:ring-2 focus:ring-[#09637E]/20"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
 
                                 {/* Events Grid */}
                                 {filteredOrganized.length > 0 ? (
@@ -228,14 +408,51 @@ const MyEvents = () => {
                                                             event.status === 'Pending Approval' ? 'bg-[#EBF4F6] text-[#09637E]' :
                                                                 event.status === 'Immediate Action' ? 'bg-amber-100 text-amber-700 border border-amber-200 animate-pulse' :
                                                                     event.status === 'Draft' ? 'bg-gray-100 text-gray-500 border border-gray-200' :
-                                                                        'bg-slate-500/50 backdrop-blur-md text-white'
+                                                                        event.status === 'Approved' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
+                                                                            event.status === 'Rejected' ? 'bg-red-50 text-red-600 border border-red-100' :
+                                                                                'bg-slate-500/50 backdrop-blur-md text-white'
                                                             }`}>
                                                             {event.status === 'Live' && <span className="w-1.5 h-1.5 bg-[#09637E] rounded-full animate-pulse" />}
                                                             {event.status === 'Live' ? 'Live Event' : event.status}
                                                         </span>
-                                                        <button className="w-10 h-10 flex items-center justify-center rounded-full bg-black/20 backdrop-blur-md hover:bg-white/20 text-white transition-all">
-                                                            <BsThreeDotsVertical />
-                                                        </button>
+
+                                                        {/* Draft Actions Menu - Only for Drafts */}
+                                                        {event.status === 'Draft' && (
+                                                            <div className="relative">
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setActiveMenuId(activeMenuId === event.id ? null : event.id);
+                                                                    }}
+                                                                    className="w-10 h-10 flex items-center justify-center rounded-full bg-black/20 backdrop-blur-md hover:bg-white/20 text-white transition-all focus:outline-none"
+                                                                >
+                                                                    <BsThreeDotsVertical />
+                                                                </button>
+
+                                                                {/* Popup Menu */}
+                                                                <AnimatePresence>
+                                                                    {activeMenuId === event.id && (
+                                                                        <motion.div
+                                                                            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                                                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                                            exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                                                                            className="absolute right-0 top-full mt-2 w-40 bg-white rounded-xl shadow-xl overflow-hidden z-50 border border-gray-100"
+                                                                        >
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleDeleteDraft(event.id);
+                                                                                    setActiveMenuId(null);
+                                                                                }}
+                                                                                className="w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest text-red-500 hover:bg-red-50 transition-colors flex items-center gap-2"
+                                                                            >
+                                                                                Delete Draft
+                                                                            </button>
+                                                                        </motion.div>
+                                                                    )}
+                                                                </AnimatePresence>
+                                                            </div>
+                                                        )}
                                                     </div>
 
                                                     {/* Center/Bottom Info */}
@@ -250,16 +467,16 @@ const MyEvents = () => {
                                                     {/* Bottom Action Area */}
                                                     <div className="pt-6 border-t border-white/20 flex items-center justify-between">
                                                         <div className="drop-shadow-sm min-h-[40px]">
-                                                            {/* Only show sold count if NOT private */}
-                                                            {event.formData?.listingType !== 'Private' && (
-                                                                <>
-                                                                    <p className="text-[9px] font-black uppercase tracking-widest text-white/60 mb-1">Tickets Sold</p>
-                                                                    <p className="text-lg font-bold text-white">{event.sold}</p>
-                                                                </>
-                                                            )}
+                                                            {/* Tickets Sold Removed */}
                                                         </div>
                                                         <button
-                                                            onClick={() => navigate(`/user/planning-wizard?eventId=${event.id}`)}
+                                                            onClick={() => {
+                                                                if (event.status === 'Immediate Action') {
+                                                                    navigate(`/user/planning-wizard?eventId=${event.id}&step=4&returnTo=my-events`);
+                                                                } else {
+                                                                    navigate(`/user/planning-wizard?eventId=${event.id}`);
+                                                                }
+                                                            }}
                                                             className="px-6 py-2.5 bg-[#EBF4F6] text-[#09637E] rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-[#7AB2B2] hover:text-white transition-colors shadow-lg"
                                                         >
                                                             Manage
