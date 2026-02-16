@@ -6,13 +6,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { myOrganizedEvents, myTickets as myTicketsData } from "../../../data/myEventsData";
 import { promotedCampaigns, getCardGradient } from "../../../data/myEventsDashboardData";
-import { 
-    OrganizedEventCard, 
-    CampaignCard, 
-    TicketCard, 
-    SavedEventCard, 
+import {
+    OrganizedEventCard,
+    CampaignCard,
+    TicketCard,
+    SavedEventCard,
     StrategyLeadCard,
-    TabButton 
+    TabButton
 } from "../../../components/User/Dashboard";
 
 const MyEvents = () => {
@@ -34,45 +34,8 @@ const MyEvents = () => {
     const [filterDate, setFilterDate] = useState("");
     const [filterLocation, setFilterLocation] = useState("");
 
-    // Mock Promoted Campaigns
-    const promotedCampaigns = [
-        {
-            id: 'p1',
-            title: "Neon Lights Fest",
-            subtitle: "OA PERFORMANCE SERIES",
-            status: "Live Campaign",
-            revenue: "$124,500",
-            revenueLabel: "Revenue Generated",
-            conversion: "4.82%",
-            centerText: "70%",
-            gradient: "bg-gradient-to-b from-[#7AB2B2]/80 via-[#EBF4F6]/20 to-[#09637E]/90",
-            buttonText: "Campaign Analytics"
-        },
-        {
-            id: 'p2',
-            title: "The Winter Gala",
-            subtitle: "EXCLUSIVE ACCESS HUB",
-            status: "Pending Review",
-            revenue: "$85,000",
-            revenueLabel: "Revenue Target",
-            conversion: null,
-            centerText: "Locked",
-            gradient: "bg-gradient-to-b from-[#EBF4F6]/80 via-[#7AB2B2]/20 to-white/90",
-            buttonText: "Edit Submission"
-        },
-        {
-            id: 'p3',
-            title: "Opera Premiere",
-            subtitle: "SIGNATURE SERIES",
-            status: "Sold Out",
-            revenue: "$210,000",
-            revenueLabel: "Total Revenue",
-            conversion: "+342%",
-            centerText: "Check",
-            gradient: "bg-gradient-to-b from-[#d7a444]/80 via-[#f0dbb0]/20 to-white/90",
-            buttonText: "Performance Report"
-        }
-    ];
+    // Mock Promoted Campaigns - Removed to use imported data
+
 
     useEffect(() => {
         const fetchSaved = () => {

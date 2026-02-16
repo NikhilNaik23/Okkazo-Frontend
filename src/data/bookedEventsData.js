@@ -1,35 +1,35 @@
 export const initialBookedEvents = [
   {
     id: 1,
-    title: "The Grand Wedding Gala",
+    title: "The Royal Udaipur Wedding",
     status: "PENDING",
     date: "28",
-    month: "OCT",
+    month: "FEB",
     category: "Wedding",
-    location: "Central Park Plaza, NY",
-    service: "Catering - Veg Menu (200 pax)",
-    pax: 200
-  },
-  {
-    id: 2,
-    title: "Tech Frontier Summit 2024",
-    status: "CONFIRMED",
-    date: "04",
-    month: "NOV",
-    category: "Conference",
-    location: "Brooklyn Expo Center",
-    service: "Beverage Package - Gold",
+    location: "City Palace, Udaipur",
+    service: "Catering - Royal Rajasthani Thali (500 pax)",
     pax: 500
   },
   {
+    id: 2,
+    title: "Bangalore Tech Summit 2026",
+    status: "CONFIRMED",
+    date: "15",
+    month: "MAR",
+    category: "Conference",
+    location: "Bangalore Palace Grounds",
+    service: "High-Tea & Snacks (1000 pax)",
+    pax: 1000
+  },
+  {
     id: 3,
-    title: "Corporate Anniversary Dinner",
+    title: "Corporate Gala Dinner",
     status: "PENDING",
-    date: "12",
-    month: "NOV",
+    date: "22",
+    month: "MAR",
     category: "Corporate",
-    location: "Manhattan Skylounge",
-    service: "Full Course Premium Buffet",
-    pax: 150
+    location: "Taj Lands End, Mumbai",
+    service: "Gourmet International Buffet",
+    pax: 250
   }
 ];
