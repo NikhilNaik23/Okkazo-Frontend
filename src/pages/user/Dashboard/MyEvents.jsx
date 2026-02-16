@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { BsCalendarEvent, BsGeoAlt, BsQrCode, BsCheckCircleFill, BsThreeDotsVertical, BsPlusLg, BsArrowRight, BsClock, BsTicketPerforated } from "react-icons/bs";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { toast, Toaster } from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { myOrganizedEvents, myTickets as myTicketsData } from "../../../data/myEventsData";
@@ -9,9 +9,12 @@ const MyEvents = () => {
     const [activeTab, setActiveTab] = useState("organized"); // "organized", "tickets", or "campaigns"
     const [isLoading, setIsLoading] = useState(true);
     const [organizedEvents, setOrganizedEvents] = useState([]);
+    const [createdEvents, setCreatedEvents] = useState([]);
+    const [draftEvents, setDraftEvents] = useState([]);
     const [myTickets, setMyTickets] = useState([]);
     const [savedEvents, setSavedEvents] = useState([]);
     const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
     const searchQuery = searchParams.get("search")?.toLowerCase() || "";
 
     // Mock Promoted Campaigns
@@ -59,9 +62,17 @@ const MyEvents = () => {
             try {
                 const items = JSON.parse(localStorage.getItem('saved') || '[]');
                 setSavedEvents(Array.isArray(items) ? items : []);
+
+                const created = JSON.parse(localStorage.getItem('my_organized_events') || '[]');
+                setCreatedEvents(Array.isArray(created) ? created : []);
+
+                const drafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
+                setDraftEvents(Array.isArray(drafts) ? drafts : []);
             } catch (e) {
-                console.error("Failed to parse saved items", e);
+                console.error("Failed to parse local storage items", e);
                 setSavedEvents([]);
+                setCreatedEvents([]);
+                setDraftEvents([]);
             }
         };
 
@@ -102,7 +113,8 @@ const MyEvents = () => {
     }, []);
 
     // Filter Logic
-    const filteredOrganized = organizedEvents.filter(e =>
+    const allOrganized = [...draftEvents, ...createdEvents, ...organizedEvents];
+    const filteredOrganized = allOrganized.filter(e =>
         e.title.toLowerCase().includes(searchQuery) ||
         e.location.toLowerCase().includes(searchQuery)
     );
@@ -185,7 +197,7 @@ const MyEvents = () => {
                                             <span className="text-[#09637E]">By Date</span>
                                             <BsArrowRight className="rotate-90 ml-2" />
                                         </div>
-                                        <Link to="/user/events/create" className="flex items-center gap-3 bg-[#09637E] text-white px-8 py-4 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-[#088395] transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">
+                                        <Link to="/user/planning-wizard" className="flex items-center gap-3 bg-[#09637E] text-white px-8 py-4 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-[#088395] transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">
                                             <BsPlusLg />
                                             Create New Event
                                         </Link>
@@ -213,7 +225,10 @@ const MyEvents = () => {
                                                     {/* Top Actions - Added subtle drop shadow for readability against image */}
                                                     <div className="flex justify-between items-start">
                                                         <span className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm ${event.status === 'Live' ? 'bg-[#7AB2B2] text-[#09637E]' :
-                                                            event.status === 'Pending Approval' ? 'bg-[#EBF4F6] text-[#09637E]' : 'bg-slate-500/50 backdrop-blur-md text-white'
+                                                            event.status === 'Pending Approval' ? 'bg-[#EBF4F6] text-[#09637E]' :
+                                                                event.status === 'Immediate Action' ? 'bg-amber-100 text-amber-700 border border-amber-200 animate-pulse' :
+                                                                    event.status === 'Draft' ? 'bg-gray-100 text-gray-500 border border-gray-200' :
+                                                                        'bg-slate-500/50 backdrop-blur-md text-white'
                                                             }`}>
                                                             {event.status === 'Live' && <span className="w-1.5 h-1.5 bg-[#09637E] rounded-full animate-pulse" />}
                                                             {event.status === 'Live' ? 'Live Event' : event.status}
@@ -234,11 +249,19 @@ const MyEvents = () => {
 
                                                     {/* Bottom Action Area */}
                                                     <div className="pt-6 border-t border-white/20 flex items-center justify-between">
-                                                        <div className="drop-shadow-sm">
-                                                            <p className="text-[9px] font-black uppercase tracking-widest text-white/60 mb-1">Tickets Sold</p>
-                                                            <p className="text-lg font-bold text-white">{event.sold}</p>
+                                                        <div className="drop-shadow-sm min-h-[40px]">
+                                                            {/* Only show sold count if NOT private */}
+                                                            {event.formData?.listingType !== 'Private' && (
+                                                                <>
+                                                                    <p className="text-[9px] font-black uppercase tracking-widest text-white/60 mb-1">Tickets Sold</p>
+                                                                    <p className="text-lg font-bold text-white">{event.sold}</p>
+                                                                </>
+                                                            )}
                                                         </div>
-                                                        <button className="px-6 py-2.5 bg-[#EBF4F6] text-[#09637E] rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-[#7AB2B2] hover:text-white transition-colors shadow-lg">
+                                                        <button
+                                                            onClick={() => navigate(`/user/planning-wizard?eventId=${event.id}`)}
+                                                            className="px-6 py-2.5 bg-[#EBF4F6] text-[#09637E] rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-[#7AB2B2] hover:text-white transition-colors shadow-lg"
+                                                        >
                                                             Manage
                                                         </button>
                                                     </div>
