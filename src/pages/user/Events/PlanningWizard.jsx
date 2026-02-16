@@ -157,7 +157,14 @@ const PlanningWizard = () => {
             const eventId = searchParams.get('eventId'); // Check if we are editing an existing draft/event
 
             // Create a pseudo-ID or use title if unique enough
-            const draftId = eventId || formData.id || `draft_${Date.now()}`;
+            // Create a pseudo-ID or use title if unique enough
+            let draftId = eventId || formData.id;
+
+            if (!draftId) {
+                draftId = `draft_${Date.now()}`;
+                // Update state so subsequent saves use the same ID
+                setFormData(prev => ({ ...prev, id: draftId }));
+            }
 
             const newDraft = {
                 id: draftId,
