@@ -144,10 +144,6 @@ const MyEvents = () => {
         return matchesSearch && matchesStatus && matchesType && matchesDate && matchesLocation;
     });
 
-    const filteredOrganized = allOrganized.filter(e =>
-        e.title.toLowerCase().includes(searchQuery) ||
-        e.location.toLowerCase().includes(searchQuery)
-    );
     const filteredCampaigns = promotedCampaigns.filter(c =>
         c.title.toLowerCase().includes(searchQuery) ||
         c.subtitle.toLowerCase().includes(searchQuery)

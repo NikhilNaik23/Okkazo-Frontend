@@ -9,7 +9,8 @@ import {
     BsFilter,
     BsPlus,
     BsX,
-    BsXLg
+    BsXLg,
+    BsArrowRight
 } from "react-icons/bs";
 import { dummyVendors } from "../../../data/vendorData";
 import { vendorServiceCategories, isDateHighDemand } from "../../../data/planningWizardData";
