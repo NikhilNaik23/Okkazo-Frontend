@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { BsArrowRight } from "react-icons/bs";
 import SidebarProgress from "../../../components/Forms/EventWizard/SidebarProgress";
@@ -11,8 +12,10 @@ import StepConfirmation from "../../../components/Forms/EventWizard/StepConfirma
 import { planningWizardSteps } from "../../../data/planningWizardData";
 import ManifestPreview from "../../../components/Forms/EventWizard/ManifestPreview";
 import StepCategorySelection from "../../../components/Forms/EventWizard/StepCategorySelection";
+import StepPayment from "../../../components/Forms/EventWizard/StepPayment";
 
 const PlanningWizard = () => {
+    const [searchParams] = useSearchParams();
     const [currentStep, setCurrentStep] = useState(1);
     const [isPreviewMode, setIsPreviewMode] = useState(false);
     const [activeServiceTab, setActiveServiceTab] = useState(0); // Index of active service tab
@@ -35,9 +38,10 @@ const PlanningWizard = () => {
         endTime: "",
         services: [], // Start with empty selection
         vendors: {}, // { 'Venue': vendorObj, 'Catering': vendorObj }
+        isPaid: false, // Payment status
     });
 
-    const isImmersiveStep = currentStep === 1 || currentStep === 2;
+    const isImmersiveStep = currentStep === 1 || currentStep === 2 || currentStep === 3;
 
     const steps = planningWizardSteps;
 
@@ -48,10 +52,54 @@ const PlanningWizard = () => {
         }
     }, [formData.services, activeServiceTab]);
 
+    // Resume Wizard from Event ID
+    useEffect(() => {
+        const eventId = searchParams.get('eventId');
+        if (eventId) {
+            try {
+                // Check 'my_organized_events' where we save new paid events
+                const myEvents = JSON.parse(localStorage.getItem('my_organized_events') || '[]');
+                const foundEvent = myEvents.find(e => e.id === eventId || e.id === Number(eventId));
+
+                if (foundEvent && foundEvent.formData) {
+                    setFormData(foundEvent.formData);
+                    // If it is paid/Immediate Action, go to Vendor Selection (Step 4)
+                    let targetStep = 1;
+
+                    if (foundEvent.status === "Immediate Action" || foundEvent.formData.isPaid) {
+                        targetStep = 4; // Vendor Selection
+                    } else if (foundEvent.formData.services && foundEvent.formData.services.length > 0) {
+                        targetStep = 3; // Payment
+                    } else if (foundEvent.formData.date && foundEvent.formData.location) {
+                        targetStep = 2; // Preview / Service Selection
+                    }
+
+                    setCurrentStep(targetStep);
+                    // Force update in case of race conditions
+                    setTimeout(() => setCurrentStep(targetStep), 100);
+                } else {
+                    // Fallback: Check drafts if we implement full draft editing later
+                    const drafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
+                    const foundDraft = drafts.find(d => d.id === eventId);
+                    if (foundDraft && foundDraft.formData) {
+                        setFormData(foundDraft.formData);
+                        // Drafts usually start at step 1 or last saved step (if we tracked it)
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to load event data", e);
+            }
+        }
+    }, [searchParams]);
+
     const handleNext = () => {
         if (currentStep === 1 && !isPreviewMode) {
+            handleSaveDraft(); // Auto-save on Manifest
             setIsPreviewMode(true);
         } else {
+            if (currentStep === 2) {
+                handleSaveDraft(); // Auto-save details & services
+            }
             setIsPreviewMode(false);
             setCurrentStep(prev => prev + 1);
         }
@@ -106,9 +154,11 @@ const PlanningWizard = () => {
     const handleSaveDraft = () => {
         try {
             const existingDrafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
+            const eventId = searchParams.get('eventId'); // Check if we are editing an existing draft/event
 
             // Create a pseudo-ID or use title if unique enough
-            const draftId = `draft_${Date.now()}`;
+            const draftId = eventId || formData.id || `draft_${Date.now()}`;
+
             const newDraft = {
                 id: draftId,
                 title: formData.title || `Untitled ${formData.type} Draft`,
@@ -117,13 +167,19 @@ const PlanningWizard = () => {
                 image: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=2069&auto=format&fit=crop", // Default draft image
                 status: "Draft",
                 sold: `Last edited ${new Date().toLocaleDateString()}`,
-                formData: formData, // Store full form data for restoration later
+                formData: { ...formData, id: draftId }, // Store full form data for restoration later
                 timestamp: Date.now()
             };
 
-            // Limit to last 5 drafts to avoid quota issues
-            const updatedDrafts = [newDraft, ...existingDrafts].slice(0, 5);
+            // Remove existing draft with same ID if it exists to "replace" it
+            const filteredDrafts = existingDrafts.filter(d => d.id !== draftId);
+
+            // Add updated draft to top
+            const updatedDrafts = [newDraft, ...filteredDrafts].slice(0, 5);
             localStorage.setItem('planningWizardDrafts', JSON.stringify(updatedDrafts));
+
+            // Dispatch event for dashboard updates
+            window.dispatchEvent(new Event('savedUpdated'));
 
             return true; // Success
         } catch (error) {
@@ -159,8 +215,8 @@ const PlanningWizard = () => {
     };
 
     const isNextDisabled = (currentStep === 2 && formData.services.length === 0) ||
-        (currentStep === 3 && Object.keys(formData.vendors).length < formData.services.length) ||
-        (currentStep === 4 && !isAtBottom);
+        (currentStep === 4 && Object.keys(formData.vendors).length < formData.services.length) ||
+        (currentStep === 5 && !isAtBottom);
 
     if (isPreviewMode) {
         return (
@@ -176,19 +232,19 @@ const PlanningWizard = () => {
         <div className={`flex flex-col flex-1 font-sans transition-colors duration-700 ${isImmersiveStep ? 'bg-[#eff6f7]' : (currentStep === 3 ? 'bg-white' : 'bg-gray-50')} min-h-screen`}>
             <main className={`flex-1 w-full mx-auto flex transition-all duration-700 ${isImmersiveStep ? 'max-w-none relative px-6' : ((currentStep >= 3) ? 'max-w-none px-0 pt-0' : 'max-w-7xl px-6 pt-8 gap-8')}`}>
 
-                {!isImmersiveStep && currentStep !== 3 && currentStep !== 4 && currentStep !== 5 && <SidebarProgress currentStep={currentStep} steps={steps} />}
+                {!isImmersiveStep && currentStep !== 4 && currentStep !== 5 && currentStep !== 6 && <SidebarProgress currentStep={currentStep} steps={steps} />}
 
                 {/* Main Content Area */}
                 <div className="flex-1 relative h-full min-h-0">
-                    {/* Header - Only for non-immersive steps, hide for Step 3 & 4 & 5 */}
-                    {!isImmersiveStep && currentStep !== 3 && currentStep !== 4 && currentStep !== 5 && (
+                    {/* Header - Only for non-immersive steps, hide for Step 4 & 5 & 6 */}
+                    {!isImmersiveStep && currentStep !== 4 && currentStep !== 5 && currentStep !== 6 && (
                         <div className="mb-8 animate-fade-in text-center lg:text-left">
                             <h1 className="text-4xl font-black text-primary tracking-tight mb-2">Manifest Your Event</h1>
                             <p className="text-teal-900/40 font-bold uppercase tracking-widest text-[10px]">Step {currentStep}: {steps[currentStep - 1]?.title || 'Done'}</p>
                         </div>
                     )}
 
-                    <div className={`transition-all duration-700 ${isImmersiveStep || currentStep >= 3 ? 'bg-transparent shadow-none border-none p-0 h-full' : 'bg-white rounded-3xl p-8 shadow-sm border border-gray-100 min-h-150'}`}>
+                    <div className={`transition-all duration-700 ${isImmersiveStep || currentStep >= 4 ? 'bg-transparent shadow-none border-none p-0 h-full' : 'bg-white rounded-3xl p-8 shadow-sm border border-gray-100 min-h-150'}`}>
                         {currentStep === 1 && (
                             <OrbitalStage
                                 formData={formData}
@@ -208,6 +264,15 @@ const PlanningWizard = () => {
                         )}
 
                         {currentStep === 3 && (
+                            <StepPayment
+                                onNext={handleNext}
+                                onBack={handleBack}
+                                formData={formData}
+                                handleChange={handleChange}
+                            />
+                        )}
+
+                        {currentStep === 4 && (
                             <StepVendorSelection
                                 formData={formData}
                                 activeServiceTab={activeServiceTab}
@@ -216,27 +281,28 @@ const PlanningWizard = () => {
                                 handleNext={handleNext}
                                 handleBack={handleBack}
                                 handleChange={handleChange}
+                                minDateString={minDateString}
                             />
                         )}
 
-                        {currentStep === 4 && (
+                        {currentStep === 5 && (
                             <StepReview formData={formData} onRemoveVendor={handleRemoveVendor} />
                         )}
 
-                        {currentStep === 5 && (
+                        {currentStep === 6 && (
                             <StepConfirmation />
                         )}
                     </div>
 
                     {/* Navigation Actions */}
                     <div className={`flex flex-col gap-4 z-[100] pointer-events-none 
-                        ${isImmersiveStep || currentStep >= 3
+                        ${isImmersiveStep || currentStep >= 4
                             ? (currentStep === 1
                                 ? 'fixed bottom-[14px] right-10'
                                 : 'fixed bottom-8 left-10 right-10')
                             : 'mt-12 relative'}`}>
 
-                        {currentStep < 5 && currentStep !== 3 && (
+                        {currentStep < 6 && currentStep !== 3 && currentStep !== 4 && (
                             <div className={`flex items-center ${isImmersiveStep ? (currentStep === 1 ? 'justify-end' : 'justify-between') : 'justify-between'}`}>
                                 {(!isImmersiveStep || currentStep === 2) && (
                                     <button
@@ -286,7 +352,7 @@ const PlanningWizard = () => {
                                                     </>
                                                 ) : (
                                                     <>
-                                                        {currentStep === 4 ? 'Finish' : 'Next Step'} <BsArrowRight />
+                                                        {currentStep === 5 ? 'Finish' : 'Next Step'} <BsArrowRight />
                                                     </>
                                                 )}
                                             </motion.button>

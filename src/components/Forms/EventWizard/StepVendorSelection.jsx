@@ -18,8 +18,10 @@ import {
 } from "react-icons/bs";
 import { MdRestaurant, MdCameraAlt, MdPalette, MdLocationOn, MdVideocam, MdMusicNote, MdFace, MdSort } from 'react-icons/md';
 import { dummyVendors } from "../../../data/vendorData";
-import { vendorServiceCategories } from "../../../data/planningWizardData";
+
+import { vendorServiceCategories, isDateHighDemand } from "../../../data/planningWizardData";
 import { BsGlobe, BsTelephone, BsEnvelope, BsInstagram } from 'react-icons/bs';
+import SharedCalendar from "./SharedCalendar";
 
 // --- Helper Components ---
 
@@ -106,7 +108,7 @@ const ReviewsTab = ({ vendor }) => {
     );
 };
 
-const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected }) => {
+const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected, priceMultiplier = 1 }) => {
     const [activeTab, setActiveTab] = React.useState('Overview');
 
     React.useEffect(() => {
@@ -124,8 +126,8 @@ const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected }) => {
     if (!vendor) return null;
 
     // Price Range Calculation (Mock logic if max missing)
-    const priceMin = vendor.priceMin || 0;
-    const priceMax = vendor.priceMax || Math.round(priceMin * 1.5);
+    const priceMin = (vendor.priceMin || 0) * priceMultiplier;
+    const priceMax = (vendor.priceMax || Math.round((vendor.priceMin || 0) * 1.5)) * priceMultiplier;
 
     return (
         <motion.div
@@ -267,11 +269,11 @@ const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected }) => {
 
                                         <div className="grid grid-cols-1 gap-4">
                                             {[
-                                                { name: "Full Day Coverage", price: "₹85,000", desc: "Up to 12 hours of coverage with 2 photographers" },
-                                                { name: "Cinematic Film", price: "₹60,000", desc: "5-7 minute highlight reel and full ceremony edit" },
-                                                { name: "Pre-Wedding Shoot", price: "₹25,000", desc: "4 hour session at location of choice" },
-                                                { name: "Drone Coverage", price: "₹15,000", desc: "Aerial shots for venue and entry" },
-                                                { name: "Express Editing", price: "₹10,000", desc: "Same day edit slideshow for reception" }
+                                                { name: "Full Day Coverage", price: 85000, desc: "Up to 12 hours of coverage with 2 photographers" },
+                                                { name: "Cinematic Film", price: 60000, desc: "5-7 minute highlight reel and full ceremony edit" },
+                                                { name: "Pre-Wedding Shoot", price: 25000, desc: "4 hour session at location of choice" },
+                                                { name: "Drone Coverage", price: 15000, desc: "Aerial shots for venue and entry" },
+                                                { name: "Express Editing", price: 10000, desc: "Same day edit slideshow for reception" }
                                             ].map((service, i) => (
                                                 <div key={i} className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-primary/20 hover:bg-gray-50 transition-all group">
                                                     <div className="flex items-start gap-4">
@@ -283,7 +285,7 @@ const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected }) => {
                                                             <p className="text-xs text-gray-400 mt-1">{service.desc}</p>
                                                         </div>
                                                     </div>
-                                                    <span className="text-sm font-bold text-primary">{service.price}</span>
+                                                    <span className="text-sm font-bold text-primary">₹{(service.price * (vendor.priceMultiplier || 1)).toLocaleString()}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -325,10 +327,10 @@ const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected }) => {
 
 // --- Vendor Card Component ---
 
-const VendorCard = ({ vendor, isSelected, onSelect, onViewDetails }) => {
+const VendorCard = ({ vendor, isSelected, onSelect, onViewDetails, priceMultiplier = 1 }) => {
     // Generate Range Price
-    const priceMin = vendor.priceMin || 0;
-    const priceMax = vendor.priceMax || Math.round(priceMin * 1.5);
+    const priceMin = (vendor.priceMin || 0) * priceMultiplier;
+    const priceMax = (vendor.priceMax || Math.round((vendor.priceMin || 0) * 1.5)) * priceMultiplier;
 
     // Format Price nicely
     const formatPrice = (p) => "₹" + (p >= 1000 ? (p / 1000).toFixed(0) + 'k' : p);
@@ -418,7 +420,7 @@ const VendorCard = ({ vendor, isSelected, onSelect, onViewDetails }) => {
 
 // --- Main Page Component ---
 
-const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTab, setActiveServiceTab, handleSelectVendor, handleChange }) => {
+const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTab, setActiveServiceTab, handleSelectVendor, handleChange, minDateString }) => {
     const activeCategory = formData.services[activeServiceTab] || "Venue";
 
     const [searchQuery, setSearchQuery] = useState("");
@@ -430,8 +432,24 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     const [showPriceFilter, setShowPriceFilter] = useState(false);
     const [priceRange, setPriceRange] = useState({ min: 0, max: 200000 });
     const [showAddServiceDropdown, setShowAddServiceDropdown] = useState(false);
+    const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
     const ITEMS_PER_PAGE = 9;
+
+    // --- High Demand Logic ---
+    const isHighDemand = isDateHighDemand(formData.date);
+    const priceMultiplier = isHighDemand ? 1.5 : 1; // 50% increase for high demand
+
+    const handleSelectVendorWrapper = (category, vendor) => {
+        // Apply multiplier to the selected vendor object
+        const adjustedVendor = {
+            ...vendor,
+            priceMin: (vendor.priceMin || 0) * priceMultiplier,
+            priceMax: (vendor.priceMax || Math.round((vendor.priceMin || 0) * 1.5)) * priceMultiplier,
+            priceMultiplier: priceMultiplier // Store for reference
+        };
+        handleSelectVendor(category, adjustedVendor);
+    };
 
     const handleAddService = (service) => {
         const newServices = [...formData.services, service];
@@ -554,8 +572,9 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                     <VendorDetailsModal
                         vendor={selectedVendorForDetails}
                         onClose={() => setSelectedVendorForDetails(null)}
-                        onSelect={() => handleSelectVendor(activeCategory, selectedVendorForDetails)}
+                        onSelect={() => handleSelectVendorWrapper(activeCategory, selectedVendorForDetails)}
                         isSelected={formData.vendors[activeCategory]?.id === selectedVendorForDetails.id}
+                        priceMultiplier={priceMultiplier}
                     />
                 )}
             </AnimatePresence>
@@ -674,19 +693,30 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                                         onChange={(e) => setSearchQuery(e.target.value)}
                                         className="flex-1 h-10 bg-transparent border-none focus:ring-0 text-primary placeholder-primary/40 font-bold text-sm px-4"
                                     />
-                                    <div className="hidden md:flex items-center gap-4 px-6 border-l border-gray-100 relative group">
+                                    <div
+                                        className="hidden md:flex items-center gap-4 px-6 border-l border-gray-100 relative group cursor-pointer"
+                                        onClick={() => setIsCalendarOpen(!isCalendarOpen)}
+                                    >
                                         <BsCalendarEvent className="text-primary/40 group-hover:text-primary transition-colors" size={14} />
-                                        <div className="flex flex-col relative">
+                                        <div className="flex flex-col relative w-24">
                                             <span className="text-[8px] font-bold uppercase tracking-widest text-primary/40">Date</span>
-                                            <input
-                                                type="date"
-                                                value={formData.date || ""}
-                                                onChange={(e) => handleChange('date', e.target.value)}
-                                                className="absolute inset-0 opacity-0 cursor-pointer z-10 w-full h-full"
-                                            />
-                                            <span className="text-[10px] font-bold text-primary underline decoration-dotted underline-offset-4 cursor-pointer group-hover:text-secondary transition-colors">
-                                                {formData.date ? new Date(formData.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : "Select Date"}
+                                            <span className="text-[10px] font-bold text-primary underline decoration-dotted underline-offset-4 cursor-pointer group-hover:text-secondary transition-colors truncate">
+                                                {formData.date ? new Date(formData.date).toLocaleDateString() : "Select"}
                                             </span>
+
+                                            <AnimatePresence>
+                                                {isCalendarOpen && (
+                                                    <SharedCalendar
+                                                        selectedDate={formData.date}
+                                                        onChange={(dateStr) => {
+                                                            handleChange('date', dateStr);
+                                                            setIsCalendarOpen(false);
+                                                        }}
+                                                        minDateString={minDateString}
+                                                        onClose={() => setIsCalendarOpen(false)}
+                                                    />
+                                                )}
+                                            </AnimatePresence>
                                         </div>
                                     </div>
                                 </div>
@@ -765,8 +795,9 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                                     key={vendor.id}
                                     vendor={vendor}
                                     isSelected={formData.vendors[activeCategory]?.id === vendor.id}
-                                    onSelect={() => handleSelectVendor(activeCategory, vendor)}
+                                    onSelect={() => handleSelectVendorWrapper(activeCategory, vendor)}
                                     onViewDetails={() => setSelectedVendorForDetails(vendor)}
+                                    priceMultiplier={priceMultiplier}
                                 />
                             ))}
                         </div>
@@ -880,7 +911,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="text-[9px] font-bold uppercase tracking-widest text-primary/60">Live Status</span>
-                                    <span className="text-xs font-bold text-primary">High Demand</span>
+                                    <span className={`text-xs font-bold ${isHighDemand ? 'text-amber-500' : 'text-primary'}`}>{isHighDemand ? 'High Demand Date' : 'Standard Date'}</span>
                                 </div>
                             </div>
 
