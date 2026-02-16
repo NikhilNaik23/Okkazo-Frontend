@@ -473,8 +473,10 @@ const MyEvents = () => {
                                                             onClick={() => {
                                                                 if (event.status === 'Immediate Action') {
                                                                     navigate(`/user/planning-wizard?eventId=${event.id}&step=4&returnTo=my-events`);
-                                                                } else {
+                                                                } else if (event.status === 'Draft') {
                                                                     navigate(`/user/planning-wizard?eventId=${event.id}`);
+                                                                } else {
+                                                                    navigate(`/user/event-management/${event.id}`);
                                                                 }
                                                             }}
                                                             className="px-6 py-2.5 bg-[#EBF4F6] text-[#09637E] rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-[#7AB2B2] hover:text-white transition-colors shadow-lg"

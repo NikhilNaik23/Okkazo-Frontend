@@ -43,6 +43,7 @@ import PlanningWizard from "./pages/user/Events/PlanningWizard";
 import PromoteEvent from "./pages/user/Events/PromoteEvent";
 import EventDetails from "./pages/user/Events/EventDetails";
 import EventCheckout from "./pages/user/Events/EventCheckout";
+import UserEventManagement from "./pages/user/Events/UserEventManagement";
 import MyEvents from "./pages/user/Dashboard/MyEvents";
 import UserProfile from "./pages/user/Profile/UserProfile";
 import Notifications from "./pages/user/Dashboard/Notifications";
@@ -299,6 +300,7 @@ const App = () => {
             <Route path="event/:eventId" element={<EventDetails />} />
             <Route path="checkout/:eventId" element={<EventCheckout />} />
             <Route path="my-events" element={<MyEvents />} />
+            <Route path="event-management/:eventId" element={<UserEventManagement />} />
             <Route path="profile" element={<UserProfile />} />
             <Route path="notifications" element={<Notifications />} />
             <Route path="edit-profile" element={<EditProfile />} />
@@ -319,7 +321,7 @@ const App = () => {
             path="/vendor"
             element={
               // <ProtectedRoute allowedRoles={['VENDOR']}>
-                <VendorLayout />
+              <VendorLayout />
               // </ProtectedRoute>
             }
           >
