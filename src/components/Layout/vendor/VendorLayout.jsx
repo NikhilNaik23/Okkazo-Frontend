@@ -1,10 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { BsBell, BsGear } from "react-icons/bs";
 import { vendorSidebarMenus, vendorLayoutData } from "../../../data/vendorLayoutData.jsx";
+import VendorNotificationSidebar from "./VendorNotificationSidebar";
 
 const VendorLayout = () => {
   const location = useLocation();
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
   const sidebarMenus = vendorSidebarMenus;
   const vendorData = vendorLayoutData;
@@ -44,6 +46,7 @@ const VendorLayout = () => {
 
         <div className="p-4 space-y-2">
           <button
+            onClick={() => setIsNotificationOpen(true)}
             className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold transition-all text-[#708aa0] hover:bg-[#e9eff1] hover:text-[#0b2d49] relative"
           >
             <span className="text-xl relative">
@@ -79,6 +82,8 @@ const VendorLayout = () => {
           <Outlet />
         </main>
       </div>
+
+      <VendorNotificationSidebar isOpen={isNotificationOpen} onClose={() => setIsNotificationOpen(false)} />
     </div>
   );
 };

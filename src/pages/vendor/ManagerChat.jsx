@@ -22,23 +22,16 @@ const ManagerChat = () => {
     { id: "ch-4", name: "budget-approvals", unread: 5 },
   ];
 
-  const groups = [
-    { id: "gr-1", name: "Grand Wedding Gala", members: 8, unread: 3 },
-    { id: "gr-2", name: "Corporate Tech Expo", members: 12, unread: 0 },
-    { id: "gr-3", name: "Summer Music Festival", members: 6, unread: 1 },
-    { id: "gr-4", name: "Annual Charity Dinner", members: 5, unread: 0 },
-  ];
-
   const dms = [
-    { id: "dm-1", name: "Sarah Johnson", status: "online", avatar: "SJ", role: "Event Manager", lastMsg: "I'll pass this along...", time: "11:05 AM", unread: 0 },
-    { id: "dm-2", name: "Mike Reynolds", status: "busy", avatar: "MR", role: "Project Lead", lastMsg: "Budget approved!", time: "9:15 AM", unread: 3 },
-    { id: "dm-3", name: "Lisa Chen", status: "offline", avatar: "LC", role: "Coordinator", lastMsg: "See you tomorrow.", time: "Yesterday", unread: 0 },
+    { id: "dm-1", name: "Sarah Johnson", status: "online", avatar: "SJ", role: "Event Organizer", lastMsg: "I'll pass this along...", time: "11:05 AM", unread: 0 },
+    { id: "dm-2", name: "Mike Reynolds", status: "busy", avatar: "MR", role: "Client", lastMsg: "Budget approved!", time: "9:15 AM", unread: 3 },
+    { id: "dm-3", name: "Lisa Chen", status: "offline", avatar: "LC", role: "Venue Coordinator", lastMsg: "See you tomorrow.", time: "Yesterday", unread: 0 },
   ];
 
   const chatPartners = {
-    "dm-1": { name: "Sarah Johnson", role: "Event Manager", subtitle: "Event Manager • #EVT-2024-089", location: "New York, NY", localTime: "11:05 AM Local Time" },
-    "dm-2": { name: "Mike Reynolds", role: "Project Lead", subtitle: "Project Lead • #EVT-2024-112", location: "Chicago, IL", localTime: "10:05 AM Local Time" },
-    "dm-3": { name: "Lisa Chen", role: "Coordinator", subtitle: "Coordinator • #EVT-2024-095", location: "Los Angeles, CA", localTime: "8:05 AM Local Time" },
+    "dm-1": { name: "Sarah Johnson", role: "Event Organizer", subtitle: "Event Organizer • #EVT-2024-089", location: "New York, NY", localTime: "11:05 AM Local Time" },
+    "dm-2": { name: "Mike Reynolds", role: "Client", subtitle: "Client • #EVT-2024-112", location: "Chicago, IL", localTime: "10:05 AM Local Time" },
+    "dm-3": { name: "Lisa Chen", role: "Venue Coordinator", subtitle: "Venue Coordinator • #EVT-2024-095", location: "Los Angeles, CA", localTime: "8:05 AM Local Time" },
   };
 
   const [messages, setMessages] = useState([
@@ -148,31 +141,6 @@ const ManagerChat = () => {
             </div>
           </div>
 
-          {/* Groups Section */}
-          <div>
-            <div className="flex items-center justify-between px-2 mb-2 group cursor-pointer">
-              <span className="text-[10px] font-black text-[#708aa0] uppercase tracking-[0.15em] group-hover:text-[#0b2d49] transition-colors flex items-center gap-1">
-                <ChevronDown className="w-3 h-3" /> Groups
-              </span>
-              <Plus className="w-4 h-4 text-[#708aa0] opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-            <div className="space-y-0.5">
-              {groups.map((gr) => (
-                <button
-                  key={gr.id}
-                  onClick={() => setSelectedChat(gr.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-bold transition-all ${selectedChat === gr.id ? 'bg-[#d7a444]/10 text-[#0b2d49]' : 'text-[#708aa0] hover:bg-[#e9eff1]'}`}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Users className={`w-4 h-4 shrink-0 ${selectedChat === gr.id ? 'text-[#d7a444]' : 'text-[#708aa0]'}`} />
-                    <span className="truncate">{gr.name}</span>
-                  </div>
-                  {gr.unread > 0 && <span className="bg-[#d7a444] text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[20px] text-center shrink-0">{gr.unread}</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* DMs Section */}
           <div>
             <div className="flex items-center justify-between px-2 mb-2 group cursor-pointer">
@@ -199,6 +167,7 @@ const ManagerChat = () => {
                       <span className={`text-sm truncate ${selectedChat === dm.id ? 'font-black text-[#0b2d49]' : 'font-bold text-[#0b2d49]/80'}`}>{dm.name}</span>
                       {dm.unread > 0 && <span className="w-2 h-2 rounded-full bg-[#d7a444]"></span>}
                     </div>
+                    <p className="text-[10px] text-[#5a5b44] font-bold uppercase tracking-wider truncate">{dm.role}</p>
                   </div>
                 </button>
               ))}

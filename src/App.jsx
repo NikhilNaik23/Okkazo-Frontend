@@ -58,6 +58,7 @@ import ManagerChat from "./pages/vendor/ManagerChat";
 import BusinessProfile from "./pages/vendor/BusinessProfile";
 import VendorEventDetails from "./pages/vendor/EventDetails";
 import AccountSettingsPage from "./pages/vendor/AccountSettings";
+import VendorNotifications from "./pages/vendor/Notifications";
 
 const App = () => {
   const location = useLocation();
@@ -333,6 +334,7 @@ const App = () => {
             <Route path="profile" element={<BusinessProfile />} />
             <Route path="event/:id" element={<VendorEventDetails />} />
             <Route path="settings" element={<AccountSettingsPage />} />
+            <Route path="notifications" element={<VendorNotifications />} />
           </Route>
         </Routes>
       </AnimatePresence>
