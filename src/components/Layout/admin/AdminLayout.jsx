@@ -12,6 +12,7 @@ import AdminSettings from "../../../pages/Home/admin/AdminSettings";
 import AdminProfile from "../../../pages/Home/admin/AdminProfile";
 import AdminManager from "../../../pages/Home/admin/AdminManager";
 import EventDetails from "../../../pages/Home/admin/EventDetails";
+import TransactionDetails from "../../../pages/Home/admin/TransactionDetails";
 
 const AdminLayout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -43,6 +44,7 @@ const AdminLayout = () => {
                 <Route path="vendors" element={<AdminVendorVerification />} />
                 <Route path="reports" element={<AdminReports />} />
                 <Route path="ledger" element={<AdminLedger />} />
+                <Route path="ledger/:id" element={<TransactionDetails />} />
                 <Route path="team-access" element={<AdminTeamAccess />} />
                 <Route path="team-access/add" element={<AdminManager />} />
                 <Route path="settings" element={<AdminSettings />} />

@@ -9,9 +9,11 @@ import {
   IndianRupee, 
   MoreHorizontal 
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const AdminReports = () => {
   const [activeRange, setActiveRange] = useState("Last 30 Days");
+  const navigate = useNavigate();
 
   const stats = [
     {
@@ -172,7 +174,12 @@ const AdminReports = () => {
           <div className="lg:col-span-8 bg-white p-6 rounded-2xl shadow-sm border border-[#f0f2f5]">
             <div className="flex items-center justify-between mb-8">
               <h3 className="text-base font-bold text-[#1a1c1e]">Recent Ledger Entries</h3>
-              <button className="text-xs font-bold text-[#28a785] hover:underline">View All</button>
+              <button 
+                onClick={() => navigate('/admin/ledger')}
+                className="text-xs font-bold text-[#28a785] hover:underline"
+              >
+                View All
+              </button>
             </div>
             
             <div className="overflow-x-auto">
@@ -187,7 +194,11 @@ const AdminReports = () => {
                 </thead>
                 <tbody className="divide-y divide-[#f1f5f9]">
                   {recentEntries.map((txn, idx) => (
-                    <tr key={idx} className="group hover:bg-[#f8fafc] transition-colors">
+                    <tr 
+                      key={idx} 
+                      className="group hover:bg-[#f8fafc] transition-colors cursor-pointer"
+                      onClick={() => navigate(`/admin/ledger/${txn.id}`)}
+                    >
                       <td className="py-4 text-sm font-semibold text-[#1a1c1e]">{txn.id}</td>
                       <td className="py-4">
                         <span className="px-2 py-0.5 bg-[#f1f5f9] text-[#64748b] text-[10px] font-bold rounded-md uppercase">

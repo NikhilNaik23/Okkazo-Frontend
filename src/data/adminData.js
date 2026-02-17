@@ -175,20 +175,20 @@ export const mockVendors = [
 export const mockAdminEvents = [
   {
     id: 1,
-    title: "Summer Soundwaves 2024",
+    title: "Summer Soundwaves 2026",
     organizer: "Vibe Entertainment Co.",
-    date: "Aug 12, 2024",
-    submitted: "Oct 24, 09:45 AM",
+    date: "Aug 12, 2026",
+    submitted: "Feb 10, 09:45 AM",
     category: "MUSIC FESTIVAL",
     status: "URGENT",
     image: "https://images.unsplash.com/photo-1533174072545-e8d4aa97edf9?q=80&w=1000&auto=format&fit=crop"
   },
   {
     id: 2,
-    title: "Future Tech Expo 2024",
+    title: "Future Tech Expo 2026",
     organizer: "Silicon Valley Events",
-    date: "Nov 05, 2024",
-    submitted: "Oct 25, 02:20 PM",
+    date: "Nov 05, 2026",
+    submitted: "Feb 10, 02:20 PM",
     category: "CONFERENCE",
     status: "REVIEWING",
     image: "https://images.unsplash.com/photo-1544531586-fde5298cdd40?q=80&w=1000&auto=format&fit=crop"
@@ -197,8 +197,8 @@ export const mockAdminEvents = [
     id: 3,
     title: "Ethereal Art Nights",
     organizer: "Canvas & Clay Hub",
-    date: "Dec 01, 2024",
-    submitted: "Oct 26, 11:15 AM",
+    date: "Dec 01, 2026",
+    submitted: "Feb 11, 11:15 AM",
     category: "EXHIBITION",
     status: "PENDING",
     image: "https://images.unsplash.com/photo-1514525253440-b393452e8d26?q=80&w=1000&auto=format&fit=crop"
@@ -207,10 +207,50 @@ export const mockAdminEvents = [
     id: 4,
     title: "Gourmet Garden Series",
     organizer: "Culinary Masters",
-    date: "Sept 18, 2024",
-    submitted: "Oct 26, 04:40 PM",
+    date: "Sept 18, 2026",
+    submitted: "Feb 11, 04:40 PM",
     category: "WORKSHOP",
     status: "PENDING",
     image: "https://images.unsplash.com/photo-1628194380993-97ae0c868427?q=80&w=1000&auto=format&fit=crop"
+  },
+  {
+    id: 5,
+    title: "Midnight Jazz Session",
+    organizer: "Blue Note Collective",
+    date: "Aug 20, 2026",
+    submitted: "Feb 09, 11:30 PM",
+    category: "MUSIC CONCERT",
+    status: "VERIFIED",
+    image: "https://images.unsplash.com/photo-1511192336575-5a79af67a629?q=80&w=1000&auto=format&fit=crop"
+  },
+  {
+    id: 6,
+    title: "Startup Founders Gala",
+    organizer: "Elevate Network",
+    date: "Oct 12, 2026",
+    submitted: "Feb 08, 09:00 AM",
+    category: "NETWORKING",
+    status: "VERIFIED",
+    image: "https://images.unsplash.com/photo-1511578314322-379afb476865?q=80&w=1000&auto=format&fit=crop"
+  },
+  {
+    id: 7,
+    title: "Underground Racing League",
+    organizer: "Speed Demons",
+    date: "July 04, 2026",
+    submitted: "Feb 07, 02:15 PM",
+    category: "SPORTS",
+    status: "REJECTED",
+    image: "https://images.unsplash.com/photo-1511919884226-fd3cad34687c?q=80&w=1000&auto=format&fit=crop"
+  },
+  {
+    id: 8,
+    title: "Secret Rooftop Party",
+    organizer: "Hidden Gems",
+    date: "July 12, 2026",
+    submitted: "Feb 06, 06:45 PM",
+    category: "PARTY",
+    status: "REJECTED",
+    image: "https://images.unsplash.com/photo-1533174072545-e8d4aa97edf9?q=80&w=1000&auto=format&fit=crop"
   }
 ];

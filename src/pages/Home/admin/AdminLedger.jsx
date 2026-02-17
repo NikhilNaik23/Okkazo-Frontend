@@ -16,6 +16,7 @@ import {
   TrendingUp,
   Activity
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 /**
  * AdminLedger Component
@@ -24,6 +25,7 @@ import {
 const AdminLedger = () => {
   const [activePage, setActivePage] = useState(1);
   const [activeRange, setActiveRange] = useState("Last 30 Days");
+  const navigate = useNavigate();
 
   const transactions = [
     { 
@@ -183,7 +185,11 @@ const AdminLedger = () => {
               </thead>
               <tbody className="divide-y divide-[#f1f5f9]/60">
                 {transactions.map((txn, index) => (
-                  <tr key={index} className="hover:bg-[#f8fafc]/50 transition-colors group cursor-pointer">
+                  <tr 
+                    key={index} 
+                    className="hover:bg-[#f8fafc]/50 transition-colors group cursor-pointer"
+                    onClick={() => navigate(`/admin/ledger/${txn.id.replace('#', '')}`)}
+                  >
                     <td className="px-8 py-5 text-sm font-medium text-[#64748b]">{txn.date}</td>
                     <td className="px-8 py-5">
                       <span className="text-sm font-black text-[#28a785] hover:text-[#0d9488] transition-colors">{txn.id}</span>
