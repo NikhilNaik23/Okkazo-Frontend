@@ -43,7 +43,7 @@ const StepEventDetails = ({ formData, handleChange, setFormData, minDateString }
                         </div>
                     </div>
 
-                    <div className="animate-in fade-in slide-in-from-top-2">
+                    <div className="animate-in fade-in slide-in-from-top-2 md:col-span-2">
                         <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Event Title <span className="text-red-500">*</span></label>
                         <input type="text" className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#d7a444] focus:ring-4 focus:ring-[#d7a444]/10 outline-none transition-all placeholder:text-gray-300" placeholder="e.g. Annual Tech Conference 2024" onChange={(e) => handleChange('title', e.target.value)} value={formData.title} />
                     </div>
@@ -74,6 +74,18 @@ const StepEventDetails = ({ formData, handleChange, setFormData, minDateString }
                                 </>
                             )}
                         </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-gray-400 uppercase mb-2">No of Guests <span className="text-red-500">*</span></label>
+                        <input
+                            type="number"
+                            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#d7a444] focus:ring-4 focus:ring-[#d7a444]/10 outline-none transition-all placeholder:text-gray-300"
+                            placeholder="e.g. 100"
+                            onChange={(e) => handleChange('guests', e.target.value)}
+                            value={formData.guests || ''}
+                            min="1"
+                        />
                     </div>
                 </div>
             </section>

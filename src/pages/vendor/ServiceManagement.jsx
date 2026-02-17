@@ -1,280 +1,381 @@
-import React, { useState } from "react";
-import { 
-  BsPlus, 
-  BsPencilSquare, 
-  BsThreeDotsVertical, 
-  BsShop, 
-  BsGeoAlt, 
-  BsGear,
-  BsPlusLg,
-  BsTrash
+import React, { useState, useEffect } from "react";
+import {
+    BsShop,
+    BsGeoAlt,
+    BsPlusLg,
+    BsPencilSquare,
+    BsBriefcase,
+    BsCamera,
+    BsCameraVideo,
+    BsPalette,
+    BsMusicNoteBeamed,
+    BsBrush,
+    BsEnvelope,
+    BsSpeaker,
+    BsTools,
+    BsShieldCheck,
+    BsTruck,
+    BsBroadcast,
+    BsThreeDotsVertical,
+    BsTrash
 } from "react-icons/bs";
-import { MdOutlineRestaurantMenu } from "react-icons/md";
+import { MdOutlineRestaurantMenu, MdCake } from "react-icons/md";
 import { toast } from "react-hot-toast";
+import AddServiceModal from "../../components/Vendor/ServiceManagement/AddServiceModal";
+import { SERVICE_CATEGORIES, INITIAL_PACKAGES, INITIAL_VENUES } from "../../components/Vendor/ServiceManagement/constants";
+
+const iconMap = {
+    BsShop,
+    MdOutlineRestaurantMenu,
+    BsCamera,
+    BsCameraVideo,
+    BsPalette,
+    BsMusicNoteBeamed,
+    BsBrush,
+    BsEnvelope,
+    BsSpeaker,
+    BsTools,
+    BsShieldCheck,
+    BsTruck,
+    BsBroadcast,
+    MdCake
+};
+
+import { vendorProfileData } from "../../data/vendorProfileData.jsx";
 
 const ServiceManagement = () => {
-  const [activeTab, setActiveTab] = useState("Active Services");
+    // Determine allowed category from profile
+    const profileServiceType = vendorProfileData.businessDetails.serviceCategory;
+    const allowedCategoryObj = SERVICE_CATEGORIES.find(cat =>
+        cat.label.toLowerCase().includes(profileServiceType.toLowerCase()) ||
+        cat.id === profileServiceType.toLowerCase()
+    );
+    const allowedCategoryId = allowedCategoryObj ? allowedCategoryObj.id : SERVICE_CATEGORIES[0].id;
 
-  const [menuItems, setMenuItems] = useState([
-    {
-      id: 1,
-      name: "Truffle Mushroom Arancini",
-      description: "Crispy risotto balls with black truffle and parmesan",
-      category: "VEG",
-      price: "12.50",
-      status: "Active"
-    },
-    {
-      id: 2,
-      name: "Slow-Cooked Butter Chicken",
-      description: "Tender chicken in a rich, creamy tomato gravy",
-      category: "NON-VEG",
-      price: "24.00",
-      status: "Active"
-    },
-    {
-      id: 3,
-      name: "Mutton Rogan Josh",
-      description: "Kashmiri style aromatic lamb curry",
-      category: "NON-VEG",
-      price: "28.50",
-      status: "Active"
-    },
-    {
-      id: 4,
-      name: "Paneer Tikka Masala",
-      description: "Char-grilled cottage cheese in spiced gravy",
-      category: "VEG",
-      price: "19.50",
-      status: "Active"
-    }
-  ]);
+    const [activeCategory, setActiveCategory] = useState(allowedCategoryId);
+    const [editingService, setEditingService] = useState(null);
+    const [activeMenuId, setActiveMenuId] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [expandedServices, setExpandedServices] = useState({});
 
-  const [venues, setVenues] = useState([
-    {
-      id: 1,
-      name: "Grand Crystal Ballroom",
-      location: "Manhattan, NY",
-      capacity: 500,
-      price: "2,500",
-      image: "https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&q=80&w=800",
-      status: "Active"
-    },
-    {
-      id: 2,
-      name: "Rooftop Sky Garden",
-      location: "Brooklyn, NY",
-      capacity: 150,
-      price: "1,800",
-      image: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?auto=format&fit=crop&q=80&w=800",
-      status: "Active"
-    }
-  ]);
+    // Initialize state with data for venues and catering, others empty
+    const [services, setServices] = useState({
+        venues: INITIAL_VENUES,
+        catering: INITIAL_PACKAGES,
+        photography: [],
+        videography: [],
+        decor: [],
+        entertainment: [],
+        makeup: [],
+        invitations: [],
+        sound: [],
+        rental: [],
+        security: [],
+        transport: [],
+        media: [],
+        cakes: []
+    });
 
-  const handleAddItem = () => {
-    const newItem = {
-        id: Date.now(),
-        name: "New Culinary Creation",
-        description: "Freshly added menu item with unique flavors.",
-        category: "VEG",
-        price: "15.00",
-        status: "Active"
+    // Only show the category allowed by the profile
+    const visibleCategories = [allowedCategoryObj || SERVICE_CATEGORIES[0]];
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = () => setActiveMenuId(null);
+        window.addEventListener('click', handleClickOutside);
+        return () => window.removeEventListener('click', handleClickOutside);
+    }, []);
+
+    const handleAddService = (serviceData) => {
+        const categoryId = allowedCategoryId;
+
+        setServices(prev => {
+            const categoryItems = prev[categoryId] || [];
+
+            if (editingService) {
+                // Update existing
+                const updatedItems = categoryItems.map(item =>
+                    item.id === editingService.id ? { ...item, ...serviceData } : item
+                );
+                return { ...prev, [categoryId]: updatedItems };
+            } else {
+                // Add new
+                const serviceToAdd = {
+                    id: Date.now(),
+                    ...serviceData,
+                    status: "Active"
+                };
+                return { ...prev, [categoryId]: [...categoryItems, serviceToAdd] };
+            }
+        });
+
+        toast.success(editingService ? "Service updated successfully!" : "New service added successfully!");
+        setEditingService(null); // Reset editing state
     };
-    setMenuItems([...menuItems, newItem]);
-    toast.success("New menu item added!", {
-        style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' }
-    });
-  };
 
-  const handleDeleteItem = (id) => {
-    setMenuItems(menuItems.filter(item => item.id !== id));
-    toast.error("Item removed from menu.", {
-        style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' }
-    });
-  };
+    const handleEditService = (item, e) => {
+        e.stopPropagation(); // Prevent menu close from affecting this strictly
+        setEditingService(item);
+        setIsModalOpen(true);
+        setActiveMenuId(null);
+    };
 
-  const handleAddVenue = () => {
-      const newVenue = {
-          id: Date.now(),
-          name: "Elegant Terrace Room",
-          location: "Queens, NY",
-          capacity: 100,
-          price: "1,200",
-          image: "https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?auto=format&fit=crop&q=80&w=800",
-          status: "Active"
-      };
-      setVenues([...venues, newVenue]);
-      toast.success("New venue listing created!", {
-          style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' }
-      });
-  };
+    const handleDeleteService = (itemId, e) => {
+        e.stopPropagation();
+        if (window.confirm("Are you sure you want to delete this service?")) {
+            setServices(prev => ({
+                ...prev,
+                [allowedCategoryId]: prev[allowedCategoryId].filter(item => item.id !== itemId)
+            }));
+            toast.success("Service deleted.");
+        }
+        setActiveMenuId(null);
+    };
 
-  const filteredMenuItems = menuItems.filter(item => {
-      if (activeTab.includes("Active")) return item.status === "Active";
-      if (activeTab.includes("Drafts")) return item.status === "Draft";
-      return item.status === "Archived";
-  });
+    const toggleMenu = (itemId, e) => {
+        e.stopPropagation();
+        setActiveMenuId(activeMenuId === itemId ? null : itemId);
+    };
 
-  return (
-    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
-        <h1 className="text-3xl font-black tracking-tight">Service Management</h1>
-        <button 
-            onClick={handleAddVenue}
-            className="flex items-center gap-2 px-6 py-3 bg-[#0b2d49] text-white rounded-2xl font-bold hover:bg-[#d7a444] transition-all shadow-lg active:scale-95"
-        >
-          <BsPlusLg strokeWidth={1} />
-          Add New Service
-        </button>
-      </div>
+    const currentServices = services[activeCategory] || [];
 
-      {/* Primary Tabs */}
-      <div className="flex border-b border-[#708aa0]/10 mb-8 overflow-x-auto no-scrollbar">
-        {["Active Services (3)", "Drafts (1)", "Archived"].map((tab) => (
-          <button 
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-8 py-4 text-sm font-black transition-all relative shrink-0 ${activeTab === tab ? 'text-[#0b2d49]' : 'text-[#708aa0] hover:text-[#0b2d49]'}`}
-          >
-            {tab}
-            {activeTab === tab && (
-              <div className="absolute bottom-0 left-0 w-full h-0.5 bg-[#0b2d49]"></div>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Catering Section */}
-      <div className="bg-white rounded-[2.5rem] shadow-sm border border-[#708aa0]/5 mb-10 overflow-hidden">
-        <div className="p-8 border-b border-gray-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-            <div className="flex items-center gap-6">
-                <div className="w-16 h-16 bg-[#e9eff1] rounded-[1.5rem] flex items-center justify-center text-[#d7a444] shadow-inner">
-                    <MdOutlineRestaurantMenu size={32} />
-                </div>
-                <div>
-                    <h2 className="text-xl font-black">Catering Menus</h2>
-                    <p className="text-sm text-[#708aa0] font-medium">Consolidated menu items with per-person pricing</p>
-                </div>
-            </div>
-            <div className="flex items-center gap-4">
-                <button className="px-6 py-3 bg-white border-2 border-[#e9eff1] text-[#0b2d49] rounded-2xl font-bold text-sm hover:border-[#0b2d49] transition-all flex items-center gap-2">
-                    <BsPencilSquare /> Edit Menu
-                </button>
-                <button 
-                    onClick={handleAddItem}
-                    className="px-6 py-3 bg-[#0b2d49] text-white rounded-2xl font-bold text-sm hover:bg-[#d7a444] transition-all flex items-center gap-2 shadow-lg shadow-[#0b2d49]/10"
+    const renderServiceCard = (item) => {
+        // Common Menu Component
+        const Menu = () => (
+            <div className="absolute top-4 right-4 z-10">
+                <button
+                    onClick={(e) => toggleMenu(item.id, e)}
+                    className="w-8 h-8 flex items-center justify-center bg-white/90 backdrop-blur-sm rounded-full shadow-sm text-[#0b2d49] hover:bg-[#0b2d49] hover:text-white transition-all"
                 >
-                    <BsPlus size={24} /> Add Item
+                    <BsThreeDotsVertical size={16} />
+                </button>
+
+                {activeMenuId === item.id && (
+                    <div className="absolute right-0 top-full mt-2 w-32 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden py-1 z-20 animate-in fade-in zoom-in-95 duration-200">
+                        <button
+                            onClick={(e) => handleEditService(item, e)}
+                            className="w-full text-left px-4 py-2 text-sm font-bold text-[#0b2d49] hover:bg-gray-50 flex items-center gap-2"
+                        >
+                            <BsPencilSquare size={12} /> Edit
+                        </button>
+                        <button
+                            onClick={(e) => handleDeleteService(item.id, e)}
+                            className="w-full text-left px-4 py-2 text-sm font-bold text-red-500 hover:bg-red-50 flex items-center gap-2"
+                        >
+                            <BsTrash size={12} /> Delete
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
+
+        if (activeCategory === 'catering') {
+            return (
+                <div key={item.id} className="relative bg-white rounded-[2rem] border-2 border-[#e9eff1] overflow-hidden group hover:border-[#d7a444] transition-all duration-300 hover:shadow-xl flex flex-col h-full">
+                    <Menu />
+                    <div className="p-8 flex flex-col h-full">
+                        <div className="mb-6 mr-8">
+                            <span className={`inline-block px-3 py-1 rounded-lg text-xs font-black uppercase tracking-widest mb-3 ${item.tierBg || 'bg-gray-100'} ${item.tierText || 'text-gray-600'}`}>
+                                {item.tier || 'Standard'}
+                            </span>
+                            <h3 className="text-2xl font-black text-[#0b2d49]">{item.name}</h3>
+                        </div>
+
+                        <div className="mb-6 pb-6 border-b border-dashed border-gray-200">
+                            <span className="text-3xl font-black text-[#0b2d49]">{item.price}</span>
+                            <span className="text-sm text-[#708aa0] font-medium ml-1">approx.</span>
+                        </div>
+
+                        <div className="space-y-3 mb-8 flex-grow">
+                            {item.items && (expandedServices[item.id] ? item.items : item.items.slice(0, 5)).map((inc, i) => (
+                                <div key={i} className="flex items-start gap-3">
+                                    <div className="mt-1 min-w-[16px] flex items-center justify-center text-[#d7a444]">
+                                        <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 16 16" height="14" width="14" xmlns="http://www.w3.org/2000/svg"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"></path></svg>
+                                    </div>
+                                    <span className="text-[#5a5b44] font-medium text-sm leading-snug">{inc}</span>
+                                </div>
+                            ))}
+                            {item.items && item.items.length > 5 && (
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setExpandedServices(prev => ({ ...prev, [item.id]: !prev[item.id] }));
+                                    }}
+                                    className="text-xs font-bold text-[#708aa0] pl-7 hover:text-[#0b2d49] transition-colors focus:outline-none"
+                                >
+                                    {expandedServices[item.id] ? "Show Less" : `+ ${item.items.length - 5} more items`}
+                                </button>
+                            )}
+                        </div>
+
+
+                    </div>
+                </div>
+            );
+        } else if (activeCategory === 'venues') {
+            return (
+                <div key={item.id} className="relative bg-white rounded-[2rem] border-2 border-[#e9eff1] overflow-hidden group hover:border-[#d7a444] transition-all duration-300 hover:shadow-xl flex flex-col">
+                    <Menu />
+                    <div className="p-8 flex flex-col h-full bg-white">
+                        {/* Top Section */}
+                        <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
+                            <img
+                                src={item.image || "https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&q=80&w=800"}
+                                alt={item.name}
+                                className="w-24 h-24 rounded-full object-cover shadow-md border-4 border-white"
+                            />
+                            <div className="flex-grow">
+                                <h3 className="text-3xl font-black text-[#0b2d49] mb-3">{item.name}</h3>
+                                <div className="flex flex-wrap items-center gap-6 text-[#708aa0] font-medium text-sm">
+                                    <span className="flex items-center gap-2">
+                                        <span className="w-2.5 h-2.5 rounded-full bg-[#d7a444]"></span>
+                                        ₹{item.price} / day
+                                    </span>
+                                    <span className="flex items-center gap-2">
+                                        <BsGeoAlt size={16} />
+                                        {item.location}
+                                    </span>
+                                    <span className="flex items-center gap-2">
+                                        <BsBriefcase size={16} />
+                                        {item.capacity} Guests
+                                    </span>
+                                </div>
+                            </div>
+                            {/* Edit button moved to menu */}
+                            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto mt-4 md:mt-0 pt-8 md:pt-0">
+
+                            </div>
+                        </div>
+
+                        <div className="h-px bg-gray-100 my-8"></div>
+
+                        {/* Bottom Section */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                            {/* Statistics */}
+                            <div>
+                                <h4 className="text-lg font-black text-[#0b2d49] mb-6">Venue Statistics</h4>
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between p-5 bg-[#f8f9fa] rounded-2xl group-hover:bg-[#f0f4f8] transition-colors">
+                                        <span className="text-[#708aa0] font-bold text-sm">Seating Capacity</span>
+                                        <span className="text-[#0b2d49] font-black">{item.capacity} Guests</span>
+                                    </div>
+                                    <div className="flex items-center justify-between p-5 bg-[#f8f9fa] rounded-2xl group-hover:bg-[#f0f4f8] transition-colors">
+                                        <span className="text-[#708aa0] font-bold text-sm">Location</span>
+                                        <span className="text-[#0b2d49] font-black">{item.location}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between p-5 bg-[#f8f9fa] rounded-2xl group-hover:bg-[#f0f4f8] transition-colors">
+                                        <span className="text-[#708aa0] font-bold text-sm">Daily Rate</span>
+                                        <span className="text-[#0b2d49] font-black">₹{item.price}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Gallery Preview */}
+                            <div>
+                                <h4 className="text-lg font-black text-[#0b2d49] mb-6">Gallery Preview</h4>
+                                <div className="rounded-2xl overflow-hidden h-64 border-4 border-white shadow-sm group-hover:shadow-md transition-all">
+                                    <img src={item.image || "https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&q=80&w=800"} alt="Gallery" className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        } else {
+            // Generic Card for other services
+            return (
+                <div key={item.id} className="relative bg-white rounded-[2rem] border-2 border-[#e9eff1] overflow-hidden group hover:border-[#d7a444] transition-all duration-300 hover:shadow-xl p-8 flex flex-col">
+                    <Menu />
+                    <div className="flex justify-between items-start mb-4 pr-8">
+                        <h3 className="text-2xl font-black text-[#0b2d49]">{item.name}</h3>
+                        <span className="px-3 py-1 bg-[#e9eff1] text-[#708aa0] rounded-lg text-xs font-bold uppercase">{activeCategory}</span>
+                    </div>
+                    <div className="mb-6">
+                        <span className="text-3xl font-black text-[#0b2d49]">{item.price}</span>
+                    </div>
+                    <div className="flex-grow text-[#708aa0] font-medium mb-6">
+                        {item.description || "No description provided."}
+                    </div>
+
+                </div>
+            );
+        }
+    };
+
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+        setEditingService(null);
+    };
+
+    return (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-7xl mx-auto">
+            {/* Header */}
+            <div className="flex flex-col gap-6 border-b border-gray-100 pb-8 mb-8">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                    <div>
+                        <h1 className="text-3xl font-black tracking-tight text-[#0b2d49]">Service Management</h1>
+                        <p className="text-[#708aa0] mt-2 font-medium">Manage your {activeCategory.replace('_', ' ')} offerings</p>
+                    </div>
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="flex items-center justify-center gap-2 px-6 py-4 bg-[#0b2d49] text-white rounded-2xl font-bold hover:bg-[#d7a444] transition-all shadow-lg active:scale-95 whitespace-nowrap"
+                    >
+                        <BsPlusLg strokeWidth={1} />
+                        <span className="hidden lg:inline">Add New</span>
+                    </button>
+                </div>
+
+                {/* Scrollable Category Tabs */}
+                {visibleCategories.length > 0 && (
+                    <div className="w-full overflow-x-auto pb-4 no-scrollbar">
+                        <div className="flex gap-3 min-w-max">
+                            {visibleCategories.map((cat) => {
+                                const Icon = iconMap[cat.icon];
+                                const isActive = activeCategory === cat.id;
+                                return (
+                                    <button
+                                        key={cat.id}
+                                        onClick={() => setActiveCategory(cat.id)}
+                                        className={`px-5 py-3 rounded-2xl text-sm font-bold transition-all flex items-center gap-2 border-2 ${isActive
+                                            ? "bg-[#0b2d49] text-white border-[#0b2d49] shadow-lg shadow-[#0b2d49]/20"
+                                            : "bg-white text-[#708aa0] border-[#e9eff1] hover:border-[#d7a444] hover:text-[#0b2d49]"
+                                            }`}
+                                    >
+                                        {Icon && <Icon size={18} />}
+                                        {cat.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Content Grid */}
+            <div className={`grid gap-8 pb-20 ${activeCategory === "catering" ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : (activeCategory === "venues" ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-3")}`}>
+                {currentServices.map((item) => renderServiceCard(item))}
+
+                {/* Add New Ghost Card (Always visible) */}
+                <button
+                    onClick={() => setIsModalOpen(true)}
+                    className={`rounded-[2.5rem] border-3 border-dashed border-[#e9eff1] flex flex-col items-center justify-center p-8 text-center group hover:bg-[#f8f9fa] hover:border-[#d7a444] transition-all duration-300 ${allowedCategoryId === "catering" ? "min-h-[400px]" : (allowedCategoryId === "venues" ? "min-h-[200px]" : "min-h-[300px]")}`}
+                >
+                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center text-[#d7a444] mb-4 group-hover:scale-110 transition-transform">
+                        <BsPlusLg size={24} />
+                    </div>
+                    <h3 className="text-lg font-bold text-[#0b2d49]">Add New {allowedCategoryId === "venues" ? "Listing" : "Service"}</h3>
                 </button>
             </div>
-        </div>
 
-        <div className="overflow-x-auto">
-            <table className="w-full">
-                <thead>
-                    <tr className="bg-gray-50/50">
-                        <th className="px-8 py-4 text-left text-[10px] font-black text-[#708aa0] uppercase tracking-widest">Item Name & Description</th>
-                        <th className="px-8 py-4 text-left text-[10px] font-black text-[#708aa0] uppercase tracking-widest">Diet Category</th>
-                        <th className="px-8 py-4 text-left text-[10px] font-black text-[#708aa0] uppercase tracking-widest">Price / Person</th>
-                        <th className="px-8 py-4 text-right text-[10px] font-black text-[#708aa0] uppercase tracking-widest">Actions</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                    {filteredMenuItems.length > 0 ? filteredMenuItems.map((item) => (
-                        <tr key={item.id} className="hover:bg-gray-50/30 transition-all group">
-                            <td className="px-8 py-6">
-                                <h4 className="font-black text-[#0b2d49] mb-1">{item.name}</h4>
-                                <p className="text-xs text-[#5a5b44] font-medium leading-relaxed">{item.description}</p>
-                            </td>
-                            <td className="px-8 py-6">
-                                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${item.category === 'VEG' ? 'bg-[#d7a444]/10 text-[#d7a444]' : 'bg-red-50 text-red-500'}`}>
-                                    ● {item.category}
-                                </span>
-                            </td>
-                            <td className="px-8 py-6">
-                                <span className="text-[#0b2d49] font-black">₹{item.price}</span>
-                            </td>
-                            <td className="px-8 py-6 text-right">
-                                <div className="flex justify-end gap-2">
-                                    <button className="p-2 text-[#708aa0] hover:text-[#0b2d49] hover:bg-white shadow-sm rounded-lg transition-all">
-                                        <BsPencilSquare size={16} />
-                                    </button>
-                                    <button 
-                                        onClick={() => handleDeleteItem(item.id)}
-                                        className="p-2 text-[#708aa0] hover:text-red-500 hover:bg-white shadow-sm rounded-lg transition-all"
-                                    >
-                                        <BsTrash size={16} />
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                    )) : (
-                        <tr>
-                            <td colSpan="4" className="px-8 py-20 text-center">
-                                <p className="text-[#708aa0] font-bold">No items found in this category.</p>
-                            </td>
-                        </tr>
-                    )}
-                </tbody>
-            </table>
+            <AddServiceModal
+                isOpen={isModalOpen}
+                onClose={handleCloseModal}
+                onSave={handleAddService}
+                allowedCategory={allowedCategoryId}
+                initialData={editingService}
+            />
         </div>
-      </div>
-
-      {/* Venue Section */}
-      <div className="mb-10">
-        <div className="flex items-center gap-6 mb-8">
-            <div className="w-16 h-16 bg-[#e9eff1] rounded-[1.5rem] flex items-center justify-center text-[#d7a444] shadow-inner">
-                <BsShop size={28} />
-            </div>
-            <div>
-                <h2 className="text-xl font-black">Venue Listings</h2>
-                <p className="text-sm text-[#708aa0] font-medium">Manage your event spaces and capacities</p>
-            </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {venues.map((venue) => (
-                <div key={venue.id} className="bg-white rounded-[2.5rem] shadow-sm border border-[#708aa0]/5 overflow-hidden group hover:shadow-xl hover:shadow-[#0b2d49]/5 transition-all duration-500">
-                    <div className="relative h-64">
-                        <img src={venue.image} alt={venue.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                        <div className="absolute top-6 right-6 px-4 py-2 bg-white/90 backdrop-blur-md rounded-xl shadow-lg border border-white/20">
-                            <span className="text-xs font-black text-[#0b2d49] uppercase tracking-tighter flex items-center gap-2">
-                                <div className="w-2 h-2 bg-[#d7a444] rounded-full animate-pulse"></div>
-                                {venue.capacity} Cap.
-                            </span>
-                        </div>
-                    </div>
-                    <div className="p-8">
-                        <h3 className="text-lg font-black text-[#0b2d49] mb-1">{venue.name}</h3>
-                        <div className="flex items-center gap-2 text-sm text-[#708aa0] font-medium mb-4">
-                            <BsGeoAlt /> {venue.location}
-                        </div>
-                        <div className="flex items-center justify-between pt-4 border-t border-gray-50">
-                            <span className="text-[#d7a444] font-black text-lg">₹{venue.price} / day</span>
-                            <button className="p-2 text-[#708aa0] hover:text-[#0b2d49] hover:bg-gray-50 rounded-xl transition-all">
-                                <BsGear size={20} />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            ))}
-
-            {/* List New Venue Card */}
-            <button 
-                onClick={handleAddVenue}
-                className="bg-[#e9eff1]/30 border-2 border-dashed border-[#708aa0]/20 rounded-[2.5rem] flex flex-col items-center justify-center p-8 text-center group hover:bg-[#e9eff1]/50 hover:border-[#d7a444]/50 transition-all duration-500 min-h-[400px]"
-            >
-                <div className="w-20 h-20 bg-white rounded-[2rem] shadow-sm flex items-center justify-center text-[#d7a444] mb-6 group-hover:scale-110 transition-transform duration-500">
-                    <BsPlusLg size={32} />
-                </div>
-                <h3 className="text-lg font-black text-[#0b2d49] mb-2 uppercase tracking-tight">List New Venue</h3>
-                <p className="text-xs text-[#708aa0] font-bold max-w-[200px] leading-relaxed">Add photos, capacity, and pricing to reach more event planners.</p>
-            </button>
-        </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default ServiceManagement;

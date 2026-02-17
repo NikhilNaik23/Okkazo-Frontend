@@ -220,7 +220,7 @@ const LocationPicker = ({ lat: initialLat, lng: initialLng, onSelect, className 
                 className="h-full w-full"
                 scrollWheelZoom={true}
             >
-                <ChangeView center={mapCenter} zoom={13} />
+                <ChangeView center={mapCenter} zoom={mapCenter[0] === 20.5937 && mapCenter[1] === 78.9629 ? 5 : 13} />
                 <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'

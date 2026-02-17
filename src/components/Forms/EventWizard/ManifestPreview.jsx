@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { BsCalendar, BsClock, BsGeoAlt, BsArrowRight, BsChevronDown } from 'react-icons/bs';
+import { BsCalendar, BsClock, BsGeoAlt, BsArrowRight, BsChevronDown, BsPeople } from 'react-icons/bs';
 
 const ManifestPreview = ({ formData, onBack, onConfirm }) => {
     const formattedDate = formData.date ? new Date(formData.date).toLocaleDateString('en-US', {
@@ -107,14 +107,23 @@ const ManifestPreview = ({ formData, onBack, onConfirm }) => {
             </div>
 
             {/* TOP RIGHT - EVENT DATE */}
-            <div className="absolute right-[15%] top-[30%] flex flex-col items-start">
+            <div className="absolute right-[15%] top-[25%] flex flex-col items-start">
                 <p className="text-[9px] tracking-[0.4em] font-black text-teal-900/30 uppercase mb-4">Event Date</p>
                 <div className="flex items-center gap-12">
                     <div>
                         <h3 className="text-4xl font-serif-premium italic text-teal-900">{formattedDate}</h3>
-                        <p className="text-[8px] font-bold text-teal-900/30 uppercase tracking-widest mt-1">Scheduled Window / Primary Alignment</p>
+                        <p className="text-[8px] font-bold text-teal-900/30 uppercase tracking-widest mt-1">Scheduled Window</p>
                     </div>
                     <BsCalendar className="text-2xl text-teal-900" />
+                </div>
+            </div>
+
+            {/* MIDDLE RIGHT - GUEST COUNT */}
+            <div className="absolute right-[15%] top-[50%] -translate-y-1/2 flex flex-col items-start">
+                <p className="text-[9px] tracking-[0.4em] font-black text-teal-900/30 uppercase mb-4">Guest Count</p>
+                <div className="flex items-center gap-12">
+                    <h3 className="text-4xl font-serif-premium italic text-teal-900">{formData.guests || '0'}</h3>
+                    <BsPeople className="text-2xl text-teal-900" />
                 </div>
             </div>
 
@@ -130,14 +139,14 @@ const ManifestPreview = ({ formData, onBack, onConfirm }) => {
             </div>
 
             {/* FOOTER - BACK & VENDOR SELECTION */}
-            <div className="absolute bottom-10 left-10 right-10 flex items-center justify-between">
+            <div className="fixed bottom-10 left-10 right-10 flex items-center justify-between z-50 pointer-events-none">
                 {/* Back Button where Progression was */}
                 <button
                     onClick={onBack}
-                    className="flex items-center gap-6 group"
+                    className="flex items-center gap-6 group pointer-events-auto"
                 >
                     <div className="w-12 h-12 rounded-full border border-teal-900/10 flex items-center justify-center text-teal-900 group-hover:bg-teal-50 transition-all">
-                        <BsArrowRight className="rotate-[225deg]" />
+                        <BsArrowRight className="rotate-180" />
                     </div>
                     <span className="text-[10px] font-black tracking-widest uppercase text-teal-900/40 group-hover:text-teal-900">Back</span>
                 </button>
@@ -145,9 +154,9 @@ const ManifestPreview = ({ formData, onBack, onConfirm }) => {
                 {/* Confirm Button */}
                 <button
                     onClick={onConfirm}
-                    className="flex items-center gap-8 group"
+                    className="flex items-center gap-8 group pointer-events-auto"
                 >
-                    <span className="text-5xl font-serif-premium italic text-teal-900 group-hover:text-[#09637E] transition-colors whitespace-nowrap">Category Selection</span>
+                    <span className="text-3xl md:text-5xl font-serif-premium italic text-teal-900 group-hover:text-[#09637E] transition-colors whitespace-nowrap">Category Selection</span>
                     <div className="w-[72px] h-[72px] rounded-full bg-[#09637E] flex items-center justify-center text-white shadow-2xl group-hover:bg-[#088395] transition-all group-hover:scale-105 active:scale-95">
                         <BsArrowRight size={32} />
                     </div>
