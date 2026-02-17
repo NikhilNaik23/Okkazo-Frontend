@@ -8,7 +8,9 @@ export const initialBookedEvents = [
     category: "Wedding",
     location: "City Palace, Udaipur",
     service: "Catering - Royal Rajasthani Thali (500 pax)",
-    pax: 500
+    pax: 500,
+    image: "https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=2070&auto=format&fit=crop",
+    managerUnreadCount: 3
   },
   {
     id: 2,
@@ -19,7 +21,9 @@ export const initialBookedEvents = [
     category: "Conference",
     location: "Bangalore Palace Grounds",
     service: "High-Tea & Snacks (1000 pax)",
-    pax: 1000
+    pax: 1000,
+    image: "https://images.unsplash.com/photo-1540575861501-7cf05a4b125a?q=80&w=2070&auto=format&fit=crop",
+    managerUnreadCount: 5
   },
   {
     id: 3,
@@ -30,6 +34,8 @@ export const initialBookedEvents = [
     category: "Corporate",
     location: "Taj Lands End, Mumbai",
     service: "Gourmet International Buffet",
-    pax: 250
+    pax: 250,
+    image: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?q=80&w=2069&auto=format&fit=crop",
+    managerUnreadCount: 0
   }
 ];

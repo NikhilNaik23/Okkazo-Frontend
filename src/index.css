@@ -214,3 +214,43 @@ body.map-ui-open header {
 .animate-fade-in {
     animation: fade-in 0.8s ease-out forwards;
 }
+
+/* Print Styles */
+@media print {
+    body {
+        background: white !important;
+        padding: 0;
+        margin: 0;
+    }
+
+    .no-print, 
+    nav, 
+    header, 
+    footer, 
+    button,
+    aside {
+        display: none !important;
+    }
+
+    #root {
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .printable-content {
+        visibility: visible !important;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100% !important;
+        box-shadow: none !important;
+        border: none !important;
+        padding: 2rem !important;
+        border-radius: 0 !important;
+    }
+
+    /* Target specific parts if needed */
+    .printable-content * {
+        visibility: visible !important;
+    }
+}
