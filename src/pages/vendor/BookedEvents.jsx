@@ -10,59 +10,129 @@ import {
   BsEye,
   BsThreeDots,
   BsSend,
-  BsSearch
+  BsSearch,
+  BsBell
 } from "react-icons/bs";
 import { RiCloseLine } from "react-icons/ri";
 import { toast } from "react-hot-toast";
 import { initialBookedEvents } from "../../data/bookedEventsData";
 
-const RejectionModal = ({ isOpen, onClose, onSend, eventTitle }) => {
+const EventRequestsModal = ({ isOpen, onClose, requests, onAccept, onReject }) => {
+  const navigate = useNavigate();
+  const [rejectingId, setRejectingId] = useState(null);
   const [reason, setReason] = useState("");
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0b2d49]/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={onClose}>
-      <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden flex flex-col shadow-2xl relative animate-in zoom-in duration-300 border border-white/20" onClick={(e) => e.stopPropagation()}>
-        <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-[#f8faFC]">
+      <div className="bg-[#f8faFC] rounded-[2.5rem] w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl relative animate-in zoom-in duration-300 border border-white/20" onClick={(e) => e.stopPropagation()}>
+        {/* Modal Header */}
+        <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-white">
           <div>
-            <h3 className="text-2xl font-black text-[#0b2d49] tracking-tight">Reject Request</h3>
-            <p className="text-xs font-bold text-[#708aa0] uppercase tracking-widest mt-1">{eventTitle}</p>
+            <h3 className="text-3xl font-black text-[#0b2d49] tracking-tight">Event Requests</h3>
+            <p className="text-sm font-bold text-[#708aa0] uppercase tracking-widest mt-1">{requests.length} Pending requests</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-[#d7a444] transition-all p-2 rounded-xl hover:bg-gray-100">
             <RiCloseLine size={28} />
           </button>
         </div>
-        
-        <div className="p-8 space-y-4">
-          <label className="text-sm font-black text-[#0b2d49] uppercase tracking-widest ml-1">Reason for Rejection</label>
-          <textarea 
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Please provide a brief reason for rejecting this event request..."
-            className="w-full h-40 p-5 rounded-2xl bg-[#e9eff1]/50 border-none focus:ring-2 focus:ring-[#d7a444]/20 focus:bg-white transition-all resize-none font-medium text-[#0b2d49] placeholder:text-[#708aa0]"
-          />
-        </div>
 
-        <div className="p-8 border-t border-gray-100 flex gap-4 bg-gray-50/50">
-          <button onClick={onClose} className="flex-1 py-3.5 bg-white border-2 border-[#e9eff1] text-[#0b2d49] rounded-xl font-bold hover:border-[#0b2d49] transition-all">
-            Cancel
-          </button>
-          <button 
-            disabled={!reason.trim()}
-            onClick={() => {
-              onSend(reason);
-              setReason("");
-              onClose();
-            }}
-            className={`flex-1 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95
-              ${reason.trim() 
-                ? "bg-[#0b2d49] text-white hover:bg-[#d7a444] shadow-[#0b2d49]/10" 
-                : "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"}`}
-          >
-            <span>Send Reason</span>
-            <BsSend />
-          </button>
+        {/* Modal Content */}
+        <div className="flex-1 overflow-y-auto p-8 space-y-6">
+          {requests.length > 0 ? requests.map((event) => (
+            <div key={event.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-[#708aa0]/10 transition-all hover:border-[#0b2d49]/20">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div className="flex items-center gap-6">
+                  {/* Thumbnail & Date Box */}
+                  <div className="relative shrink-0">
+                    <img 
+                      src={event.image} 
+                      alt={event.title}
+                      className="w-20 h-20 rounded-[1.5rem] object-cover border-2 border-white shadow-md"
+                    />
+                    <div className="absolute -bottom-2 -right-2 flex flex-col items-center justify-center w-10 h-10 bg-white rounded-xl shadow-lg border border-gray-100">
+                      <span className="text-[10px] font-black text-[#0b2d49] leading-none mb-0.5">{event.date}</span>
+                      <span className="text-[6px] font-bold text-[#708aa0] uppercase">{event.month}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-black text-[#0b2d49] mb-1">{event.title}</h4>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-bold text-[#708aa0]">
+                      <span className="flex items-center gap-1"><BsCalendarEvent /> {event.category}</span>
+                      <span className="flex items-center gap-1"><BsGeoAlt /> {event.location}</span>
+                      <span className="flex items-center gap-1 text-[#0b2d49]"><BsBriefcase className="text-[#10b981]" /> {event.service}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {rejectingId !== event.id ? (
+                  <div className="flex items-center gap-3 w-full md:w-auto">
+                    <button 
+                      onClick={() => navigate(`/vendor/event/${event.id}`)}
+                      className="flex-1 md:flex-none px-4 py-3 bg-white border border-gray-200 text-[#0b2d49] rounded-xl font-bold text-sm hover:border-[#0b2d49] transition-all flex items-center justify-center gap-2"
+                    >
+                      <BsEye />
+                      Details
+                    </button>
+                    <button 
+                      onClick={() => setRejectingId(event.id)}
+                      className="flex-1 md:flex-none px-6 py-3 bg-red-50 text-red-500 rounded-xl font-bold text-sm hover:bg-red-500 hover:text-white transition-all shadow-sm active:scale-95"
+                    >
+                      Reject
+                    </button>
+                    <button 
+                      onClick={() => onAccept(event.id)}
+                      className="flex-1 md:flex-none px-8 py-3 bg-[#0b2d49] text-white rounded-xl font-bold text-sm hover:bg-[#d7a444] transition-all shadow-lg shadow-[#0b2d49]/10 active:scale-95"
+                    >
+                      Accept Request
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-full md:w-[450px] animate-in slide-in-from-right-4">
+                    <div className="flex flex-col gap-3">
+                      <div className="relative">
+                        <textarea 
+                          value={reason}
+                          onChange={(e) => setReason(e.target.value)}
+                          placeholder="Please mention the reason for rejection..."
+                          className="w-full p-4 rounded-xl bg-[#e9eff1]/50 border-none focus:ring-2 focus:ring-red-500/20 focus:bg-white transition-all resize-none text-sm font-medium h-24"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => { setRejectingId(null); setReason(""); }}
+                          className="flex-1 py-2.5 bg-white border border-gray-200 text-[#708aa0] rounded-lg font-bold text-xs hover:border-[#708aa0] transition-all"
+                        >
+                          Cancel
+                        </button>
+                        <button 
+                          disabled={!reason.trim()}
+                          onClick={() => {
+                            onReject(event.id, reason);
+                            setRejectingId(null);
+                            setReason("");
+                          }}
+                          className={`flex-[2] py-2.5 rounded-lg font-bold text-xs text-white transition-all flex items-center justify-center gap-2 ${reason.trim() ? "bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20" : "bg-gray-300 cursor-not-allowed"}`}
+                        >
+                          <BsSend size={14} />
+                          Confirm Rejection
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )) : (
+            <div className="py-20 flex flex-col items-center justify-center text-center">
+              <div className="w-24 h-24 bg-[#e9eff1] rounded-full flex items-center justify-center text-[#708aa0] mb-6">
+                <BsBell size={40} />
+              </div>
+              <h4 className="text-2xl font-black text-[#0b2d49]">All Caught Up!</h4>
+              <p className="text-[#708aa0] font-bold mt-2">You don't have any pending event requests at the moment.</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -71,10 +141,8 @@ const RejectionModal = ({ isOpen, onClose, onSend, eventTitle }) => {
 
 const BookedEvents = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("All Requests");
   const [searchQuery, setSearchQuery] = useState("");
-  const [rejectionModalData, setRejectionModalData] = useState({ isOpen: false, event: null });
-
+  const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
   const [bookedEventsData, setBookedEventsData] = useState(initialBookedEvents);
 
   const stats = {
@@ -83,13 +151,13 @@ const BookedEvents = () => {
   };
 
   const filteredEvents = bookedEventsData.filter(event => {
-    const matchesTab = activeTab === "All Requests" || 
-                      (activeTab === "Pending" && event.status === "PENDING") || 
-                      (activeTab === "Confirmed" && event.status === "CONFIRMED");
+    const isConfirmed = event.status === "CONFIRMED";
     const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
                          event.location.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesTab && matchesSearch;
+    return isConfirmed && matchesSearch;
   });
+
+  const pendingRequests = bookedEventsData.filter(e => e.status === "PENDING");
 
   const handleAccept = (eventId) => {
     setBookedEventsData(prev => prev.map(event => 
@@ -100,10 +168,9 @@ const BookedEvents = () => {
     });
   };
 
-  const handleReject = (reason) => {
-    const eventId = rejectionModalData.event?.id;
+  const handleReject = (eventId, reason) => {
     setBookedEventsData(prev => prev.filter(event => event.id !== eventId));
-    toast.error("Event request rejected and reason sent.", {
+    toast.error("Event request rejected. Reason: " + reason, {
         icon: '🚫',
         style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' }
     });
@@ -116,152 +183,155 @@ const BookedEvents = () => {
         <BsSearch className="text-[#708aa0] ml-2" size={20} />
         <input 
             type="text" 
-            placeholder="Search events by name or location..." 
+            placeholder="Search confirmed events by name or location..." 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="flex-1 bg-transparent border-none focus:ring-0 text-lg font-bold text-[#0b2d49] placeholder:text-[#708aa0]"
         />
       </div>
 
-      {/* Header & Filters */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
-        <h1 className="text-3xl font-black tracking-tight">Booked Events</h1>
-        
-        <div className="flex flex-wrap items-center gap-6">
-            <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-[#708aa0]/10">
-                {["All Requests", "Pending", "Confirmed"].map((tab) => (
-                    <button 
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all duration-300 ${activeTab === tab ? 'bg-[#0b2d49] text-white shadow-lg' : 'text-[#708aa0] hover:text-[#0b2d49]'}`}
-                    >
-                        {tab}
-                    </button>
-                ))}
-            </div>
-
-            <div className="flex items-center gap-4 text-xs font-black uppercase tracking-widest">
-                <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-[#d7a444] rounded-full"></span>
-                    <span className="text-[#d7a444]">{stats.pending} Pending</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 bg-[#0b2d49] rounded-full"></span>
-                    <span className="text-[#0b2d49]">{stats.confirmed} Confirmed</span>
-                </div>
-            </div>
+      {/* Header & Action */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6 px-2">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-[#0b2d49]">Booked Events</h1>
+          <p className="text-sm font-bold text-[#708aa0] mt-1 flex items-center gap-2">
+            <span className="w-2 h-2 bg-[#0b2d49] rounded-full"></span>
+            Manage your {stats.confirmed} confirmed event bookings
+          </p>
         </div>
+        
+        <button 
+          onClick={() => setIsRequestsModalOpen(true)}
+          className="relative group flex items-center gap-3 px-8 py-4 bg-[#0b2d49] text-white rounded-2xl font-bold text-sm shadow-xl shadow-[#0b2d49]/10 hover:bg-[#d7a444] transition-all active:scale-95"
+        >
+          <BsBell size={18} className={stats.pending > 0 ? "animate-bounce" : ""} />
+          <span>Event Requests</span>
+          {stats.pending > 0 && (
+            <span className="flex items-center justify-center min-w-[22px] h-[22px] px-1 bg-red-500 text-white text-[10px] font-black rounded-full ring-4 ring-[#f8f9fa] shadow-lg">
+              {stats.pending}
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* Events List */}
-      <div className="space-y-6">
+      {/* Confirmed Events Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {filteredEvents.length > 0 ? filteredEvents.map((event) => (
-          <div key={event.id} className="bg-white p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-[#708aa0]/5 hover:shadow-xl hover:shadow-[#0b2d49]/5 transition-all duration-500 group">
-            <div className="flex flex-col md:flex-row items-start md:items-center gap-8">
-              {/* Date Box */}
-              <div className="flex flex-col items-center justify-center w-24 h-24 bg-[#e9eff1] rounded-[2rem] border border-white shadow-inner shrink-0 group-hover:bg-[#f3ddb1]/30 transition-colors">
-                <span className="text-2xl font-black text-[#0b2d49] tracking-tighter">{event.date}</span>
-                <span className="text-[10px] font-bold text-[#708aa0] uppercase tracking-widest">{event.month}</span>
-              </div>
-
-              {/* Event Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-xl font-black truncate">{event.title}</h3>
-                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-tighter ${event.status === 'PENDING' ? 'bg-[#f3ddb1] text-[#d7a444]' : 'bg-[#e9eff1] text-[#0b2d49]'}`}>
-                        {event.status}
-                    </span>
+          <div key={event.id} className="bg-white rounded-[2.5rem] shadow-sm border border-[#708aa0]/5 hover:shadow-2xl hover:shadow-[#0b2d49]/10 transition-all duration-500 group overflow-hidden flex flex-col">
+            {/* Image Header */}
+            <div className="relative h-48 overflow-hidden">
+                <img 
+                    src={event.image} 
+                    alt={event.title}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0b2d49]/40 to-transparent"></div>
+                <div className="absolute top-4 left-4 flex flex-col items-center justify-center w-14 h-14 bg-white/90 backdrop-blur-md rounded-2xl shadow-lg">
+                  <span className="text-lg font-black text-[#0b2d49] leading-none mb-0.5">{event.date}</span>
+                  <span className="text-[8px] font-bold text-[#708aa0] uppercase tracking-tighter">{event.month}</span>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-6">
-                    <div className="flex items-center gap-2 text-sm text-[#5a5b44] font-medium">
-                        <BsCalendarEvent className="text-[#708aa0]" />
-                        <span>{event.category}</span>
-                        <span className="w-1.5 h-1.5 bg-[#708aa0]/30 rounded-full mx-1"></span>
-                        <BsGeoAlt className="text-[#708aa0]" />
-                        <span className="truncate">{event.location}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-[#0b2d49] font-bold">
-                        <BsBriefcase className="text-[#10b981]" />
-                        <span>{event.service}</span>
-                    </div>
+                {/* Manager Chat Notification Icon */}
+                <div 
+                  className="absolute top-4 right-4 cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate("/vendor/messages");
+                  }}
+                >
+                  <div className="relative p-2.5 bg-white/90 backdrop-blur-md rounded-xl shadow-lg hover:bg-white transition-all text-[#0b2d49]">
+                    <BsChatDots size={20} />
+                    {event.managerUnreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center ring-2 ring-white">
+                        {event.managerUnreadCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+            </div>
+
+            <div className="p-8 flex-1">
+              <div className="flex justify-between items-start mb-4">
+                <span className="text-[10px] font-bold px-3 py-1 bg-[#e9eff1] text-[#0b2d49] rounded-lg uppercase tracking-widest">
+                  {event.category}
+                </span>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button className="p-2.5 bg-gray-50 text-[#708aa0] rounded-xl hover:bg-[#0b2d49] hover:text-white transition-all">
+                        <BsThreeDots />
+                    </button>
                 </div>
               </div>
 
-              {/* Actions */}
-              <div className="flex items-center gap-3 w-full md:w-auto shrink-0 mt-4 md:mt-0">
-                {event.status === 'PENDING' ? (
-                    <>
-                        <button 
-                            onClick={() => navigate(`/vendor/event/${event.id}`)}
-                            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3.5 bg-white border-2 border-[#e9eff1] text-[#0b2d49] rounded-2xl font-bold text-sm hover:border-[#0b2d49] transition-all group/btn"
-                        >
-                            <BsEye className="group-hover/btn:scale-110 transition-transform" />
-                            View Details
-                        </button>
-                        <button 
-                            onClick={() => setRejectionModalData({ isOpen: true, event })}
-                            className="flex items-center justify-center px-4 py-3.5 bg-red-50 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-all shadow-sm"
-                        >
-                            <BsXCircle size={18} />
-                        </button>
-                        <button 
-                            onClick={() => handleAccept(event.id)}
-                            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-8 py-3.5 bg-[#0b2d49] text-white rounded-2xl font-bold text-sm shadow-lg shadow-[#0b2d49]/10 hover:bg-[#d7a444] transition-all hover:-translate-y-0.5"
-                        >
-                            <BsCheckCircle />
-                            Accept
-                        </button>
-                    </>
-                ) : (
-                    <>
-                        <button 
-                            onClick={() => navigate("/vendor/messages")}
-                            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-8 py-3.5 bg-[#0b2d49] text-white rounded-2xl font-bold text-sm shadow-lg shadow-[#0b2d49]/10 hover:bg-[#d7a444] transition-all flex-row-reverse"
-                        >
-                            Chat
-                            <BsChatDots />
-                        </button>
-                        <button 
-                            onClick={() => navigate(`/vendor/event/${event.id}`)}
-                            className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3.5 bg-white border-2 border-[#e9eff1] text-[#0b2d49] rounded-2xl font-bold text-sm hover:border-[#0b2d49] transition-all group/btn"
-                        >
-                            <BsEye className="group-hover/btn:scale-110 transition-transform" />
-                            View Details
-                        </button>
-                        <button className="p-3.5 bg-gray-50 text-[#708aa0] rounded-2xl hover:bg-white hover:text-[#0b2d49] hover:shadow-md transition-all border border-transparent hover:border-[#708aa0]/10">
-                            <BsThreeDots />
-                        </button>
-                    </>
-                )}
+              <h3 
+                className="text-xl font-black text-[#0b2d49] mb-4 line-clamp-2 leading-tight group-hover:text-[#d7a444] transition-colors cursor-pointer"
+                onClick={() => navigate(`/vendor/event/${event.id}`)}
+              >
+                {event.title}
+              </h3>
+              
+              <div className="space-y-4 mb-2">
+                <div className="flex items-center gap-3 text-xs text-[#708aa0] font-bold">
+                  <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
+                    <BsGeoAlt size={14} />
+                  </div>
+                  <span className="truncate">{event.location}</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-[#0b2d49] font-black">
+                  <div className="w-8 h-8 rounded-lg bg-[#10b981]/10 flex items-center justify-center shrink-0">
+                    <BsBriefcase size={14} className="text-[#10b981]" />
+                  </div>
+                  <span className="truncate">{event.service}</span>
+                </div>
               </div>
+            </div>
+
+            <div className="p-5 bg-gray-50/50 border-t border-gray-100">
+              <button 
+                onClick={() => navigate(`/vendor/event/${event.id}`)}
+                className="w-full py-4 bg-[#0b2d49] text-white rounded-2xl font-bold text-sm hover:bg-[#d7a444] transition-all flex items-center justify-center gap-3 shadow-lg shadow-[#0b2d49]/10 active:scale-[0.98]"
+              >
+                <BsEye size={18} />
+                View Event Details
+              </button>
             </div>
           </div>
         )) : (
-            <div className="p-20 flex flex-col items-center justify-center text-center bg-white rounded-[3rem] border border-[#708aa0]/5">
-                <div className="w-20 h-20 bg-[#e9eff1] rounded-full flex items-center justify-center text-[#708aa0] mb-6">
-                    <BsCalendarEvent size={32} />
+            <div className="col-span-full p-20 flex flex-col items-center justify-center text-center bg-white rounded-[3rem] border border-[#708aa0]/10">
+                <div className="w-24 h-24 bg-[#e9eff1] rounded-full flex items-center justify-center text-[#708aa0] mb-8">
+                    <BsCalendarEvent size={40} />
                 </div>
-                <h3 className="text-xl font-black text-[#0b2d49]">No events found</h3>
-                <p className="text-sm text-[#708aa0] font-bold mt-2">Try adjusting your search or filters to see more results.</p>
-            </div>
-        )}
-
-        {filteredEvents.length > 0 && (
-            <div className="pt-4 flex justify-center">
-                <button className="px-10 py-4 bg-white/50 backdrop-blur-sm border border-[#708aa0]/10 rounded-2xl text-[#0b2d49] font-bold text-sm hover:bg-white hover:shadow-lg transition-all active:scale-95">
-                    Load 12 more events
-                </button>
+                <h3 className="text-2xl font-black text-[#0b2d49]">No Confirmed Events</h3>
+                <p className="text-sm text-[#708aa0] font-bold mt-2 max-w-md mx-auto">
+                    When you accept event requests, they will appear here as confirmed bookings.
+                </p>
+                {searchQuery && (
+                  <button 
+                    onClick={() => setSearchQuery("")}
+                    className="mt-6 text-[#d7a444] font-black text-sm hover:underline"
+                  >
+                    Clear Search
+                  </button>
+                )}
             </div>
         )}
       </div>
 
-      {/* Rejection Modal */}
-      <RejectionModal 
-        isOpen={rejectionModalData.isOpen}
-        onClose={() => setRejectionModalData({ isOpen: false, event: null })}
-        onSend={handleReject}
-        eventTitle={rejectionModalData.event?.title}
+      {/* Load More Button */}
+      {filteredEvents.length > 0 && filteredEvents.length >= 3 && (
+        <div className="mt-12 flex justify-center">
+            <button className="px-10 py-4 bg-white border border-[#708aa0]/10 rounded-2xl text-[#0b2d49] font-black text-sm hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 shadow-sm">
+                Load More Events
+            </button>
+        </div>
+      )}
+
+      {/* Event Requests Modal */}
+      <EventRequestsModal 
+        isOpen={isRequestsModalOpen}
+        onClose={() => setIsRequestsModalOpen(false)}
+        requests={pendingRequests}
+        onAccept={handleAccept}
+        onReject={handleReject}
       />
     </div>
   );
