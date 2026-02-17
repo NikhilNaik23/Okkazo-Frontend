@@ -9,6 +9,32 @@ import {
     PaymentMethodSelector
 } from './Payment';
 
+const PaymentFormInput = ({ name, label, value, placeholder, maxLength, onChange, onFocus, onBlur, error, type = 'text', showIcon = false, iconComponent: IconComponent }) => (
+    <div className="relative group">
+        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2 block group-focus-within:text-[#09637E] transition-colors flex justify-between">
+            {label}
+            {error && <span className="text-red-500 font-bold">{error}</span>}
+        </label>
+        <div className="relative">
+            <input
+                type={type}
+                name={name}
+                value={value}
+                onChange={onChange}
+                onFocus={onFocus}
+                onBlur={onBlur}
+                placeholder={placeholder}
+                maxLength={maxLength}
+                className={`w-full bg-transparent border-b py-3 text-sm font-bold text-gray-800 focus:outline-none transition-all placeholder:text-gray-300 ${name === 'cardName' ? 'tracking-wider' : 'font-mono tracking-wider'} ${error ? 'border-red-300 text-red-900' : 'border-gray-200 focus:border-[#09637E]'}`}
+                required
+            />
+            {showIcon && IconComponent && (
+                <IconComponent className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-300" size={name === 'cvv' ? 14 : undefined} />
+            )}
+        </div>
+    </div>
+);
+
 const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
@@ -131,34 +157,10 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
         }, 2000);
     };
 
-    const PaymentFormInput = ({ name, label, value, placeholder, maxLength, type = 'text', showIcon = false, iconComponent: IconComponent }) => (
-        <div className="relative group">
-            <label className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2 block group-focus-within:text-[#09637E] transition-colors flex justify-between">
-                {label}
-                {errors[name] && <span className="text-red-500 font-bold">{errors[name]}</span>}
-            </label>
-            <div className="relative">
-                <input
-                    type={type}
-                    name={name}
-                    value={value}
-                    onChange={(e) => {
-                        handleInputChange(e);
-                        if (errors[name]) setErrors({ ...errors, [name]: null });
-                    }}
-                    onFocus={() => setFocusedField(name)}
-                    onBlur={() => setFocusedField(null)}
-                    placeholder={placeholder}
-                    maxLength={maxLength}
-                    className={`w-full bg-transparent border-b py-3 text-sm font-bold text-gray-800 focus:outline-none transition-all placeholder:text-gray-300 ${name === 'cardName' ? 'tracking-wider' : 'font-mono tracking-wider'} ${errors[name] ? 'border-red-300 text-red-900' : 'border-gray-200 focus:border-[#09637E]'}`}
-                    required
-                />
-                {showIcon && IconComponent && (
-                    <IconComponent className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-300" size={name === 'cvv' ? 14 : undefined} />
-                )}
-            </div>
-        </div>
-    );
+    const handleFieldChange = (e) => {
+        handleInputChange(e);
+        if (errors[e.target.name]) setErrors({ ...errors, [e.target.name]: null });
+    };
 
     return (
         <div className="w-full min-h-screen flex items-center justify-center animate-fade-in font-sans pt-32 pb-12 px-4 box-border relative z-10">
@@ -193,12 +195,20 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                                                     name="cardName"
                                                     label="Name on Card"
                                                     value={paymentData.cardName}
+                                                    onChange={handleFieldChange}
+                                                    onFocus={() => setFocusedField('cardName')}
+                                                    onBlur={() => setFocusedField(null)}
+                                                    error={errors.cardName}
                                                     placeholder="JANE DOE"
                                                 />
                                                 <PaymentFormInput
                                                     name="cardNumber"
                                                     label="Card Number"
                                                     value={paymentData.cardNumber}
+                                                    onChange={handleFieldChange}
+                                                    onFocus={() => setFocusedField('cardNumber')}
+                                                    onBlur={() => setFocusedField(null)}
+                                                    error={errors.cardNumber}
                                                     placeholder="0000 0000 0000 0000"
                                                     maxLength="19"
                                                     showIcon
@@ -210,6 +220,10 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                                                             name="expiry"
                                                             label="Expiry"
                                                             value={paymentData.expiry}
+                                                            onChange={handleFieldChange}
+                                                            onFocus={() => setFocusedField('expiry')}
+                                                            onBlur={() => setFocusedField(null)}
+                                                            error={errors.expiry}
                                                             placeholder="MM/YY"
                                                             maxLength="5"
                                                         />
@@ -219,6 +233,10 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                                                             name="cvv"
                                                             label="CVV"
                                                             value={paymentData.cvv}
+                                                            onChange={handleFieldChange}
+                                                            onFocus={() => setFocusedField('cvv')}
+                                                            onBlur={() => setFocusedField(null)}
+                                                            error={errors.cvv}
                                                             placeholder="123"
                                                             maxLength="3"
                                                             showIcon
