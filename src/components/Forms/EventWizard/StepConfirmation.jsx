@@ -1,9 +1,10 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { BsCheck, BsArrowRight } from "react-icons/bs";
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
-const StepConfirmation = () => {
+const StepConfirmation = ({ eventId }) => {
+    const navigate = useNavigate();
     return (
         <div className="w-full h-screen bg-surface relative flex flex-col overflow-hidden">
             {/* Ambient Background */}
@@ -58,10 +59,10 @@ const StepConfirmation = () => {
                     </Link>
 
                     <button
-                        onClick={() => window.location.reload()}
+                        onClick={() => navigate(`/user/event-management/${eventId}`)}
                         className="px-10 py-4 bg-white border border-primary/10 text-primary text-xs font-black uppercase tracking-[0.2em] rounded-2xl hover:border-primary/30 hover:bg-gray-50 transition-all"
                     >
-                        Plan Another Event
+                        Track Event Status
                     </button>
                 </motion.div>
             </div>
