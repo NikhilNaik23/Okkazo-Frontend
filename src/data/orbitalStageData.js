@@ -6,7 +6,8 @@ export const steps = [
     { id: 'type', label: 'Event Type', hint: 'Nature of Event' },
     { id: 'date', label: 'Event Date', hint: 'Select Event Date' },
     { id: 'location', label: 'Event Location', hint: 'Set Venue Location' },
-    { id: 'time', label: 'Event Time', hint: 'Set Start Time' }
+    { id: 'time', label: 'Event Time', hint: 'Set Start Time' },
+    { id: 'guests', label: 'Guest Count', hint: 'Expected Attendance' }
 ];
 
 export const publicTypes = ["Concert", "Festival", "Exhibition", "Workshop", "Seminar", "Other"];

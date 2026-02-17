@@ -40,6 +40,7 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
             case 'date': return !!formData.date && formData.date >= minDateString;
             case 'location': return !!formData.locationValid;
             case 'time': return !!formData.startTime;
+            case 'guests': return !!formData.guests && formData.guests > 0;
             default: return false;
         }
     };
@@ -65,8 +66,8 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
 
                 <motion.div
                     className="absolute top-1/2 w-1"
-                    style={{ right: '15vh', transformOrigin: '-45vh center' }}
-                    animate={{ rotate: activeIndex * -15 }}
+                    style={{ right: '2vh', transformOrigin: '-58vh center' }}
+                    animate={{ rotate: activeIndex * -10 }}
                     transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                 >
                     {steps.map((step, idx) => (
@@ -77,18 +78,18 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                 right: 0,
                                 top: '50%',
                                 transformOrigin: '-45vh center',
-                                transform: `translateY(-50%) rotate(${idx * 15}deg)`,
+                                transform: `translateY(-50%) rotate(${idx * 10}deg)`,
                             }}
-                            className="flex items-center gap-6 text-right justify-end whitespace-nowrap"
+                            className="flex items-center text-right justify-end whitespace-nowrap pr-8"
                         >
                             <motion.div
                                 animate={{
                                     opacity: activeIndex === idx ? 1 : 0.15,
                                     scale: activeIndex === idx ? 1.2 : 0.85,
-                                    rotate: -(idx * 15) + (activeIndex * 15)
+                                    rotate: -(idx * 10) + (activeIndex * 10)
                                 }}
                                 transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                                className="flex items-center gap-6"
+                                className="flex items-center gap-4"
                             >
                                 <span className="text-[1.2vh] font-black tracking-[0.3em] uppercase">{step.label}</span>
                                 <div className={`w-[1.2vh] h-[1.2vh] rounded-full transition-all duration-500 ${activeIndex === idx ? 'bg-teal-700 shadow-[0_0_20px_#0f766e]' : 'bg-teal-900/20'}`} />
@@ -102,7 +103,7 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
             <ProgressIndicator activeIndex={activeIndex} totalSteps={steps.length} onSaveDraft={onSaveDraft} />
 
             {/* PORTAL CONTAINER */}
-            <div className="portal-container flex flex-col h-[70vh] justify-center z-30 pointer-events-none" style={{ position: 'absolute', left: '45vw', top: '50%', transform: 'translateY(-50%)', width: '45vw', minWidth: '400px' }}>
+            <div className="portal-container flex flex-col h-[60vh] justify-center z-30 pointer-events-none" style={{ position: 'absolute', left: '45vw', top: '45%', transform: 'translateY(-50%)', width: '45vw', minWidth: '400px' }}>
                 <div className="flex-1 overflow-visible flex flex-col justify-center pointer-events-auto">
                     <AnimatePresence mode="wait">
                         <motion.div
@@ -309,6 +310,30 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                             <span className="text-[10px] font-black uppercase tracking-widest">Event Time Secured</span>
                                         </motion.div>
                                     )}
+                                </div>
+                            )}
+
+                            {/* 7. Guests */}
+                            {currentStep.id === 'guests' && (
+                                <div className="max-w-md">
+                                    <input
+                                        autoFocus
+                                        type="number"
+                                        min="1"
+                                        className="w-full bg-transparent border-b border-teal-900/10 py-4 text-5xl font-serif-premium text-teal-900 outline-none focus:border-teal-700 transition-all placeholder:opacity-10 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                        placeholder="100"
+                                        value={formData.guests || ''}
+                                        onChange={(e) => handleChange('guests', e.target.value)}
+                                        onKeyDown={(e) => {
+                                            // Prevent non-numeric keys like e, +, -
+                                            if (['e', 'E', '+', '-'].includes(e.key)) {
+                                                e.preventDefault();
+                                            }
+                                            // Allow Navigation
+                                            if (e.key === 'Enter' && isStepValid()) handleNext();
+                                        }}
+                                    />
+                                    <p className="mt-4 text-[10px] font-bold text-teal-600/30 tracking-widest uppercase">Expected number of attendees.</p>
                                 </div>
                             )}
                         </motion.div>

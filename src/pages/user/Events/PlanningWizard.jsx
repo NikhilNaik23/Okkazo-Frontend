@@ -403,11 +403,15 @@ const PlanningWizard = () => {
 
                                 <AnimatePresence>
                                     {(!isImmersiveStep || (
+                                        formData.listingType &&
+                                        formData.title &&
+                                        formData.type &&
                                         formData.date &&
                                         formData.date >= minDateString &&
-                                        formData.startTime &&
                                         formData.locationValid &&
-                                        (formData.listingType !== 'Public' || formData.title)
+                                        formData.startTime &&
+                                        formData.guests &&
+                                        formData.guests > 0
                                     )) && (currentStep !== 2 || formData.services.length > 0) && (
                                             <motion.button
                                                 initial={isImmersiveStep ? { opacity: 0, x: 20 } : false}
