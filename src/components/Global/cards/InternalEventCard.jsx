@@ -1,5 +1,4 @@
-import React from 'react';
-import { Calendar, Clock, User, ChevronRight, ShieldCheck, MapPin } from 'lucide-react';
+import { Calendar, Clock, User, ChevronRight, ShieldCheck, MapPin, CheckCircle, X } from 'lucide-react';
 
 const InternalEventCard = ({ 
   image = 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?q=80&w=1000&auto=format&fit=crop', // Better placeholder
@@ -31,7 +30,11 @@ const InternalEventCard = ({
             <span className="w-1.5 h-1.5 rounded-full bg-[#d7a444] animate-pulse"></span>
             {category}
           </span>
-          <span className="bg-[#0b2d49]/80 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-medium text-white shadow-sm border border-white/10">
+          <span className={`${
+            status === 'VERIFIED' ? 'bg-emerald-500/90' : 
+            status === 'REJECTED' ? 'bg-rose-500/90' : 
+            'bg-[#0b2d49]/80'
+          } backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-bold text-white shadow-sm border border-white/10 uppercase tracking-wider`}>
             {status}
           </span>
         </div>
@@ -80,10 +83,20 @@ const InternalEventCard = ({
         <div className="flex gap-2 mt-auto">
           <button 
             onClick={onVerify}
-            className="flex-1 bg-[#0b2d49] hover:bg-[#d7a444] text-white font-semibold py-2 px-3 rounded-lg transition-all duration-300 shadow-md shadow-[#0b2d49]/10 hover:shadow-[#d7a444]/20 flex items-center justify-center gap-1.5 group/btn text-xs"
+            className={`flex-1 ${
+              status === 'VERIFIED' ? 'bg-[#28a785]' : 
+              status === 'REJECTED' ? 'bg-rose-500' : 
+              'bg-[#0b2d49]'
+            } hover:opacity-90 text-white font-semibold py-2 px-3 rounded-lg transition-all duration-300 shadow-md flex items-center justify-center gap-1.5 group/btn text-xs`}
           >
-            <ShieldCheck size={14} />
-            <span>Verify</span>
+            {status === 'VERIFIED' ? <CheckCircle size={14} /> : 
+             status === 'REJECTED' ? <X size={14} /> : 
+             <ShieldCheck size={14} />}
+            <span>
+              {status === 'VERIFIED' ? 'Verified' : 
+               status === 'REJECTED' ? 'Rejected' : 
+               'Verify'}
+            </span>
           </button>
           
           <button 
