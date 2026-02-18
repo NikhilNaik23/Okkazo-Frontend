@@ -111,28 +111,36 @@ const LocationPicker = ({ lat: initialLat, lng: initialLng, onSelect, className 
     const [mapCenter, setMapCenter] = useState(initialLat && initialLng ? [initialLat, initialLng] : [20.5937, 78.9629]);
     const [markerPos, setMarkerPos] = useState(initialLat && initialLng ? { lat: initialLat, lng: initialLng } : null);
 
+    // Sync with external coordinate changes (e.g. from Google Maps link)
+    useEffect(() => {
+        if (initialLat && initialLng) {
+            setMapCenter([initialLat, initialLng]);
+            setMarkerPos({ lat: initialLat, lng: initialLng });
+        }
+    }, [initialLat, initialLng]);
+
+    const triggerSearch = async (query) => {
+        if (!query || query.length < 3) return;
+        setIsLoading(true);
+        try {
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`,
+                { headers: { 'User-Agent': 'Okkazo-Frontend/1.0 (nikhilnaik023@gmail.com)' } }
+            );
+            const data = await response.json();
+            setSuggestions(data);
+        } catch (error) {
+            console.error("Search error:", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // Debounced search logic
     useEffect(() => {
-        const timer = setTimeout(async () => {
-            if (searchQuery.length < 3) {
-                setSuggestions([]);
-                return;
-            }
-
-            setIsLoading(true);
-            try {
-                const response = await fetch(
-                    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5&addressdetails=1`,
-                    { headers: { 'User-Agent': 'Okkazo-Frontend/1.0 (nikhilnaik023@gmail.com)' } }
-                );
-                const data = await response.json();
-                setSuggestions(data);
-            } catch (error) {
-                console.error("Search error:", error);
-            } finally {
-                setIsLoading(false);
-            }
-        }, 500); // 500ms debounce
+        const timer = setTimeout(() => {
+            triggerSearch(searchQuery);
+        }, 800);
 
         return () => clearTimeout(timer);
     }, [searchQuery]);
@@ -167,8 +175,8 @@ const LocationPicker = ({ lat: initialLat, lng: initialLng, onSelect, className 
 
     return (
         <div className={className || "h-80 w-full rounded-2xl overflow-visible border border-gray-200 relative z-0 bg-gray-100"}>
-            {/* Search Bar Overlay - Float into the header area */}
-            <div className="absolute top-[-75px] left-[320px] w-full max-w-md z-[1000] hidden md:block">
+            {/* Search Bar Overlay - Integrated into the map area top-left */}
+            <div className="absolute top-4 left-4 right-4 md:right-auto md:w-full md:max-w-md z-[1000]">
                 <div className="relative group">
                     <div className="absolute left-5 top-1/2 -translate-y-1/2 text-teal-900/30 group-focus-within:text-teal-700 transition-colors">
                         <BsSearch size={16} />
@@ -176,9 +184,10 @@ const LocationPicker = ({ lat: initialLat, lng: initialLng, onSelect, className 
                     <input
                         type="text"
                         placeholder="Search for a venue or city..."
-                        className="w-full h-12 pl-14 pr-12 bg-[#eff6f7]/50 focus:bg-white backdrop-blur-xl border border-teal-900/5 shadow-sm rounded-2xl outline-none text-teal-900 font-medium placeholder:text-teal-900/20 focus:ring-2 focus:ring-teal-700/10 transition-all"
+                        className="w-full h-12 pl-14 pr-12 bg-white backdrop-blur-xl border border-teal-900/10 shadow-xl rounded-2xl outline-none text-teal-900 font-medium placeholder:text-teal-900/20 focus:ring-2 focus:ring-teal-700/20 transition-all"
                         value={searchQuery}
                         onChange={(e) => handleSearchInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && triggerSearch(searchQuery)}
                     />
                     {searchQuery && (
                         <button
@@ -220,7 +229,7 @@ const LocationPicker = ({ lat: initialLat, lng: initialLng, onSelect, className 
                 className="h-full w-full"
                 scrollWheelZoom={true}
             >
-                <ChangeView center={mapCenter} zoom={mapCenter[0] === 20.5937 && mapCenter[1] === 78.9629 ? 5 : 13} />
+                <ChangeView center={mapCenter} zoom={(mapCenter[0] === 20.5937 || mapCenter[0] === 28.6139) ? 5 : 13} />
                 <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'

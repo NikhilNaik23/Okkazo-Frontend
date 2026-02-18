@@ -1,13 +1,17 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BsXLg, BsStarFill, BsCheck } from 'react-icons/bs';
+import { BsXLg, BsStarFill, BsCheck, BsArrowRight } from 'react-icons/bs';
 import { BsGlobe, BsTelephone, BsEnvelope, BsInstagram } from 'react-icons/bs';
 import { MdLocationOn } from 'react-icons/md';
 import ReviewsTab from './ReviewsTab';
-import { servicePackages, vendorHighlights } from '../../../../data/vendorSelectionData';
+import { categoryPackages, servicePackages as defaultPackages, vendorHighlights } from '../../../../data/vendorSelectionData';
 
-const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected, priceMultiplier = 1 }) => {
-    const [activeTab, setActiveTab] = React.useState('Overview');
+const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected, priceMultiplier = 1, guestCount = 0 }) => {
+    const [activeTab, setActiveTab] = React.useState('Services');
+    const [expandedPackageId, setExpandedPackageId] = React.useState(null);
+
+    const currentPackages = vendor ? (categoryPackages[vendor.category] || defaultPackages) : [];
+    const expandedPackage = currentPackages.find(p => p.id === expandedPackageId);
 
     React.useEffect(() => {
         if (!vendor) return;
@@ -65,15 +69,17 @@ const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected, priceMultip
                         </div>
 
                         <h2 className="text-4xl font-serif-premium italic mb-2 leading-tight">{vendor.name}</h2>
-                        <p className="text-white/70 text-sm font-medium flex items-center gap-2 mb-8 tracking-wide uppercase text-[11px]">
+                        <p className="text-white/70 text-sm font-medium flex items-center gap-2 mb-4 tracking-wide uppercase text-[11px]">
                             <MdLocationOn className="text-secondary" size={16} /> {vendor.location}
                         </p>
+                        {vendor.capacity && (
+                            <p className="text-white/70 text-sm font-medium flex items-center gap-2 mb-8 tracking-wide uppercase text-[11px]">
+                                <span className="bg-secondary/20 px-2 py-1 rounded text-white font-bold">Capacity: {vendor.capacity} Guests</span>
+                            </p>
+                        )}
 
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
-                                <span className="text-[10px] uppercase tracking-widest opacity-60 block mb-1">Range</span>
-                                <span className="text-xl font-serif-premium">₹{(originalMin => originalMin >= 1000 ? (originalMin / 1000).toFixed(0) + 'k' : originalMin)(priceMin)} - ₹{(originalMax => originalMax >= 1000 ? (originalMax / 1000).toFixed(0) + 'k' : originalMax)(priceMax)}</span>
-                            </div>
+
                             <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
                                 <span className="text-[10px] uppercase tracking-widest opacity-60 block mb-1">Rating</span>
                                 <div className="flex items-center gap-2">
@@ -152,35 +158,144 @@ const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected, priceMultip
                                     </section>
                                 </motion.div>
                             )}
-                            {/* Services Tab */}
                             {activeTab === 'Services' && (
                                 <motion.div
                                     key="Services"
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, y: -10 }}
-                                    className="absolute inset-0 overflow-y-auto p-10 space-y-8 scrollbar-thin scrollbar-thumb-gray-200"
+                                    className="absolute inset-0 overflow-y-auto p-10 scrollbar-thin scrollbar-thumb-gray-200"
                                 >
-                                    <div className="space-y-6">
-                                        <h3 className="text-2xl font-serif-premium text-primary">Offered Services</h3>
-                                        <p className="text-gray-400 text-xs uppercase tracking-widest font-bold">Standard Packages</p>
+                                    <div className="space-y-8 pb-10">
+                                        {!expandedPackageId ? (
+                                            <>
+                                                <div>
+                                                    <h3 className="text-2xl font-serif-premium text-primary mb-2">Offered Packages</h3>
+                                                    <p className="text-gray-400 text-xs uppercase tracking-widest font-bold">Select a tier for your event ({guestCount} Guests)</p>
+                                                </div>
 
-                                        <div className="grid grid-cols-1 gap-4">
-                                            {servicePackages.map((service, i) => (
-                                                <div key={i} className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:border-primary/20 hover:bg-gray-50 transition-all group">
-                                                    <div className="flex items-start gap-4">
-                                                        <div className="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-primary mt-1">
-                                                            <BsCheck />
-                                                        </div>
+                                                <div className="grid grid-cols-1 gap-6">
+                                                    {currentPackages.map((pkg, i) => {
+                                                        const isPerUnit = pkg.unit?.toLowerCase().includes('plate') || pkg.unit?.toLowerCase().includes('person');
+                                                        const displayPrice = pkg.price * priceMultiplier;
+
+                                                        return (
+                                                            <div key={pkg.id} className="p-6 rounded-2xl border border-gray-100 hover:border-primary/20 hover:bg-gray-50 transition-all group flex flex-col relative overflow-hidden">
+                                                                <div className="flex justify-between items-start mb-4">
+                                                                    <div>
+                                                                        <span className="inline-block px-3 py-1 rounded-full bg-surface border border-primary/10 text-[9px] font-bold uppercase tracking-widest text-primary mb-2">
+                                                                            {pkg.tier}
+                                                                        </span>
+                                                                        <h4 className="text-xl font-bold text-primary group-hover:text-secondary transition-colors">{pkg.name}</h4>
+                                                                    </div>
+                                                                    <div className="text-right">
+                                                                        <span className="block text-2xl font-serif-premium text-primary">₹{displayPrice.toLocaleString()}</span>
+                                                                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">/ {pkg.unit || 'Event'}</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                <p className="text-sm text-gray-500 mb-6 leading-relaxed">{pkg.desc}</p>
+
+
+
+                                                                <div className="grid grid-cols-2 gap-4 mt-auto">
+                                                                    <button
+                                                                        onClick={() => setExpandedPackageId(pkg.id)}
+                                                                        className="py-3 rounded-xl border border-primary/10 text-primary font-bold text-[10px] uppercase tracking-widest hover:bg-white hover:border-primary/30 transition-colors"
+                                                                    >
+                                                                        Explore
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            const isPerUnit = pkg.unit?.toLowerCase().includes('plate') || pkg.unit?.toLowerCase().includes('person');
+                                                                            const unitMultiplier = isPerUnit ? (guestCount || 1) : 1;
+
+                                                                            const updatedVendor = {
+                                                                                ...vendor,
+                                                                                priceMin: pkg.price * unitMultiplier,
+                                                                                priceMax: pkg.price * unitMultiplier * 1.2,
+                                                                                selectedPackage: pkg
+                                                                            };
+                                                                            onSelect(updatedVendor);
+                                                                            onClose();
+                                                                        }}
+                                                                        className="py-3 rounded-xl bg-primary text-white font-bold text-[10px] uppercase tracking-widest hover:bg-secondary transition-colors shadow-lg shadow-primary/20"
+                                                                    >
+                                                                        Add Combined
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div className="animate-fade-in">
+                                                <button
+                                                    onClick={() => setExpandedPackageId(null)}
+                                                    className="group flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-primary/60 hover:text-primary mb-8 transition-colors"
+                                                >
+                                                    <span className="w-6 h-6 rounded-full border border-primary/20 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-all">←</span>
+                                                    Back to Packages
+                                                </button>
+
+                                                <div className="bg-surface rounded-3xl p-8 border border-primary/5">
+                                                    <div className="flex justify-between items-start mb-8 border-b border-primary/5 pb-8">
                                                         <div>
-                                                            <h4 className="text-sm font-bold text-primary group-hover:text-secondary transition-colors">{service.name}</h4>
-                                                            <p className="text-xs text-gray-400 mt-1">{service.desc}</p>
+                                                            <span className="text-secondary font-serif-premium italic text-lg mb-1 block">Selected Tier</span>
+                                                            <h2 className="text-3xl md:text-4xl font-bold text-primary mb-2">{expandedPackage.name}</h2>
+                                                            <p className="text-gray-500">{expandedPackage.desc}</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="text-4xl font-serif-premium text-primary">₹{(expandedPackage.price * priceMultiplier).toLocaleString()}</div>
+                                                            <div className="text-xs font-bold uppercase tracking-widest text-gray-400">/ {expandedPackage.unit || 'Event'}</div>
                                                         </div>
                                                     </div>
-                                                    <span className="text-sm font-bold text-primary">₹{(service.price * (vendor.priceMultiplier || 1)).toLocaleString()}</span>
+
+                                                    <h3 className="text-sm font-bold uppercase tracking-widest text-primary mb-6">Complete Inclusions</h3>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+                                                        {expandedPackage.includes.map((item, idx) => (
+                                                            <div key={idx} className="flex items-start gap-3 p-4 bg-white rounded-xl border border-gray-100">
+                                                                <div className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
+                                                                    <BsCheck size={12} strokeWidth={1} />
+                                                                </div>
+                                                                <span className="text-sm text-gray-600 font-medium">{item}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+
+                                                    <div className="flex justify-between items-center bg-primary/5 p-6 rounded-2xl border border-primary/10">
+                                                        <div>
+                                                            <span className="block text-[10px] font-bold uppercase tracking-widest text-primary/60 mb-1">Total Estimated Cost</span>
+                                                            <div className="text-2xl font-serif-premium text-primary">
+                                                                ₹{(expandedPackage.price * priceMultiplier * ((expandedPackage.unit?.toLowerCase().includes('plate') || expandedPackage.unit?.toLowerCase().includes('person')) ? (guestCount || 1) : 1)).toLocaleString()}
+                                                            </div>
+                                                            <span className="text-xs text-gray-500">
+                                                                {(expandedPackage.unit?.toLowerCase().includes('plate') || expandedPackage.unit?.toLowerCase().includes('person')) ? `For ${guestCount} guests` : 'Fixed Event Price'}
+                                                            </span>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => {
+                                                                const isPerUnit = expandedPackage.unit?.toLowerCase().includes('plate') || expandedPackage.unit?.toLowerCase().includes('person');
+                                                                const unitMultiplier = isPerUnit ? (guestCount || 1) : 1;
+
+                                                                const updatedVendor = {
+                                                                    ...vendor,
+                                                                    priceMin: expandedPackage.price * unitMultiplier,
+                                                                    priceMax: expandedPackage.price * unitMultiplier * 1.2,
+                                                                    selectedPackage: expandedPackage
+                                                                };
+                                                                onSelect(updatedVendor);
+                                                                onClose();
+                                                            }}
+                                                            className="px-8 py-4 bg-primary text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-secondary transition-colors shadow-lg"
+                                                        >
+                                                            Add to Event
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                            ))}
-                                        </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </motion.div>
                             )}
@@ -191,26 +306,7 @@ const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected, priceMultip
                         </AnimatePresence>
                     </div>
 
-                    {/* Footer Action */}
-                    <div className="p-8 border-t border-gray-100 bg-white mt-auto shrink-0 z-20">
-                        <button
-                            onClick={() => {
-                                onSelect();
-                                onClose();
-                            }}
-                            disabled={isSelected}
-                            className={`w-full py-5 rounded-2xl text-[11px] font-bold uppercase tracking-[0.25em] transition-all shadow-xl flex items-center justify-center gap-4
-                            ${isSelected
-                                    ? 'bg-secondary text-white cursor-default opacity-90'
-                                    : 'bg-primary text-white hover:bg-secondary hover:shadow-2xl hover:-translate-y-1 active:translate-y-0'}`}
-                        >
-                            {isSelected ? (
-                                <span className="flex items-center gap-3"><BsCheck size={20} /> Currently Selected</span>
-                            ) : (
-                                <span>Add to Event</span>
-                            )}
-                        </button>
-                    </div>
+
                 </div>
             </motion.div>
         </motion.div>

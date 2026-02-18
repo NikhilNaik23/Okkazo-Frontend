@@ -1,13 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { BsStarFill, BsCheck, BsArrowRight } from 'react-icons/bs';
-import { formatPrice } from '../../../../data/vendorSelectionData';
+import { BsStarFill, BsCheck } from 'react-icons/bs';
 
-const VendorCard = ({ vendor, isSelected, onSelect, onViewDetails, priceMultiplier = 1 }) => {
-    // Generate Range Price
-    const priceMin = (vendor.priceMin || 0) * priceMultiplier;
-    const priceMax = (vendor.priceMax || Math.round((vendor.priceMin || 0) * 1.5)) * priceMultiplier;
-
+const VendorCard = ({ vendor, isSelected, onViewDetails }) => {
     return (
         <motion.div
             layout
@@ -43,48 +38,31 @@ const VendorCard = ({ vendor, isSelected, onSelect, onViewDetails, priceMultipli
 
             {/* Content Section */}
             <div className="p-6 flex flex-col flex-1">
-                <span className="text-[9px] font-bold tracking-[0.25em] text-gray-400 uppercase mb-3 block">
-                    {vendor.location}
-                </span>
+                <div className="flex justify-between items-start mb-3">
+                    <span className="text-[9px] font-bold tracking-[0.25em] text-gray-400 uppercase block">
+                        {vendor.location}
+                    </span>
+                    {vendor.capacity && (
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-secondary bg-secondary/10 px-2 py-1 rounded-md">
+                            Cap: {vendor.capacity}
+                        </span>
+                    )}
+                </div>
 
-                <h3 className="text-2xl font-serif-premium italic text-primary leading-tight mb-2 group-hover:text-secondary transition-colors">
+                <h3 className="text-2xl font-serif-premium italic text-primary leading-tight mb-6 group-hover:text-secondary transition-colors">
                     {vendor.name}
                 </h3>
 
-                <div className="mt-auto pt-6 flex items-center justify-between">
-                    <div className="flex flex-col">
-                        <span className="text-[9px] font-bold text-gray-300 uppercase tracking-widest mb-1">Estimated Range</span>
-                        <span className="text-sm font-bold text-primary">
-                            {formatPrice(priceMin)} - {formatPrice(priceMax)}
-                        </span>
-                    </div>
-                </div>
-
-                {/* Actions Row */}
-                <div className="flex items-center gap-3 mt-6">
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onViewDetails();
-                        }}
-                        className="flex-1 py-3 px-6 bg-surface hover:bg-gray-200 text-primary text-[10px] font-black uppercase tracking-widest rounded-full transition-colors truncate"
-                    >
-                        Explore
-                    </button>
-
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onSelect();
-                        }}
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all border
-                        ${isSelected
-                                ? 'bg-secondary border-secondary text-white'
-                                : 'bg-white border-gray-200 text-primary hover:border-primary hover:text-secondary'}`}
-                    >
-                        {isSelected ? <BsCheck size={20} /> : <BsArrowRight size={14} className="-rotate-45 group-hover:rotate-0 transition-transform duration-300" />}
-                    </button>
-                </div>
+                {/* Explore Button */}
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onViewDetails();
+                    }}
+                    className="w-full py-4 bg-surface hover:bg-primary hover:text-white text-primary text-[10px] font-black uppercase tracking-widest rounded-xl transition-all mt-auto"
+                >
+                    Explore
+                </button>
             </div>
         </motion.div>
     );

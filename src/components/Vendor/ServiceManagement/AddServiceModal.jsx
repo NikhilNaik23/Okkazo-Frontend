@@ -37,7 +37,7 @@ const AddServiceModal = ({ isOpen, onClose, onSave, allowedCategory, initialData
     if (!isOpen) return null;
 
     const handleCategoryChange = (e) => {
-        if (allowedCategory || initialData) return; // Lock if allowed or editing
+        if (initialData) return; // Lock if editing
         setSelectedCategory(e.target.value);
         setFormData({}); // Reset form data on category switch
     };
@@ -67,40 +67,45 @@ const AddServiceModal = ({ isOpen, onClose, onSave, allowedCategory, initialData
                 return (
                     <>
                         <div className="space-y-2">
-                            <label className="text-sm font-bold text-[#708aa0]">Venue Name</label>
-                            <input name="name" value={formData.name || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10" placeholder="e.g. Grand Ballroom" />
+                            <label className="text-sm font-bold text-[#708aa0]">Venue Name <span className="text-red-500">*</span></label>
+                            <input required name="name" value={formData.name || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10" placeholder="e.g. Grand Ballroom" />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-bold text-[#708aa0]">Capacity</label>
-                                <input name="capacity" value={formData.capacity || ''} onChange={handleInputChange} type="number" className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10" placeholder="500" />
+                                <label className="text-sm font-bold text-[#708aa0]">Capacity <span className="text-red-500">*</span></label>
+                                <input required type="number" min="1" onWheel={(e) => e.target.blur()} name="capacity" value={formData.capacity || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" placeholder="500" />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-bold text-[#708aa0]">Price per Day</label>
-                                <input name="price" value={formData.price || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10" placeholder="₹25,000" />
+                                <label className="text-sm font-bold text-[#708aa0]">Price per Day <span className="text-red-500">*</span></label>
+                                <input required type="number" min="1" onWheel={(e) => e.target.blur()} name="price" value={formData.price || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" placeholder="25000" />
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-bold text-[#708aa0]">Location</label>
-                            <input name="location" value={formData.location || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10" placeholder="Complete Address" />
+                            <label className="text-sm font-bold text-[#708aa0]">Location <span className="text-red-500">*</span></label>
+                            <input required name="location" value={formData.location || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10" placeholder="Complete Address" />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-bold text-[#708aa0]">Description <span className="text-red-500">*</span></label>
+                            <textarea required name="description" value={formData.description || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10 h-24 resize-none" placeholder="Describe the venue features..." />
                         </div>
                     </>
                 );
+
             case 'catering':
                 return (
                     <>
                         <div className="space-y-2">
-                            <label className="text-sm font-bold text-[#708aa0]">Package Name</label>
-                            <input name="name" value={formData.name || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10" placeholder="e.g. Traditional Feast" />
+                            <label className="text-sm font-bold text-[#708aa0]">Package Name <span className="text-red-500">*</span></label>
+                            <input required name="name" value={formData.name || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10" placeholder="e.g. Traditional Feast" />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-bold text-[#708aa0]">Price per Plate</label>
-                                <input name="price" value={formData.price || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10" placeholder="₹850" />
+                                <label className="text-sm font-bold text-[#708aa0]">Price per Plate <span className="text-red-500">*</span></label>
+                                <input required type="number" min="1" onWheel={(e) => e.target.blur()} name="price" value={formData.price || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" placeholder="850" />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-bold text-[#708aa0]">Tier</label>
-                                <select name="tier" value={formData.tier || 'Economy'} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10">
+                                <label className="text-sm font-bold text-[#708aa0]">Tier <span className="text-red-500">*</span></label>
+                                <select required name="tier" value={formData.tier || 'Economy'} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10">
                                     <option value="Economy">Economy</option>
                                     <option value="Mid-Range">Mid-Range</option>
                                     <option value="Luxury">Luxury</option>
@@ -108,25 +113,117 @@ const AddServiceModal = ({ isOpen, onClose, onSave, allowedCategory, initialData
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-bold text-[#708aa0]">Included Items (comma separated)</label>
-                            <textarea name="items" value={formData.items || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10 h-24 resize-none" placeholder="Starter, Main Course, Dessert..." />
+                            <label className="text-sm font-bold text-[#708aa0]">Included Items (comma separated) <span className="text-red-500">*</span></label>
+                            <textarea required name="items" value={formData.items || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10 h-24 resize-none" placeholder="Starter, Main Course, Dessert..." />
                         </div>
                     </>
                 );
+
+            case 'makeup':
+            case 'security':
+            case 'transport':
+            case 'cakes':
+            case 'invitations':
+                {
+                    let priceLabel = 'Price';
+                    let pricePlaceholder = '5000';
+                    let itemsLabel = 'Included Services/Items';
+                    let itemsPlaceholder = 'e.g. Item 1, Item 2...';
+                    let namePlaceholder = 'Service Name';
+
+                    if (selectedCategory === 'makeup') {
+                        priceLabel = 'Price per Person';
+                        pricePlaceholder = '15000';
+                        namePlaceholder = 'e.g. Bridal HD Makeup';
+                        itemsPlaceholder = 'e.g. Lashes, Draping, Hair...';
+                    }
+                    if (selectedCategory === 'security') {
+                        priceLabel = 'Price per Team/Shift';
+                        pricePlaceholder = '25000';
+                        namePlaceholder = 'e.g. Bouncers Team (4 Pax)';
+                        itemsPlaceholder = 'e.g. 4 Bouncers, 6 Hours...';
+                    }
+                    if (selectedCategory === 'transport') {
+                        priceLabel = 'Price per Vehicle/Day';
+                        pricePlaceholder = '12000';
+                        namePlaceholder = 'e.g. Luxury Sedan Rental';
+                        itemsPlaceholder = 'e.g. 8 Hours, 80km, Fuel...';
+                    }
+                    if (selectedCategory === 'cakes') {
+                        priceLabel = 'Price per Kg';
+                        pricePlaceholder = '1500';
+                        namePlaceholder = 'e.g. Chocolate Truffle Cake';
+                        itemsPlaceholder = 'e.g. Eggless, Fondant Finish...';
+                    }
+                    if (selectedCategory === 'invitations') {
+                        priceLabel = 'Price per 100 Units';
+                        pricePlaceholder = '5000';
+                        namePlaceholder = 'e.g. Royal Scroll Invites';
+                        itemsPlaceholder = 'e.g. Gold Foiling, Boxed...';
+                    }
+
+                    return (
+                        <>
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-[#708aa0]">Package/Service Name <span className="text-red-500">*</span></label>
+                                <input required name="name" value={formData.name || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10" placeholder={namePlaceholder} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-[#708aa0]">{priceLabel} <span className="text-red-500">*</span></label>
+                                    <input required type="number" min="1" onWheel={(e) => e.target.blur()} name="price" value={formData.price || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" placeholder={pricePlaceholder} />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-[#708aa0]">Tier <span className="text-red-500">*</span></label>
+                                    <select required name="tier" value={formData.tier || 'Standard'} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10">
+                                        <option value="Basic">Basic</option>
+                                        <option value="Standard">Standard</option>
+                                        <option value="Premium">Premium</option>
+                                        <option value="Luxury">Luxury</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-[#708aa0]">Description <span className="text-red-500">*</span></label>
+                                <textarea required name="description" value={formData.description || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10 h-24 resize-none" placeholder="Describe what makes this service special..." />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-[#708aa0]">{itemsLabel} <span className="text-red-500">*</span></label>
+                                <input required name="items" value={formData.items || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10" placeholder={itemsPlaceholder} />
+                            </div>
+                        </>
+                    );
+                }
+
+            // Default for Per Event services (Photography, Videography, Decor, etc.)
             default:
                 return (
                     <>
                         <div className="space-y-2">
-                            <label className="text-sm font-bold text-[#708aa0]">Service/Package Name</label>
-                            <input name="name" value={formData.name || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10" placeholder="Service Name" />
+                            <label className="text-sm font-bold text-[#708aa0]">Package Name <span className="text-red-500">*</span></label>
+                            <input required name="name" value={formData.name || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10" placeholder="e.g. Candid Photography" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-[#708aa0]">Price per Event/Day <span className="text-red-500">*</span></label>
+                                <input required type="number" min="1" onWheel={(e) => e.target.blur()} name="price" value={formData.price || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" placeholder="50000" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-[#708aa0]">Tier <span className="text-red-500">*</span></label>
+                                <select required name="tier" value={formData.tier || 'Standard'} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10">
+                                    <option value="Silver">Silver</option>
+                                    <option value="Gold">Gold</option>
+                                    <option value="Platinum">Platinum</option>
+                                </select>
+                            </div>
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-bold text-[#708aa0]">Price / Starting From</label>
-                            <input name="price" value={formData.price || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10" placeholder="₹5,000" />
+                            <label className="text-sm font-bold text-[#708aa0]">Description <span className="text-red-500">*</span></label>
+                            <textarea required name="description" value={formData.description || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10 h-24 resize-none" placeholder="Describe coverage details..." />
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-bold text-[#708aa0]">Description</label>
-                            <textarea name="description" value={formData.description || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10 h-24 resize-none" placeholder="Describe your service..." />
+                            <label className="text-sm font-bold text-[#708aa0]">Included Deliverables <span className="text-red-500">*</span></label>
+                            <textarea required name="items" value={formData.items || ''} onChange={handleInputChange} className="w-full p-3 bg-gray-50 rounded-xl border-none focus:ring-2 focus:ring-[#0b2d49]/10 h-24 resize-none" placeholder="e.g. 500 Edited Photos, 1 Album, Drone Shot..." />
                         </div>
                     </>
                 );
@@ -152,28 +249,14 @@ const AddServiceModal = ({ isOpen, onClose, onSave, allowedCategory, initialData
                 <div className="p-8 max-h-[70vh] overflow-y-auto">
                     <div className="space-y-6">
                         {/* Category Selector */}
-                        <div className="space-y-2">
-                            <label className="text-sm font-bold text-[#708aa0] uppercase tracking-wider">Service Category</label>
-                            {allowedCategory ? (
-                                <div className="w-full p-4 bg-gray-50 border-2 border-[#e9eff1] rounded-2xl font-bold text-[#0b2d49]">
-                                    {SERVICE_CATEGORIES.find(c => c.id === allowedCategory)?.label || allowedCategory}
-                                </div>
-                            ) : (
-                                <div className="relative">
-                                    <select
-                                        value={selectedCategory}
-                                        onChange={handleCategoryChange}
-                                        className="w-full p-4 pr-10 bg-white border-2 border-[#e9eff1] rounded-2xl font-bold text-[#0b2d49] appearance-none focus:border-[#d7a444] focus:ring-0 outline-none transition-all cursor-pointer"
-                                    >
-                                        {SERVICE_CATEGORIES.map(cat => (
-                                            <option key={cat.id} value={cat.id}>{cat.label}</option>
-                                        ))}
-                                    </select>
-                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[#708aa0] pointer-events-none">
-                                        <BsChevronDown />
-                                    </div>
-                                </div>
-                            )}
+                        <div className="space-y-3 relative z-20">
+                            <label className="text-xs font-bold text-[#708aa0] tracking-widest uppercase mb-1">Service Category</label>
+                            <div className="w-full p-4 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between text-[#0b2d49] font-bold">
+                                {SERVICE_CATEGORIES.find(c => c.id === selectedCategory)?.label}
+                                <span className="bg-[#f0f4f8] text-[#708aa0] text-[10px] uppercase px-2 py-1 rounded font-black tracking-widest cursor-default">
+                                    {initialData ? "Editing" : "Fixed"}
+                                </span>
+                            </div>
                         </div>
 
                         {/* Divider */}
