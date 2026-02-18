@@ -10,7 +10,7 @@ const VendorLayout = () => {
 
   const sidebarMenus = vendorSidebarMenus;
   const vendorData = vendorLayoutData;
-  const isMessagesPage = location.pathname === '/vendor/messages';
+  const isMessagesPage = location.pathname === '/vendor/messages' || location.pathname.includes('/vendor/event/');
 
   return (
     <div className="flex min-h-screen bg-[#e9eff1] font-sans text-[#0b2d49]">

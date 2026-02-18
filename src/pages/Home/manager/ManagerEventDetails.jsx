@@ -24,11 +24,13 @@ import {
     ToDoTab,
     DocumentsTab
 } from '../../../components/Manager/EventDetails/tabs';
+// import NewChatTab from '../../../components/Manager/EventDetails/tabs/NewChatTab';
 
 // Data
 import { mockEvent, tabs as tabsData } from '../../../data/managerEventDetailsData';
 
 const ManagerEventDetails = () => {
+    // Force HMR Update
     const { id } = useParams();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('overview');

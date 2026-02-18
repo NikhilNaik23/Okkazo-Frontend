@@ -59,6 +59,11 @@ import ServiceManagement from "./pages/vendor/ServiceManagement";
 import ManagerChat from "./pages/vendor/ManagerChat";
 import BusinessProfile from "./pages/vendor/BusinessProfile";
 import VendorEventDetails from "./pages/vendor/EventDetails";
+import VendorEventDetailsTab from "./components/Vendor/EventDetails/VendorEventDetailsTab";
+import VendorEventBudgetTab from "./components/Vendor/EventDetails/VendorEventBudgetTab";
+import VendorEventChatTab from "./components/Vendor/EventDetails/VendorEventChatTab";
+import VendorEventTodoTab from "./components/Vendor/EventDetails/VendorEventTodoTab";
+import VendorEventBillTab from "./components/Vendor/EventDetails/VendorEventBillTab";
 import AccountSettingsPage from "./pages/vendor/AccountSettings";
 import VendorNotifications from "./pages/vendor/Notifications";
 
@@ -336,7 +341,14 @@ const App = () => {
             <Route path="service-management" element={<ServiceManagement />} />
             <Route path="messages" element={<ManagerChat />} />
             <Route path="profile" element={<BusinessProfile />} />
-            <Route path="event/:id" element={<VendorEventDetails />} />
+            <Route path="event/:id" element={<VendorEventDetails />}>
+              <Route index element={<Navigate to="details" replace />} />
+              <Route path="details" element={<VendorEventDetailsTab />} />
+              <Route path="budget" element={<VendorEventBudgetTab />} />
+              <Route path="chat" element={<VendorEventChatTab />} />
+              <Route path="todo" element={<VendorEventTodoTab />} />
+              <Route path="bill" element={<VendorEventBillTab />} />
+            </Route>
             <Route path="settings" element={<AccountSettingsPage />} />
             <Route path="notifications" element={<VendorNotifications />} />
           </Route>

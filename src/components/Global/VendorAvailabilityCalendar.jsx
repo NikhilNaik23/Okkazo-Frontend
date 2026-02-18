@@ -1,9 +1,11 @@
 import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     BsChevronLeft,
     BsChevronRight,
     BsCalendarEvent,
-    BsXCircle
+    BsXCircle,
+    BsChevronDown
 } from 'react-icons/bs';
 import { toast } from 'react-hot-toast';
 
@@ -41,6 +43,15 @@ const VendorAvailabilityCalendar = ({ compact = false }) => {
     const [selectedDate, setSelectedDate] = useState(null);
     const [showBlockModal, setShowBlockModal] = useState(false);
     const [blockReason, setBlockReason] = useState('');
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+    const BLOCK_REASONS = [
+        "Not available",
+        "Occupied with other event",
+        "Personal day off",
+        "Equipment maintenance",
+        "Team holiday"
+    ];
 
     const calendarDays = useMemo(() => {
         const firstDay = new Date(currentYear, currentMonth, 1).getDay();
@@ -239,18 +250,51 @@ const VendorAvailabilityCalendar = ({ compact = false }) => {
                                 {selectedDate && new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                             </p>
                         </div>
-                        <select
-                            value={blockReason}
-                            onChange={(e) => setBlockReason(e.target.value)}
-                            style={{ width: '100%', padding: '8px 10px', backgroundColor: '#f3f4f6', border: 'none', borderRadius: '10px', fontSize: '11px', fontWeight: 700, color: '#0b2d49', marginBottom: '10px', outline: 'none', boxSizing: 'border-box' }}
-                        >
-                            <option value="">Select reason...</option>
-                            <option value="Not available">Not available</option>
-                            <option value="Occupied with other event">Occupied with other event</option>
-                            <option value="Personal day off">Personal day off</option>
-                            <option value="Equipment maintenance">Equipment maintenance</option>
-                            <option value="Team holiday">Team holiday</option>
-                        </select>
+                        <div className="relative mb-4 z-50">
+                            {/* Trigger */}
+                            <div
+                                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                                className={`w-full py-3.5 pl-4 pr-4 bg-[#f8f9fa] border-2 rounded-xl text-[13px] font-bold text-[#0b2d49] cursor-pointer transition-all flex items-center justify-between ${isDropdownOpen ? 'border-[#d7a444] shadow-sm' : 'border-[#e9eff1] hover:border-[#d7a444]/50'}`}
+                            >
+                                <span className={!blockReason ? 'text-[#708aa0]' : ''}>
+                                    {blockReason || "Select reason..."}
+                                </span>
+                                <BsChevronDown
+                                    size={12}
+                                    className={`text-[#708aa0] transition-transform duration-300 ${isDropdownOpen ? 'rotate-180' : ''}`}
+                                    strokeWidth={1}
+                                />
+                            </div>
+
+                            {/* Dropdown Menu */}
+                            <AnimatePresence>
+                                {isDropdownOpen && (
+                                    <>
+                                        {/* Click Outside Listener (Invisible Backdrop) */}
+                                        <div className="fixed inset-0 z-10" onClick={() => setIsDropdownOpen(false)} />
+
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                                            transition={{ duration: 0.2, ease: "easeOut" }}
+                                            className="absolute top-full left-0 right-0 mt-2 bg-white border border-[#e9eff1] rounded-xl shadow-xl z-20 overflow-hidden max-h-[200px] overflow-y-auto custom-scrollbar"
+                                        >
+                                            {BLOCK_REASONS.map((reason) => (
+                                                <div
+                                                    key={reason}
+                                                    onClick={() => { setBlockReason(reason); setIsDropdownOpen(false); }}
+                                                    className={`px-4 py-3 text-[13px] font-bold cursor-pointer transition-colors border-b border-[#f8f9fa] last:border-none flex items-center justify-between ${blockReason === reason ? 'bg-[#f8f9fa] text-[#d7a444]' : 'text-[#0b2d49] hover:bg-[#f8f9fa] hover:text-[#0b2d49]'}`}
+                                                >
+                                                    {reason}
+                                                    {blockReason === reason && <div className="w-1.5 h-1.5 rounded-full bg-[#d7a444]" />}
+                                                </div>
+                                            ))}
+                                        </motion.div>
+                                    </>
+                                )}
+                            </AnimatePresence>
+                        </div>
                         <div style={{ display: 'flex', gap: '6px' }}>
                             <button onClick={() => { setShowBlockModal(false); setSelectedDate(null); }} style={{ flex: 1, padding: '8px', border: '2px solid #e9eff1', borderRadius: '10px', fontSize: '11px', fontWeight: 900, color: '#0b2d49', backgroundColor: 'white', cursor: 'pointer' }}>
                                 Cancel
