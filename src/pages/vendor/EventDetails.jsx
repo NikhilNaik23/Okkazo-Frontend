@@ -183,7 +183,8 @@ const EventDetails = () => {
             channel: 'internal',
             isBroadcast: false,
             badge: 'bg-teal-100 text-teal-700',
-            status: 'read'
+            status: 'read',
+            timestamp: Date.now() - 3600000
         },
         {
             id: 2,
@@ -194,7 +195,8 @@ const EventDetails = () => {
             channel: 'vendors',
             isBroadcast: true,
             badge: 'bg-teal-100 text-teal-700',
-            status: 'read'
+            status: 'read',
+            timestamp: Date.now() - 3600000
         },
         {
             id: 3,
@@ -205,7 +207,8 @@ const EventDetails = () => {
             channel: 'client',
             isBroadcast: false,
             badge: '',
-            status: 'read'
+            status: 'read',
+            timestamp: Date.now() - 3600000
         },
         {
             id: 4,
@@ -216,18 +219,8 @@ const EventDetails = () => {
             channel: 'client',
             isBroadcast: false,
             badge: 'bg-teal-100 text-teal-700',
-            status: 'read'
-        },
-        {
-            id: 5,
-            sender: "You",
-            role: "Vendor",
-            time: "11:06 AM",
-            text: "Just let me know if you need any other changes.",
-            channel: 'client',
-            isBroadcast: false,
-            badge: 'bg-teal-100 text-teal-700',
-            status: 'delivered'
+            status: 'read',
+            timestamp: Date.now() - 3600000
         }
     ]);
 
@@ -246,7 +239,8 @@ const EventDetails = () => {
             channel: activeChannel,
             badge: 'bg-teal-100 text-teal-700',
             isBroadcast: isBroadcast,
-            status: 'sending'
+            status: 'sending',
+            timestamp: Date.now()
         };
 
         setMessages(prev => [...prev, newMessage]);
@@ -263,7 +257,16 @@ const EventDetails = () => {
             setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: 'read' } : m));
         }, 4000);
 
+    };
 
+    const handleDeleteMessage = (messageId) => {
+        setMessages(prev => prev.filter(m => m.id !== messageId));
+        toast.success("Message deleted");
+    };
+
+    const handleEditMessage = (messageId, newText) => {
+        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, text: newText, isEdited: true } : m));
+        toast.success("Message updated");
     };
 
     // Shared Context to pass to lower components
@@ -294,6 +297,8 @@ const EventDetails = () => {
         vendors,
         messages,
         handleSend,
+        handleDeleteMessage,
+        handleEditMessage,
         // Todo
         todoTasks,
         toggleTask,

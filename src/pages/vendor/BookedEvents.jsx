@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { 
-  BsCalendarEvent, 
-  BsGeoAlt, 
-  BsBriefcase, 
-  BsChatDots, 
-  BsCheckCircle, 
+import {
+  BsCalendarEvent,
+  BsGeoAlt,
+  BsBriefcase,
+  BsChatDots,
+  BsCheckCircle,
   BsXCircle,
   BsEye,
   BsThreeDots,
@@ -46,8 +46,8 @@ const EventRequestsModal = ({ isOpen, onClose, requests, onAccept, onReject }) =
                 <div className="flex items-center gap-6">
                   {/* Thumbnail & Date Box */}
                   <div className="relative shrink-0">
-                    <img 
-                      src={event.image} 
+                    <img
+                      src={event.image}
                       alt={event.title}
                       className="w-20 h-20 rounded-[1.5rem] object-cover border-2 border-white shadow-md"
                     />
@@ -68,20 +68,20 @@ const EventRequestsModal = ({ isOpen, onClose, requests, onAccept, onReject }) =
 
                 {rejectingId !== event.id ? (
                   <div className="flex items-center gap-3 w-full md:w-auto">
-                    <button 
+                    <button
                       onClick={() => navigate(`/vendor/event/${event.id}`)}
                       className="flex-1 md:flex-none px-4 py-3 bg-white border border-gray-200 text-[#0b2d49] rounded-xl font-bold text-sm hover:border-[#0b2d49] transition-all flex items-center justify-center gap-2"
                     >
                       <BsEye />
                       Details
                     </button>
-                    <button 
+                    <button
                       onClick={() => setRejectingId(event.id)}
                       className="flex-1 md:flex-none px-6 py-3 bg-red-50 text-red-500 rounded-xl font-bold text-sm hover:bg-red-500 hover:text-white transition-all shadow-sm active:scale-95"
                     >
                       Reject
                     </button>
-                    <button 
+                    <button
                       onClick={() => onAccept(event.id)}
                       className="flex-1 md:flex-none px-8 py-3 bg-[#0b2d49] text-white rounded-xl font-bold text-sm hover:bg-[#d7a444] transition-all shadow-lg shadow-[#0b2d49]/10 active:scale-95"
                     >
@@ -92,7 +92,7 @@ const EventRequestsModal = ({ isOpen, onClose, requests, onAccept, onReject }) =
                   <div className="w-full md:w-[450px] animate-in slide-in-from-right-4">
                     <div className="flex flex-col gap-3">
                       <div className="relative">
-                        <textarea 
+                        <textarea
                           value={reason}
                           onChange={(e) => setReason(e.target.value)}
                           placeholder="Please mention the reason for rejection..."
@@ -100,13 +100,13 @@ const EventRequestsModal = ({ isOpen, onClose, requests, onAccept, onReject }) =
                         />
                       </div>
                       <div className="flex gap-2">
-                        <button 
+                        <button
                           onClick={() => { setRejectingId(null); setReason(""); }}
                           className="flex-1 py-2.5 bg-white border border-gray-200 text-[#708aa0] rounded-lg font-bold text-xs hover:border-[#708aa0] transition-all"
                         >
                           Cancel
                         </button>
-                        <button 
+                        <button
                           disabled={!reason.trim()}
                           onClick={() => {
                             onReject(event.id, reason);
@@ -152,27 +152,27 @@ const BookedEvents = () => {
 
   const filteredEvents = bookedEventsData.filter(event => {
     const isConfirmed = event.status === "CONFIRMED";
-    const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         event.location.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      event.location.toLowerCase().includes(searchQuery.toLowerCase());
     return isConfirmed && matchesSearch;
   });
 
   const pendingRequests = bookedEventsData.filter(e => e.status === "PENDING");
 
   const handleAccept = (eventId) => {
-    setBookedEventsData(prev => prev.map(event => 
+    setBookedEventsData(prev => prev.map(event =>
       event.id === eventId ? { ...event, status: "CONFIRMED" } : event
     ));
     toast.success("Event request accepted successfully!", {
-        style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' }
+      style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' }
     });
   };
 
   const handleReject = (eventId, reason) => {
     setBookedEventsData(prev => prev.filter(event => event.id !== eventId));
     toast.error("Event request rejected. Reason: " + reason, {
-        icon: '🚫',
-        style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' }
+      icon: '🚫',
+      style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' }
     });
   };
 
@@ -181,12 +181,12 @@ const BookedEvents = () => {
       {/* Search Header */}
       <div className="mb-8 p-6 bg-white rounded-[2rem] shadow-sm border border-[#708aa0]/5 flex items-center gap-4">
         <BsSearch className="text-[#708aa0] ml-2" size={20} />
-        <input 
-            type="text" 
-            placeholder="Search confirmed events by name or location..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 bg-transparent border-none focus:ring-0 text-lg font-bold text-[#0b2d49] placeholder:text-[#708aa0]"
+        <input
+          type="text"
+          placeholder="Search confirmed events by name or location..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="flex-1 bg-transparent border-none focus:ring-0 text-lg font-bold text-[#0b2d49] placeholder:text-[#708aa0]"
         />
       </div>
 
@@ -199,8 +199,8 @@ const BookedEvents = () => {
             Manage your {stats.confirmed} confirmed event bookings
           </p>
         </div>
-        
-        <button 
+
+        <button
           onClick={() => setIsRequestsModalOpen(true)}
           className="relative group flex items-center gap-3 px-8 py-4 bg-[#0b2d49] text-white rounded-2xl font-bold text-sm shadow-xl shadow-[#0b2d49]/10 hover:bg-[#d7a444] transition-all active:scale-95"
         >
@@ -220,34 +220,34 @@ const BookedEvents = () => {
           <div key={event.id} className="bg-white rounded-[2.5rem] shadow-sm border border-[#708aa0]/5 hover:shadow-2xl hover:shadow-[#0b2d49]/10 transition-all duration-500 group overflow-hidden flex flex-col">
             {/* Image Header */}
             <div className="relative h-48 overflow-hidden">
-                <img 
-                    src={event.image} 
-                    alt={event.title}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0b2d49]/40 to-transparent"></div>
-                <div className="absolute top-4 left-4 flex flex-col items-center justify-center w-14 h-14 bg-white/90 backdrop-blur-md rounded-2xl shadow-lg">
-                  <span className="text-lg font-black text-[#0b2d49] leading-none mb-0.5">{event.date}</span>
-                  <span className="text-[8px] font-bold text-[#708aa0] uppercase tracking-tighter">{event.month}</span>
+              <img
+                src={event.image}
+                alt={event.title}
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0b2d49]/40 to-transparent"></div>
+              <div className="absolute top-4 left-4 flex flex-col items-center justify-center w-14 h-14 bg-white/90 backdrop-blur-md rounded-2xl shadow-lg">
+                <span className="text-lg font-black text-[#0b2d49] leading-none mb-0.5">{event.date}</span>
+                <span className="text-[8px] font-bold text-[#708aa0] uppercase tracking-tighter">{event.month}</span>
+              </div>
+
+              {/* Manager Chat Notification Icon */}
+              <div
+                className="absolute top-4 right-4 cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/vendor/event/${event.id}/chat`);
+                }}
+              >
+                <div className="relative p-2.5 bg-white/90 backdrop-blur-md rounded-xl shadow-lg hover:bg-white transition-all text-[#0b2d49]">
+                  <BsChatDots size={20} />
+                  {event.managerUnreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center ring-2 ring-white">
+                      {event.managerUnreadCount}
+                    </span>
+                  )}
                 </div>
-                
-                {/* Manager Chat Notification Icon */}
-                <div 
-                  className="absolute top-4 right-4 cursor-pointer"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate("/vendor/messages");
-                  }}
-                >
-                  <div className="relative p-2.5 bg-white/90 backdrop-blur-md rounded-xl shadow-lg hover:bg-white transition-all text-[#0b2d49]">
-                    <BsChatDots size={20} />
-                    {event.managerUnreadCount > 0 && (
-                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center ring-2 ring-white">
-                        {event.managerUnreadCount}
-                      </span>
-                    )}
-                  </div>
-                </div>
+              </div>
             </div>
 
             <div className="p-8 flex-1">
@@ -256,19 +256,19 @@ const BookedEvents = () => {
                   {event.category}
                 </span>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="p-2.5 bg-gray-50 text-[#708aa0] rounded-xl hover:bg-[#0b2d49] hover:text-white transition-all">
-                        <BsThreeDots />
-                    </button>
+                  <button className="p-2.5 bg-gray-50 text-[#708aa0] rounded-xl hover:bg-[#0b2d49] hover:text-white transition-all">
+                    <BsThreeDots />
+                  </button>
                 </div>
               </div>
 
-              <h3 
+              <h3
                 className="text-xl font-black text-[#0b2d49] mb-4 line-clamp-2 leading-tight group-hover:text-[#d7a444] transition-colors cursor-pointer"
                 onClick={() => navigate(`/vendor/event/${event.id}`)}
               >
                 {event.title}
               </h3>
-              
+
               <div className="space-y-4 mb-2">
                 <div className="flex items-center gap-3 text-xs text-[#708aa0] font-bold">
                   <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center shrink-0">
@@ -286,7 +286,7 @@ const BookedEvents = () => {
             </div>
 
             <div className="p-5 bg-gray-50/50 border-t border-gray-100">
-              <button 
+              <button
                 onClick={() => navigate(`/vendor/event/${event.id}`)}
                 className="w-full py-4 bg-[#0b2d49] text-white rounded-2xl font-bold text-sm hover:bg-[#d7a444] transition-all flex items-center justify-center gap-3 shadow-lg shadow-[#0b2d49]/10 active:scale-[0.98]"
               >
@@ -296,37 +296,37 @@ const BookedEvents = () => {
             </div>
           </div>
         )) : (
-            <div className="col-span-full p-20 flex flex-col items-center justify-center text-center bg-white rounded-[3rem] border border-[#708aa0]/10">
-                <div className="w-24 h-24 bg-[#e9eff1] rounded-full flex items-center justify-center text-[#708aa0] mb-8">
-                    <BsCalendarEvent size={40} />
-                </div>
-                <h3 className="text-2xl font-black text-[#0b2d49]">No Confirmed Events</h3>
-                <p className="text-sm text-[#708aa0] font-bold mt-2 max-w-md mx-auto">
-                    When you accept event requests, they will appear here as confirmed bookings.
-                </p>
-                {searchQuery && (
-                  <button 
-                    onClick={() => setSearchQuery("")}
-                    className="mt-6 text-[#d7a444] font-black text-sm hover:underline"
-                  >
-                    Clear Search
-                  </button>
-                )}
+          <div className="col-span-full p-20 flex flex-col items-center justify-center text-center bg-white rounded-[3rem] border border-[#708aa0]/10">
+            <div className="w-24 h-24 bg-[#e9eff1] rounded-full flex items-center justify-center text-[#708aa0] mb-8">
+              <BsCalendarEvent size={40} />
             </div>
+            <h3 className="text-2xl font-black text-[#0b2d49]">No Confirmed Events</h3>
+            <p className="text-sm text-[#708aa0] font-bold mt-2 max-w-md mx-auto">
+              When you accept event requests, they will appear here as confirmed bookings.
+            </p>
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="mt-6 text-[#d7a444] font-black text-sm hover:underline"
+              >
+                Clear Search
+              </button>
+            )}
+          </div>
         )}
       </div>
 
       {/* Load More Button */}
       {filteredEvents.length > 0 && filteredEvents.length >= 3 && (
         <div className="mt-12 flex justify-center">
-            <button className="px-10 py-4 bg-white border border-[#708aa0]/10 rounded-2xl text-[#0b2d49] font-black text-sm hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 shadow-sm">
-                Load More Events
-            </button>
+          <button className="px-10 py-4 bg-white border border-[#708aa0]/10 rounded-2xl text-[#0b2d49] font-black text-sm hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 shadow-sm">
+            Load More Events
+          </button>
         </div>
       )}
 
       {/* Event Requests Modal */}
-      <EventRequestsModal 
+      <EventRequestsModal
         isOpen={isRequestsModalOpen}
         onClose={() => setIsRequestsModalOpen(false)}
         requests={pendingRequests}

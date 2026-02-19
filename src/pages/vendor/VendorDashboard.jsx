@@ -184,9 +184,9 @@ const VendorDashboard = () => {
                                         </div>
                                     </div>
                                 </div>
-                                {activity.type === 'booking' && (
+                                {['booking', 'success'].includes(activity.type) && (
                                     <button
-                                        onClick={(e) => { e.stopPropagation(); navigate("/vendor/messages"); }}
+                                        onClick={(e) => { e.stopPropagation(); navigate(`/vendor/event/${activity.id}/chat`); }}
                                         className="flex items-center gap-2 px-6 py-3 bg-[#0b2d49] text-white rounded-xl font-bold text-sm shadow-lg shadow-[#0b2d49]/10 hover:bg-[#d7a444] transition-all"
                                     >
                                         <BsChatDots /> Chat with Manager

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import {
     Search, Volume2, Users, Briefcase, MoreVertical,
@@ -22,7 +22,9 @@ const VendorEventChatTab = () => {
         team,
         vendors,
         messages,
-        handleSend
+        handleSend,
+        handleDeleteMessage,
+        handleEditMessage
     } = useOutletContext();
 
     const groupChannels = ['vendors', 'general', 'internal'];
@@ -31,7 +33,45 @@ const VendorEventChatTab = () => {
     const [isVendorsOpen, setIsVendorsOpen] = useState(true);
     const [isInternalOpen, setIsInternalOpen] = useState(true);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-    const fileInputRef = React.useRef(null);
+    const [isCallModalOpen, setIsCallModalOpen] = useState(false);
+    const [callDuration, setCallDuration] = useState(0);
+    const [activeMessageMenu, setActiveMessageMenu] = useState(null);
+    const [editingMessageId, setEditingMessageId] = useState(null);
+    const [editInput, setEditInput] = useState('');
+    const [contextMenu, setContextMenu] = useState({ x: 0, y: 0, show: false, msgId: null });
+    const fileInputRef = useRef(null);
+    const emojiPickerRef = useRef(null);
+    const contextMenuRef = useRef(null);
+    const messageMenuRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
+                setShowEmojiPicker(false);
+            }
+            if (contextMenu.show && contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
+                setContextMenu(prev => ({ ...prev, show: false }));
+            }
+            if (activeMessageMenu && messageMenuRef.current && !messageMenuRef.current.contains(event.target)) {
+                setActiveMessageMenu(null);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showEmojiPicker, contextMenu.show, activeMessageMenu]);
+
+    const handleContextMenu = (e, msgId) => {
+        e.preventDefault();
+        setContextMenu({
+            x: e.pageX,
+            y: e.pageY,
+            show: true,
+            msgId: msgId
+        });
+    };
 
 
     const filteredGroupChats = groupChats.filter(g => g.name.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -44,6 +84,33 @@ const VendorEventChatTab = () => {
         setChatInput(prev => prev + emojiData.emoji);
     };
 
+    useEffect(() => {
+        let interval;
+        if (isCallModalOpen) {
+            interval = setInterval(() => {
+                setCallDuration(prev => prev + 1);
+            }, 1000);
+        } else {
+            setCallDuration(0);
+        }
+        return () => clearInterval(interval);
+    }, [isCallModalOpen]);
+
+    const formatDuration = (seconds) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const handleCallClick = () => {
+        setIsCallModalOpen(true);
+    };
+
+    const endCall = () => {
+        setIsCallModalOpen(false);
+        toast.error("Call ended");
+    };
+
     const handleAttachClick = () => {
         fileInputRef.current?.click();
     };
@@ -54,6 +121,59 @@ const VendorEventChatTab = () => {
             toast.info(`Selected file: ${file.name}`);
             // In a real app, we'd upload here
         }
+    };
+
+    const handleStartEdit = (msg) => {
+        setEditingMessageId(msg.id);
+        setEditInput(msg.text);
+        setActiveMessageMenu(null);
+    };
+
+    const submitEdit = (id) => {
+        if (editInput.trim()) {
+            handleEditMessage(id, editInput);
+            setEditingMessageId(null);
+        }
+    };
+
+    const renderMessageActions = (msg, isMe) => {
+        const isEditable = isMe && (Date.now() - (msg.timestamp || 0) < 120000); // 2 minutes window
+
+        return (
+            <div className={`absolute top-1 right-1 z-20`}>
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveMessageMenu(activeMessageMenu === msg.id ? null : msg.id);
+                    }}
+                    className={`p-1 ${isMe ? 'text-white/40 hover:text-white hover:bg-white/10' : 'text-gray-400 hover:text-gray-600 hover:bg-black/5'} rounded-full transition-all opacity-0 group-hover/bubble:opacity-100 ${activeMessageMenu === msg.id ? 'opacity-100 bg-black/5' : ''}`}
+                >
+                    <MoreVertical size={14} />
+                </button>
+
+                {activeMessageMenu === msg.id && (
+                    <div
+                        ref={messageMenuRef}
+                        className={`absolute z-[60] top-full ${isMe ? 'right-0' : 'left-0'} mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 min-w-[140px] p-2 animate-in fade-in zoom-in-95 duration-200`}
+                    >
+                        {isEditable && (
+                            <button
+                                onClick={() => handleStartEdit(msg)}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 rounded-xl transition-colors text-left"
+                            >
+                                Edit
+                            </button>
+                        )}
+                        <button
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors text-left"
+                        >
+                            Delete
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
     };
 
     const renderSidebarItem = (id, name, subtext, Icon, isActive, badge, statusColor) => (
@@ -260,11 +380,11 @@ const VendorEventChatTab = () => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50 transition-colors">
-                            <Phone size={20} />
-                        </button>
-                        <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50">
-                            <MoreVertical size={20} />
+                        <button
+                            onClick={handleCallClick}
+                            className="p-3 text-teal-600 hover:text-white bg-teal-50 hover:bg-teal-500 rounded-xl transition-all shadow-sm group"
+                        >
+                            <Phone size={20} className="group-hover:rotate-12 transition-transform" />
                         </button>
                     </div>
                 </div>
@@ -281,40 +401,69 @@ const VendorEventChatTab = () => {
                     {/* Broadcast History / Messages */}
                     <div className="max-w-4xl mx-auto space-y-6">
 
-                        {messages.filter(m => m.channel === activeChannel).map(msg => (
-                            <div key={msg.id} className="group">
-                                {(msg.sender === 'You' || msg.sender === 'Manager' || msg.sender === 'me') ? (
-                                    <div className="flex flex-col items-end gap-1">
-                                        <div className="flex items-end gap-3 max-w-[75%]">
-                                            <div className="bg-[#0b2d49] text-white p-4 rounded-2xl rounded-tr-sm shadow-sm">
-                                                <p className="text-sm font-medium leading-relaxed">{msg.text}</p>
+                        {messages.filter(m => m.channel === activeChannel).map(msg => {
+                            const isMe = (msg.sender === 'You' || msg.sender === 'Manager' || msg.sender === 'me');
+                            return (
+                                <div
+                                    key={msg.id}
+                                    className="group relative"
+                                    onContextMenu={(e) => handleContextMenu(e, msg.id)}
+                                >
+                                    {isMe ? (
+                                        <div className="flex flex-col items-end gap-1">
+                                            <div className="flex items-end gap-3 max-w-[75%]">
+                                                <div className="bg-[#0b2d49] text-white p-4 pr-7 rounded-2xl rounded-tr-sm shadow-sm relative group/bubble">
+                                                    {renderMessageActions(msg, true)}
+                                                    {editingMessageId === msg.id ? (
+                                                        <div className="flex flex-col gap-2">
+                                                            <textarea
+                                                                className="bg-white/10 text-white rounded-xl p-2 text-sm outline-none border border-white/20 min-w-[200px]"
+                                                                value={editInput}
+                                                                onChange={(e) => setEditInput(e.target.value)}
+                                                                autoFocus
+                                                            />
+                                                            <div className="flex justify-end gap-2 text-xs">
+                                                                <button onClick={() => setEditingMessageId(null)} className="font-bold opacity-70">Cancel</button>
+                                                                <button onClick={() => submitEdit(msg.id)} className="font-bold">Save</button>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <p className="text-sm font-medium leading-relaxed">{msg.text}</p>
+                                                            {msg.isEdited && <span className="text-[9px] opacity-40 float-right mt-1 ml-2 italic">edited</span>}
+                                                        </>
+                                                    )}
+                                                </div>
+                                                <div className="w-8 h-8 rounded-full bg-blue-50 text-[#0b2d49] flex items-center justify-center text-xs font-bold shrink-0 border border-blue-100 uppercase">ME</div>
                                             </div>
-                                            <div className="w-8 h-8 rounded-full bg-blue-50 text-[#0b2d49] flex items-center justify-center text-xs font-bold shrink-0 border border-blue-100">ME</div>
-                                        </div>
-                                        <div className="flex items-center gap-1 mr-12">
-                                            <span className="text-[10px] font-bold text-gray-400">{msg.time}</span>
-                                            {msg.status === 'sending' && <Clock size={12} className="text-gray-400" />}
-                                            {msg.status === 'sent' && <Check size={12} className="text-gray-400" />}
-                                            {msg.status === 'delivered' && <CheckCheck size={12} className="text-gray-400" />}
-                                            {(msg.status === 'read' || !msg.status) && <CheckCheck size={12} className="text-green-500" />}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col items-start gap-1">
-                                        {isGroup && <span className="text-[10px] font-bold text-gray-500 ml-12 mb-0.5">{msg.sender}</span>}
-                                        <div className="flex items-end gap-3 max-w-[75%]">
-                                            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-xs font-bold shrink-0 border border-gray-200">
-                                                {msg.sender.substring(0, 2).toUpperCase()}
-                                            </div>
-                                            <div className="bg-gray-100 text-gray-800 p-4 rounded-2xl rounded-tl-sm shadow-sm">
-                                                <p className="text-sm font-medium leading-relaxed">{msg.text}</p>
+                                            <div className="flex items-center gap-1 mr-12">
+                                                <span className="text-[10px] font-bold text-gray-400">{msg.time}</span>
+                                                {msg.status === 'sending' && <Clock size={12} className="text-gray-400" />}
+                                                {msg.status === 'sent' && <Check size={12} className="text-gray-400" />}
+                                                {msg.status === 'delivered' && <CheckCheck size={12} className="text-gray-400" />}
+                                                {(msg.status === 'read' || !msg.status) && <CheckCheck size={12} className="text-green-500" />}
                                             </div>
                                         </div>
-                                        <span className="text-[10px] font-bold text-gray-400 ml-12">{msg.time}</span>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                                    ) : (
+                                        <div className="flex flex-col items-start gap-1">
+                                            {isGroup && <span className="text-[10px] font-bold text-gray-500 ml-12 mb-0.5">{msg.sender}</span>}
+                                            <div className="flex items-end gap-3 max-w-[75%]">
+                                                <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-xs font-bold shrink-0 border border-gray-200">
+                                                    {msg.sender.substring(0, 2).toUpperCase()}
+                                                </div>
+                                                <div className="bg-gray-100 text-gray-800 p-4 pr-7 rounded-2xl rounded-tl-sm shadow-sm relative group/bubble">
+                                                    {renderMessageActions(msg, false)}
+                                                    <p className="text-sm font-medium leading-relaxed">{msg.text}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-1 ml-12">
+                                                <span className="text-[10px] font-bold text-gray-400">{msg.time}</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
 
                     </div>
                 </div>
@@ -335,7 +484,7 @@ const VendorEventChatTab = () => {
                             >
                                 <Paperclip size={20} />
                             </button>
-                            <div className="relative">
+                            <div className="relative" ref={emojiPickerRef}>
                                 <button
                                     onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                                     className={`p-2 rounded-full transition-colors ${showEmojiPicker ? 'text-[#0b2d49] bg-gray-200' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200'}`}
@@ -376,7 +525,106 @@ const VendorEventChatTab = () => {
                 </div>
 
             </div>
-        </div>
+            {/* --- VOICE CALL MODAL --- */}
+            {
+                isCallModalOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0b2d49]/40 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white w-[380px] rounded-[2.5rem] p-8 shadow-2xl border border-white/20 relative overflow-hidden animate-in zoom-in-95 duration-300">
+                            {/* Background Decoration */}
+                            <div className="absolute -top-24 -right-24 w-48 h-48 bg-teal-500/10 rounded-full blur-3xl"></div>
+                            <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl"></div>
+
+                            <div className="relative z-10 flex flex-col items-center">
+                                {/* Animated Pulse Rings */}
+                                <div className="relative mb-8">
+                                    <div className="absolute inset-0 bg-teal-500/20 rounded-full animate-ping"></div>
+                                    <div className="absolute inset-0 bg-teal-500/10 rounded-full animate-pulse delay-75"></div>
+                                    <div className="w-28 h-28 rounded-full bg-gradient-to-br from-teal-500 to-[#0b2d49] p-1 relative z-10 shadow-xl">
+                                        <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
+                                            <div className="text-3xl font-black text-[#0b2d49]">
+                                                {(() => {
+                                                    const name = activeChannel === 'vendors' ? 'All Vendors' :
+                                                        activeChannel === 'general' ? 'All Stakeholders' :
+                                                            activeChannel === 'internal' ? 'Internal Team' : activeChannel;
+                                                    return name.substring(0, 2).toUpperCase();
+                                                })()}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <h3 className="text-2xl font-black text-gray-900 mb-2 mt-2">
+                                    {activeChannel === 'vendors' ? 'All Vendors Group' :
+                                        activeChannel === 'general' ? 'All Stakeholders' :
+                                            activeChannel === 'internal' ? 'Internal Team' : activeChannel}
+                                </h3>
+                                <p className="text-teal-600 font-bold tracking-widest text-xs uppercase mb-8">
+                                    {callDuration > 2 ? formatDuration(callDuration) : 'Calling...'}
+                                </p>
+
+                                <div className="flex gap-6 mt-4">
+                                    <button className="w-14 h-14 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 transition-all shadow-sm">
+                                        <Volume2 size={24} />
+                                    </button>
+                                    <button
+                                        onClick={endCall}
+                                        className="w-16 h-16 rounded-full bg-rose-500 text-white flex items-center justify-center hover:bg-rose-600 hover:scale-110 active:scale-95 transition-all shadow-lg shadow-rose-200"
+                                    >
+                                        <Phone size={28} className="rotate-[135deg]" />
+                                    </button>
+                                    <button className="w-14 h-14 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 transition-all shadow-sm">
+                                        <Users size={24} />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+            {/* --- CONTEXT MENU --- */}
+            {
+                contextMenu.show && (
+                    <div
+                        ref={contextMenuRef} // Assuming contextMenuRef is defined using useRef
+                        className="fixed z-[100] bg-white rounded-2xl shadow-2xl border border-gray-100 min-w-[160px] p-2 animate-in fade-in zoom-in-95 duration-200"
+                        style={{ top: contextMenu.y, left: contextMenu.x }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {(() => {
+                            const msg = messages.find(m => m.id === contextMenu.msgId);
+                            if (!msg) return null;
+                            const isMe = (msg.sender === 'You' || msg.sender === 'Manager' || msg.sender === 'me');
+                            const isEditable = isMe && (Date.now() - (msg.timestamp || 0) < 120000);
+
+                            return (
+                                <>
+                                    {isEditable && (
+                                        <button
+                                            onClick={() => {
+                                                handleStartEdit(msg);
+                                                setContextMenu(prev => ({ ...prev, show: false }));
+                                            }}
+                                            className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 rounded-xl transition-colors text-left"
+                                        >
+                                            Edit Message
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => {
+                                            handleDeleteMessage(contextMenu.msgId);
+                                            setContextMenu(prev => ({ ...prev, show: false }));
+                                        }}
+                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors text-left"
+                                    >
+                                        Delete Message
+                                    </button>
+                                </>
+                            );
+                        })()}
+                    </div>
+                )
+            }
+        </div >
     );
 };
 
