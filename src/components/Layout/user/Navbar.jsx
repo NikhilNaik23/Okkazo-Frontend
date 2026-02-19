@@ -1,4 +1,6 @@
 import React, { useState, useRef, useLayoutEffect, useEffect } from "react";
+import { useSelector, useDispatch } from "react-redux";
+import { selectUser } from "../../../store/slices/authSlice";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { BsBell, BsPersonCircle, BsSearch, BsBookmarkHeart } from "react-icons/bs";
 import { GiHamburgerMenu } from "react-icons/gi";
@@ -24,6 +26,7 @@ const Navbar = () => {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const user = useSelector(selectUser);
 
   const isActive = (path) => location.pathname === path;
   const isDashboard = ["/user/dashboard", "/user/my-events", "/user/notifications"].includes(location.pathname);
@@ -200,7 +203,11 @@ const Navbar = () => {
                       <div className={`h-6 w-[1px] ${isDashboard ? "bg-white/10" : "bg-[#09637E]/10"}`} />
                       <Link to="/user/profile" className="flex items-center pl-1 group ml-3">
                         <div className="w-10 h-10 rounded-xl border-2 border-[#09637E]/20 overflow-hidden shadow-lg group-hover:scale-105 transition-all duration-300 flex items-center justify-center bg-[#09637E] text-white text-[11px] font-black">
-                          AM
+                          {user?.avatar ? (
+                            <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" />
+                          ) : (
+                            <span>{user?.name ? user.name.substring(0, 2).toUpperCase() : "US"}</span>
+                          )}
                         </div>
                       </Link>
                     </div>

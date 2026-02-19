@@ -1,31 +1,29 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
-import { BsPencil, BsGear, BsEnvelope, BsTelephone, BsGeoAlt } from "react-icons/bs";
+import { BsPencil, BsGear, BsEnvelope, BsTelephone, BsGeoAlt, BsStars, BsClockHistory, BsCameraFill } from "react-icons/bs";
 import { toast } from "react-hot-toast";
 import { selectUser, selectIsLoading as selectAuthLoading, selectIsAuthenticated, fetchCurrentUser } from "../../../store/slices/authSlice";
 
 const UserProfile = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch();
-    
+
     const authUser = useSelector(selectUser);
     const authLoading = useSelector(selectAuthLoading);
     const isAuthenticated = useSelector(selectIsAuthenticated);
-    
+
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
     // Fetch user data and map to local state
     useEffect(() => {
-        // If not authenticated, redirect to login
         if (!isAuthenticated) {
             toast.error("Please login to view your profile");
             navigate("/login");
             return;
         }
 
-        // If we don't have user data yet, fetch it
         if (!authUser) {
             dispatch(fetchCurrentUser());
         }
@@ -41,10 +39,10 @@ const UserProfile = () => {
                 email: authUser.email,
                 phone: authUser.phone || "Not provided",
                 location: authUser.location || "Not provided",
-                avatar: authUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(authUser.name)}&background=d7a444&color=0b2d49&size=200`,
+                avatar: authUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(authUser.name)}&background=09637E&color=ffffff&size=200`,
                 bio: authUser.bio || "",
                 interests: authUser.interests || [],
-                memberSince: authUser.memberSince ? new Date(authUser.memberSince).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Unknown",
+                memberSince: authUser.memberSince ? new Date(authUser.memberSince).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "February 2026",
                 role: authUser.role,
                 profileIsComplete: authUser.profileIsComplete,
                 profileCompletionPercentage: authUser.profileCompletionPercentage,
@@ -55,101 +53,116 @@ const UserProfile = () => {
         }
     }, [authUser]);
 
-    // Sync loading state
     useEffect(() => {
         setIsLoading(authLoading);
     }, [authLoading]);
 
     return (
-        <div className="min-h-screen bg-[#e9eff1] flex flex-col font-sans text-[#0b2d49]">
-            <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-12 pb-20">
+        <div className="min-h-screen bg-[#EBF4F6] flex flex-col font-sans text-[#09637E]">
+            <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-24 pb-20">
                 {isLoading ? (
-                    <div className="flex flex-col items-center justify-center py-40 bg-white rounded-[3rem] shadow-xl border border-gray-100">
-                        <div className="w-12 h-12 border-4 border-[#d7a444] border-t-transparent rounded-full animate-spin mb-4"></div>
-                        <p className="font-bold text-gray-400 uppercase tracking-widest text-xs">Loading Profile...</p>
+                    <div className="flex flex-col items-center justify-center py-40 bg-white rounded-[3rem] shadow-xl border border-[#09637E]/5">
+                        <div className="w-12 h-12 border-4 border-[#09637E] border-t-transparent rounded-full animate-spin mb-4"></div>
+                        <p className="font-bold text-[#09637E]/40 uppercase tracking-widest text-xs">Loading Profile...</p>
                     </div>
                 ) : user ? (
                     <>
-                        {/* Hero Profile Section */}
-                        <div className="bg-white rounded-[3rem] shadow-xl border border-gray-100 overflow-hidden mb-12 relative animate-in fade-in duration-700">
-                            <div className="h-48 bg-gradient-to-r from-[#d7a444]/20 via-[#e9eff1] to-[#708aa0]/20"></div>
+                        {/* Hero Profile Card */}
+                        <div className="bg-[#EBF4F6] rounded-[3rem] shadow-xl border border-white/50 overflow-hidden mb-12 relative animate-in fade-in duration-700">
+                            {/* Top Gradient Background */}
+                            <div className="h-48 bg-gradient-to-b from-[#D1E9ED] to-[#EBF4F6]"></div>
+
                             <div className="px-10 pb-12 flex flex-col items-center">
-                                <div className="relative -mt-24 mb-6">
-                                    <div className="w-40 h-40 rounded-full border-8 border-white shadow-2xl overflow-hidden bg-white">
-                                        <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                                {/* Auto-centered Profile Picture Container */}
+                                <div className="relative -mt-24 mb-6 group cursor-pointer">
+                                    <div className="w-40 h-40 rounded-full p-1 bg-gradient-to-tr from-[#09637E] to-[#7AB2B2] shadow-2xl">
+                                        <div className="w-full h-full rounded-full border-4 border-white overflow-hidden bg-white">
+                                            <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                                        </div>
+                                    </div>
+                                    {/* Edit Badge */}
+                                    <div className="absolute bottom-2 right-2 w-10 h-10 bg-[#09637E] rounded-full flex items-center justify-center text-white border-4 border-[#EBF4F6] shadow-lg group-hover:scale-110 transition-transform">
+                                        <BsCameraFill size={14} />
                                     </div>
                                 </div>
-                                <h1 className="text-5xl font-black mb-2 tracking-tight">{user.name}</h1>
-                                <p className="text-gray-400 font-medium mb-8">Member since {user.memberSince}</p>
-                                
+
+                                <h1 className="text-5xl font-serif-premium italic font-bold mb-2 tracking-tight text-[#09637E] text-center">{user.name}</h1>
+                                <p className="text-[#088395] font-medium mb-8">Member since {user.memberSince}</p>
+
                                 <div className="flex gap-4">
-                                    <button 
+                                    <button
                                         onClick={() => navigate("/user/edit-profile")}
-                                        className="flex items-center gap-2 bg-[#0b2d49] text-white px-8 py-4 rounded-2xl font-black text-sm hover:bg-[#d7a444] hover:text-[#0b2d49] transition-all shadow-lg active:scale-95 group"
+                                        className="flex items-center gap-2 bg-[#09637E] text-white px-8 py-3 rounded-full font-bold text-sm hover:bg-[#088395] transition-all shadow-lg hover:shadow-xl active:scale-95"
                                     >
-                                        <BsPencil className="group-hover:scale-110 transition-transform" />
+                                        <BsPencil size={14} />
                                         Edit Profile
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={() => navigate("/user/account-settings")}
-                                        className="flex items-center gap-2 bg-white text-[#0b2d49] px-8 py-4 rounded-2xl font-black text-sm hover:bg-gray-50 transition-all border border-gray-100 shadow-sm active:scale-95 group"
+                                        className="flex items-center gap-2 bg-white text-[#09637E] px-8 py-3 rounded-full font-bold text-sm hover:bg-gray-50 transition-all border border-[#09637E]/10 shadow-sm active:scale-95"
                                     >
-                                        <BsGear className="group-hover:rotate-90 transition-transform" />
+                                        <BsGear size={14} />
                                         Account Settings
                                     </button>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 animate-in fade-in slide-in-from-bottom-5 duration-700">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-5 duration-700">
                             {/* Left Column: Info & Interests */}
-                            <div className="space-y-10">
+                            <div className="space-y-8">
                                 {/* Personal Info */}
-                                <div className="bg-white rounded-[2.5rem] p-10 shadow-sm border border-gray-100">
-                                    <h2 className="text-xl font-black mb-8 flex items-center gap-3">
-                                        <span className="w-1.5 h-6 bg-[#d7a444] rounded-full"></span>
+                                <div className="bg-[#EBF4F6] rounded-[2.5rem] p-8 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),0_4px_16px_rgba(9,99,126,0.05)] border border-white/60">
+                                    <h2 className="text-xl font-serif-premium text-[#09637E] mb-8 border-l-4 border-[#09637E] pl-4 font-bold">
                                         Personal Info
                                     </h2>
-                                    <div className="space-y-8">
-                                        <div className="space-y-1">
-                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                    <div className="space-y-6 px-2">
+                                        <div className="group">
+                                            <p className="text-[10px] font-black text-[#088395] uppercase tracking-widest flex items-center gap-2 mb-1">
                                                 <BsEnvelope /> Email Address
                                             </p>
-                                            <p className="font-bold text-[#0b2d49]">{user.email}</p>
+                                            <p className="font-bold text-[#09637E] text-sm md:text-base break-all">{user.email}</p>
                                         </div>
-                                        <div className="space-y-1">
-                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                        <div className="group">
+                                            <p className="text-[10px] font-black text-[#088395] uppercase tracking-widest flex items-center gap-2 mb-1">
                                                 <BsTelephone /> Phone Number
                                             </p>
-                                            <p className="font-bold text-[#0b2d49]">{user.phone}</p>
+                                            <p className="font-bold text-[#09637E] text-sm md:text-base italic opacity-60">{user.phone}</p>
                                         </div>
-                                        <div className="space-y-1">
-                                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                        <div className="group">
+                                            <p className="text-[10px] font-black text-[#088395] uppercase tracking-widest flex items-center gap-2 mb-1">
                                                 <BsGeoAlt /> Location
                                             </p>
-                                            <p className="font-bold text-[#0b2d49]">{user.location}</p>
+                                            <p className="font-bold text-[#09637E] text-sm md:text-base italic opacity-60">{user.location}</p>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Interests */}
-                                <div className="bg-white rounded-[2.5rem] p-10 shadow-sm border border-gray-100">
-                                    <h2 className="text-xl font-black mb-8 flex items-center gap-3">
-                                        <span className="w-1.5 h-6 bg-[#d7a444] rounded-full"></span>
+                                <div className="bg-[#EBF4F6] rounded-[2.5rem] p-8 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),0_4px_16px_rgba(9,99,126,0.05)] border border-white/60 min-h-[300px] flex flex-col">
+                                    <h2 className="text-xl font-serif-premium text-[#09637E] mb-8 border-l-4 border-[#09637E] pl-4 font-bold">
                                         Interests
                                     </h2>
-                                    <div className="flex flex-wrap gap-3">
+                                    <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
                                         {user.interests.length > 0 ? (
-                                            user.interests.map((interest) => (
-                                                <span 
-                                                    key={interest}
-                                                    className="px-4 py-2 bg-[#f3ddb1]/30 text-[#d0a862] rounded-xl text-xs font-black border border-[#f3ddb1]/50 hover:bg-[#d7a444] hover:text-[#0b2d49] transition-all cursor-default"
-                                                >
-                                                    {interest}
-                                                </span>
-                                            ))
+                                            <div className="flex flex-wrap gap-2 justify-center">
+                                                {user.interests.map((interest) => (
+                                                    <span
+                                                        key={interest}
+                                                        className="px-4 py-2 bg-white text-[#09637E] rounded-xl text-xs font-bold border border-[#09637E]/10 shadow-sm"
+                                                    >
+                                                        {interest}
+                                                    </span>
+                                                ))}
+                                            </div>
                                         ) : (
-                                            <p className="text-xs text-gray-400 italic">No interests listed.</p>
+                                            <div className="space-y-4">
+                                                <BsStars size={32} className="text-[#09637E]/20 mx-auto animate-pulse" />
+                                                <p className="text-xs text-[#09637E]/40 italic font-serif-premium">No interests listed yet.</p>
+                                                <button onClick={() => navigate("/user/edit-profile")} className="text-[10px] font-black uppercase tracking-widest text-[#09637E] border-b border-[#09637E] hover:text-[#088395] hover:border-[#088395] transition-colors pb-0.5">
+                                                    Add Your Passions
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -157,20 +170,38 @@ const UserProfile = () => {
 
                             {/* Right Column: Recent Activity */}
                             <div className="lg:col-span-2">
-                                <div className="bg-white rounded-[2.5rem] p-10 shadow-sm border border-gray-100 h-full">
-                                    <div className="flex items-center justify-between mb-10">
-                                        <h2 className="text-2xl font-black tracking-tight flex items-center gap-3">
-                                            <span className="w-1.5 h-8 bg-[#d7a444] rounded-full"></span>
+                                <div className="bg-[#EBF4F6] rounded-[2.5rem] p-10 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),0_4px_16px_rgba(9,99,126,0.05)] border border-white/60 h-full relative overflow-hidden flex flex-col">
+                                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/20 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
+
+                                    <div className="flex items-center justify-between mb-10 relative z-10">
+                                        <h2 className="text-2xl font-serif-premium text-[#09637E] border-l-4 border-[#09637E] pl-4 font-bold">
                                             Recent Activity
                                         </h2>
-                                        <button className="text-sm font-black text-[#d7a444] hover:underline">View All</button>
+                                        <button className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/60 hover:text-[#09637E] transition-colors">View All</button>
                                     </div>
 
-                                    <div className="space-y-8 relative">
-                                        {/* Vertical Line for Timeline */}
-                                        <div className="absolute left-[23px] top-6 bottom-6 w-0.5 bg-gray-50"></div>
+                                    <div className="flex-1 flex flex-col items-center justify-center relative z-10">
+                                        <div className="w-24 h-24 rounded-full border-4 border-[#09637E]/10 flex items-center justify-center mb-6 relative">
+                                            <BsClockHistory size={40} className="text-[#09637E]/20" />
+                                            {/* Decorative orbit dots */}
+                                            <div className="absolute top-0 right-0 w-3 h-3 bg-[#7AB2B2] rounded-full opacity-50 animate-ping"></div>
+                                        </div>
+                                        <h3 className="font-serif-premium italic text-2xl text-[#09637E]/30 mb-2">A blank canvas for your journey.</h3>
+                                        <p className="text-xs text-[#09637E]/40 max-w-xs text-center leading-relaxed">Your recent interactions and event highlights will appear here.</p>
 
-                                        <p className="text-sm text-gray-400 italic text-center py-10">No recent activity found.</p>
+                                        {/* Pagination dots placeholder */}
+                                        <div className="flex gap-2 mt-8">
+                                            <div className="w-8 h-1.5 bg-[#09637E]/10 rounded-full"></div>
+                                            <div className="w-1.5 h-1.5 bg-[#09637E]/10 rounded-full"></div>
+                                            <div className="w-1.5 h-1.5 bg-[#09637E]/10 rounded-full"></div>
+                                        </div>
+                                    </div>
+
+                                    {/* Quick Fab or Action (Optional from design) */}
+                                    <div className="absolute bottom-8 right-8">
+                                        <button className="w-12 h-12 bg-[#09637E] rounded-full flex items-center justify-center text-white shadow-xl hover:scale-110 transition-transform">
+                                            <div className="w-6 h-6 border-2 border-white/50 rounded-full border-t-white animate-spin-slow" />
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -178,7 +209,7 @@ const UserProfile = () => {
                     </>
                 ) : (
                     <div className="flex flex-col items-center justify-center py-40">
-                        <p className="text-gray-400 font-bold uppercase tracking-widest text-xs">User profile not found.</p>
+                        <p className="text-[#09637E]/40 font-bold uppercase tracking-widest text-xs">User profile not found.</p>
                     </div>
                 )}
             </main>
