@@ -5,6 +5,7 @@ import Navbar from "./Navbar";
 import AdminDashboard from "../../../pages/Home/admin/AdminDashboard";
 import AdminEvents from "../../../pages/Home/admin/AdminEvents";
 import AdminVendorVerification from "../../../pages/Home/admin/AdminVendorVerification";
+import VendorDetails from "../../../pages/Home/admin/VendorDetails";
 import AdminReports from "../../../pages/Home/admin/AdminReports";
 import AdminLedger from "../../../pages/Home/admin/AdminLedger";
 import AdminTeamAccess from "../../../pages/Home/admin/AdminTeamAccess";
@@ -42,6 +43,7 @@ const AdminLayout = () => {
                 <Route path="events" element={<AdminEvents />} />
                 <Route path="events/:id" element={<EventDetails />} />
                 <Route path="vendors" element={<AdminVendorVerification />} />
+                <Route path="vendors/:id" element={<VendorDetails />} />
                 <Route path="reports" element={<AdminReports />} />
                 <Route path="ledger" element={<AdminLedger />} />
                 <Route path="ledger/:id" element={<TransactionDetails />} />

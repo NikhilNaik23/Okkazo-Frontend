@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { mockVendors } from "../../../data/adminData";
 
 import {
@@ -7,392 +8,240 @@ import {
   Filter,
   CheckCircle,
   Clock,
-  AlertTriangle,
-  XCircle,
-  MoreHorizontal,
-  Printer,
-  Share2,
   ExternalLink,
   ShieldCheck,
   Building2,
   FileText,
-  CreditCard,
-  Plus,
-  IndianRupee
+  X,
+  ArrowRight
 } from "lucide-react";
 
 const MOCK_VENDORS = mockVendors;
 
-/*const MOCK_VENDORS_OLD = [
-  {
-    id: "V-92842",
-    name: "EcoMart Solutions",
-    legalName: "EcoMart Solutions LLC",
-    status: "PENDING",
-    submittedDate: "Oct 24, 2023",
-    riskLevel: "Low Risk",
-    description: "Sustainability & Eco-friendly consumer goods",
-    location: "Seattle, WA",
-    taxId: "88-2394851",
-    registryNumber: "REG-2023-WA-0922",
-    yearFounded: "2018",
-    address: "1200 Innovation Way, Suite 400, Seattle, WA 98101, USA",
-    checks: {
-      businessLicense: { status: "valid", match: true, message: "Match found in WA State Registry" },
-      ownerIdentity: { status: "valid", verified: true, message: "Verified via Persona API" },
-      bankAccount: { status: "pending", linked: false, message: "Plaid connection pending auth" },
-    },
-    logoColor: "bg-[#0b2d49]/10 text-[#0b2d49]"
-  },
-  {
-    id: "V-92101",
-    name: "Urban Threads",
-    legalName: "Urban Threads Inc.",
-    status: "REVIEWING",
-    submittedDate: "Oct 23, 2023",
-    riskLevel: "Medium Risk",
-    description: "Contemporary fashion and apparel",
-    location: "Austin, TX",
-    taxId: "74-1029384",
-    registryNumber: "REG-2015-TX-1102",
-    yearFounded: "2015",
-    address: "450 Congress Ave, Austin, TX 78701, USA",
-    checks: {
-      businessLicense: { status: "valid", match: true, message: "Match found in TX State Registry" },
-      ownerIdentity: { status: "warning", verified: false, message: "Manual review required" },
-      bankAccount: { status: "valid", linked: true, message: "Verified via Plaid" },
-    },
-    logoColor: "bg-[#d7a444]/10 text-[#d7a444]"
-  },
-  {
-    id: "V-91992",
-    name: "Apex Electronics",
-    legalName: "Apex Global Electronics Ltd",
-    status: "PENDING",
-    submittedDate: "Oct 22, 2023",
-    riskLevel: "High Risk",
-    description: "Consumer electronics wholesaler",
-    location: "San Francisco, CA",
-    taxId: "94-5551234",
-    registryNumber: "REG-2020-CA-8833",
-    yearFounded: "2020",
-    address: "200 Market St, San Francisco, CA 94111, USA",
-    checks: {
-      businessLicense: { status: "warning", match: false, message: "Registry mismatch detected" },
-      ownerIdentity: { status: "valid", verified: true, message: "Verified via Persona API" },
-      bankAccount: { status: "valid", linked: true, message: "Verified via Plaid" },
-    },
-    logoColor: "bg-[#708aa0]/10 text-[#708aa0]"
-  },
-  {
-    id: "V-90877",
-    name: "GreenLeaf Wholesale",
-    legalName: "GreenLeaf Organics Co.",
-    status: "REJECTED",
-    submittedDate: "Oct 21, 2023",
-    riskLevel: "Sanction Flag",
-    description: "Organic produce distributor",
-    location: "Portland, OR",
-    taxId: "93-2223344",
-    registryNumber: "REG-2019-OR-4421",
-    yearFounded: "2019",
-    address: "1500 SW 1st Ave, Portland, OR 97201, USA",
-    checks: {
-      businessLicense: { status: "invalid", match: false, message: "License expired" },
-      ownerIdentity: { status: "invalid", verified: false, message: "Identity flag detected" },
-      bankAccount: { status: "invalid", linked: false, message: "Account frozen" },
-    },
-    logoColor: "bg-red-100 text-red-600"
-  }
-];*/
-
 const AdminVendorVerification = () => {
-  const [selectedVendorId, setSelectedVendorId] = useState(MOCK_VENDORS[0].id);
-  const selectedVendor = MOCK_VENDORS.find(v => v.id === selectedVendorId) || MOCK_VENDORS[0];
+    const navigate = useNavigate();
+    const [searchQuery, setSearchQuery] = useState("");
+    const [showApplicationsModal, setShowApplicationsModal] = useState(false);
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "PENDING": return "bg-[#f3ddb1] text-[#d7a444]";
-      case "REVIEWING": return "bg-[#708aa0]/20 text-[#0b2d49]";
-      case "REJECTED": return "bg-red-100 text-red-700";
-      case "APPROVED": return "bg-[#0b2d49]/10 text-[#0b2d49]";
-      default: return "bg-gray-100 text-gray-700";
-    }
-  };
+    const filteredVendors = MOCK_VENDORS.filter(vendor => {
+        const query = searchQuery.toLowerCase();
+        const matchesQuery = (
+            vendor.name.toLowerCase().includes(query) ||
+            vendor.id.toLowerCase().includes(query) ||
+            vendor.description.toLowerCase().includes(query) ||
+            vendor.location.toLowerCase().includes(query)
+        );
+        return matchesQuery && vendor.status === "APPROVED";
+    });
 
-  const getRiskColor = (risk) => {
-    if (risk.includes("Low")) return "text-[#0b2d49] bg-[#0b2d49]/5 border-[#0b2d49]/10";
-    if (risk.includes("Medium")) return "text-[#d7a444] bg-[#f3ddb1]/30 border-[#d7a444]/20";
-    return "text-red-600 bg-red-50 border-red-100";
-  };
+    const pendingApplications = MOCK_VENDORS.filter(v => v.status === "PENDING" || v.status === "REVIEWING");
 
-  const getRiskIcon = (risk) => {
-    if (risk.includes("Low")) return <ShieldCheck size={14} className="mr-1.5" />;
-    if (risk.includes("Medium")) return <AlertTriangle size={14} className="mr-1.5" />;
-    return <XCircle size={14} className="mr-1.5" />;
-  };
-
-  return (
-    <div className="flex flex-col h-full relative overflow-hidden">
-        {/* Header Section */}
-        <div className="px-6 mb-6 pt-6 shrink-0">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
+    return (
+    <div className="flex flex-col h-full relative overflow-hidden bg-[#f8fafc]">
+        {/* Header Section - Slimmed Down */}
+        <div className="px-6 mb-4 pt-6 shrink-0">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4">
                 <div>
-                <h2 className="text-2xl font-bold text-[#0b2d49] tracking-tight">
-                    Vendor Verification
-                </h2>
+                    <h2 className="text-2xl font-black text-[#0b2d49] tracking-tight">
+                        Vendor Verification
+                    </h2>
+                    <p className="text-[#708aa0] text-xs font-medium mt-0.5">Manage and verify platform service providers</p>
                 </div>
-                <button className="flex items-center gap-2 px-4 py-2 bg-white border border-[#e9eff1] rounded-lg text-sm font-medium text-[#5a5b44] hover:bg-[#e9eff1] shadow-sm transition-colors mt-4 sm:mt-0">
-                    <Download size={16} />
+                <button className="flex items-center gap-2 px-4 py-2 bg-white border border-[#e9eff1] rounded-xl text-xs font-bold text-[#0b2d49] hover:bg-[#0b2d49] hover:text-white shadow-sm transition-all mt-3 sm:mt-0 active:scale-95 group">
+                    <Download size={14} className="group-hover:animate-bounce" />
                     Export Report
                 </button>
             </div>
 
-            {/* Filters */}
-            <div className="flex flex-col md:flex-row gap-4">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#708aa0]" size={18} />
+            {/* Filters - Slimmed Down */}
+            <div className="flex flex-col md:flex-row gap-3 items-center justify-between bg-white p-2.5 rounded-2xl border border-[#e9eff1] shadow-sm">
+                <div className="relative w-full md:max-w-md group">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#708aa0] group-focus-within:text-[#d7a444] transition-colors" size={16} />
                     <input 
                         type="text" 
-                        placeholder="Search vendors by name, ID, or tax number..." 
-                        className="w-full pl-10 pr-4 py-2.5 bg-[#f8fafc] border-none rounded-xl text-sm focus:bg-white focus:border-[#d7a444] focus:ring-1 focus:ring-[#d7a444] focus:outline-none transition-all placeholder:text-[#708aa0] text-[#0b2d49]"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search vendors..." 
+                        className="w-full pl-11 pr-4 py-2.5 bg-[#f8fafc] border border-transparent rounded-xl text-xs focus:bg-white focus:border-[#d7a444] focus:ring-2 focus:ring-[#d7a444]/5 focus:outline-none transition-all placeholder:text-[#708aa0] text-[#0b2d49] font-medium"
                     />
                 </div>
-                <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 font-medium text-13px">
-                    <button className="flex items-center gap-2 px-4 py-2 bg-[#0b2d49] text-white rounded-lg text-sm shadow-sm hover:bg-[#0b2d49]/90 transition-colors whitespace-nowrap">
-                        All Applications
-                        <span className="ml-1 opacity-80">▼</span>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => setShowApplicationsModal(true)}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-[#0b2d49] text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md shadow-[#0b2d49]/10 hover:bg-[#d7a444] transition-all whitespace-nowrap active:scale-95"
+                    >
+                        <FileText size={14} />
+                        Applications
+                        {pendingApplications.length > 0 && (
+                            <span className="ml-1 px-1.5 py-0.5 bg-[#d7a444] text-white rounded-md text-[8px]">{pendingApplications.length}</span>
+                        )}
                     </button>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-white border border-[#e9eff1] text-[#5a5b44] rounded-lg text-sm hover:bg-[#f3ddb1]/20 transition-colors whitespace-nowrap">
-                        Pending
-                        <span className="ml-1 text-[#708aa0]">▼</span>
-                    </button>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-white border border-[#e9eff1] text-[#5a5b44] rounded-lg text-sm hover:bg-[#f3ddb1]/20 transition-colors whitespace-nowrap">
-                        Under Review
-                        <span className="ml-1 text-[#708aa0]">▼</span>
-                    </button>
-                    <button className="flex items-center gap-2 px-4 py-2 bg-white border border-[#e9eff1] text-[#5a5b44] rounded-lg text-sm hover:bg-[#f3ddb1]/20 transition-colors whitespace-nowrap">
-                        Risk Level
-                        <span className="ml-1 text-[#708aa0]">▼</span>
+                    <button className="flex items-center gap-2 px-5 py-2.5 bg-white border border-[#e9eff1] text-[#0b2d49] rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:border-[#0b2d49] transition-all whitespace-nowrap active:scale-95">
+                        <Filter size={14} />
+                        Filter
                     </button>
                 </div>
             </div>
         </div>
 
         {/* Content Grid */}
-        <div className="flex-1 px-6 pb-6 overflow-hidden max-h-full">
-            <div className="grid grid-cols-12 gap-6 h-full">
-                {/* Left Panel: Vendor List - Added overflow handling */}
-                <div className="col-span-12 lg:col-span-4 overflow-y-auto pr-2 space-y-3 custom-scrollbar h-full">
-                    {MOCK_VENDORS.map((vendor) => (
-                        <div 
-                            key={vendor.id}
-                            onClick={() => setSelectedVendorId(vendor.id)}
-                            className={`p-4 rounded-xl border cursor-pointer transition-all hover:shadow-md ${
-                                selectedVendorId === vendor.id 
-                                ? "bg-white border-[#d7a444] ring-1 ring-[#d7a444] shadow-sm" 
-                                : "bg-white border-[#e9eff1] hover:border-[#d7a444]/50"
-                            }`}
-                        >
-                            <div className="flex justify-between items-start mb-3">
-                                <h3 className="font-semibold text-[#0b2d49]">{vendor.name}</h3>
-                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide ${getStatusColor(vendor.status)}`}>
-                                    {vendor.status}
-                                </span>
-                            </div>
-                            
-                            <div className="flex items-center gap-1.5 text-xs text-[#5a5b44] mb-4">
-                                <Clock size={14} />
-                                <span>Submitted {vendor.submittedDate}</span>
-                            </div>
-
-                            <div className="flex items-center justify-between">
-                                <span className={`flex items-center px-2 py-1 rounded-md text-xs font-medium border ${getRiskColor(vendor.riskLevel)}`}>
-                                    {getRiskIcon(vendor.riskLevel)}
-                                    {vendor.riskLevel}
-                                </span>
-                                <span className="text-xs text-[#708aa0] font-mono">ID: #{vendor.id}</span>
+        <div className="flex-1 px-6 pb-6 overflow-y-auto custom-scrollbar">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {filteredVendors.length > 0 ? (
+                    filteredVendors.map((vendor) => (
+                    <div 
+                        key={vendor.id}
+                        className="bg-white rounded-[2rem] border border-[#708aa0]/10 shadow-sm hover:shadow-2xl hover:shadow-[#0b2d49]/10 transition-all group overflow-hidden flex flex-col h-full"
+                    >
+                        <div className="h-48 w-full relative overflow-hidden">
+                            <img 
+                                src={vendor.image} 
+                                alt={vendor.name}
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                            />
+                            <div className="absolute inset-0 bg-linear-to-t from-[#0b2d49]/80 via-[#0b2d49]/20 to-transparent"></div>
+                            <div className="absolute bottom-5 left-6">
+                                <p className="text-[9px] font-black text-white/90 uppercase tracking-[0.2em]">ID: #{vendor.id}</p>
                             </div>
                         </div>
-                    ))}
-                </div>
 
-                {/* Right Panel: Vendor Details */}
-                <div className="col-span-12 lg:col-span-8 bg-white border border-[#e9eff1] rounded-2xl shadow-sm flex flex-col h-full overflow-hidden">
-                    {selectedVendor && (
-                        <>
-                            {/* Detail Header */}
-                            <div className="p-6 border-b border-[#e9eff1] flex items-start justify-between shrink-0">
-                                <div className="flex gap-4">
-                                    <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-2xl font-bold shadow-sm ${selectedVendor.logoColor}`}>
-                                        <Building2 />
-                                    </div>
-                                    <div>
-                                        <div className="flex items-center gap-3 mb-1">
-                                            <h2 className="text-xl font-bold text-[#0b2d49]">{selectedVendor.legalName}</h2>
-                                            <span className="flex items-center gap-1 px-2 py-0.5 bg-[#0b2d49]/10 text-[#0b2d49] rounded-full text-xs font-bold uppercase">
-                                                <CheckCircle size={12} className="fill-current" />
-                                                KYC Verified
-                                            </span>
-                                        </div>
-                                        <p className="text-[#5a5b44] text-sm flex items-center gap-2">
-                                            {selectedVendor.description}
-                                            <span className="w-1 h-1 bg-[#708aa0] rounded-full"></span>
-                                            {selectedVendor.location}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button className="p-2 text-[#708aa0] hover:text-[#0b2d49] hover:bg-[#e9eff1] rounded-lg transition-colors">
-                                        <Printer size={20} />
-                                    </button>
-                                    <button className="p-2 text-[#708aa0] hover:text-[#0b2d49] hover:bg-[#e9eff1] rounded-lg transition-colors">
-                                        <Share2 size={20} />
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Scrollable Content */}
-                            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                                    {/* Business Details */}
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-4">
-                                            <div className="w-1 h-5 bg-[#0b2d49] rounded-full"></div>
-                                            <h4 className="text-xs font-bold text-[#708aa0] uppercase tracking-wider">Business Details</h4>
-                                        </div>
-                                        <div className="bg-[#f8fafc] rounded-xl p-5 space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <p className="text-xs text-[#708aa0] font-medium mb-1 uppercase">Legal Name</p>
-                                                    <p className="text-sm font-semibold text-[#0b2d49]">{selectedVendor.legalName}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs text-[#708aa0] font-medium mb-1 uppercase">Tax ID / EIN</p>
-                                                    <p className="text-sm font-semibold text-[#0b2d49]">{selectedVendor.taxId}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs text-[#708aa0] font-medium mb-1 uppercase">Registry Number</p>
-                                                    <p className="text-sm font-semibold text-[#0b2d49]">{selectedVendor.registryNumber}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-xs text-[#708aa0] font-medium mb-1 uppercase">Year Founded</p>
-                                                    <p className="text-sm font-semibold text-[#0b2d49]">{selectedVendor.yearFounded}</p>
-                                                </div>
-                                            </div>
-                                            <div className="pt-4 border-t border-[#e9eff1]">
-                                                <p className="text-xs text-[#708aa0] font-medium mb-1 uppercase">Registered Address</p>
-                                                <p className="text-sm text-[#5a5b44] leading-relaxed">{selectedVendor.address}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Identity Checks */}
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-4">
-                                            <div className="w-1 h-5 bg-[#0b2d49] rounded-full"></div>
-                                            <h4 className="text-xs font-bold text-[#708aa0] uppercase tracking-wider">Identity Checks</h4>
-                                        </div>
-                                        <div className="space-y-3">
-                                            {/* Business License Check */}
-                                            <div className="flex items-start p-4 border border-[#e9eff1] rounded-xl bg-white shadow-sm hover:shadow-md transition-shadow">
-                                                <div className={`p-2 rounded-lg mr-4 ${
-                                                    selectedVendor.checks.businessLicense.match ? 'bg-[#0b2d49]/10 text-[#0b2d49]' : 'bg-[#f3ddb1]/50 text-[#d7a444]'
-                                                }`}>
-                                                    <FileText size={20} />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <h5 className="text-sm font-bold text-[#0b2d49]">Business License</h5>
-                                                    <p className="text-xs text-[#5a5b44] mt-0.5">{selectedVendor.checks.businessLicense.message}</p>
-                                                </div>
-                                                <button className="text-xs font-bold text-[#d7a444] hover:text-[#d0a862] hover:underline">
-                                                    View<br/>File
-                                                </button>
-                                            </div>
-
-                                            {/* Owner Identity Check */}
-                                            <div className="flex items-start p-4 border border-[#e9eff1] rounded-xl bg-white shadow-sm hover:shadow-md transition-shadow">
-                                                <div className={`p-2 rounded-lg mr-4 ${
-                                                    selectedVendor.checks.ownerIdentity.verified ? 'bg-[#0b2d49]/10 text-[#0b2d49]' : 'bg-red-50 text-red-600'
-                                                }`}>
-                                                    <ShieldCheck size={20} />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <h5 className="text-sm font-bold text-[#0b2d49]">Owner Identity (KYC)</h5>
-                                                    <p className="text-xs text-[#5a5b44] mt-0.5">{selectedVendor.checks.ownerIdentity.message} • Oct 24</p>
-                                                </div>
-                                                <button className="text-xs font-bold text-[#d7a444] hover:text-[#d0a862] hover:underline">
-                                                    Details
-                                                </button>
-                                            </div>
-
-                                             {/* Bank Account Check */}
-                                             <div className="flex items-start p-4 border border-[#e9eff1] rounded-xl bg-white shadow-sm hover:shadow-md transition-shadow">
-                                                <div className={`p-2 rounded-lg mr-4 ${
-                                                    selectedVendor.checks.bankAccount.linked ? 'bg-[#0b2d49]/10 text-[#0b2d49]' : 'bg-[#f3ddb1]/50 text-[#d7a444]'
-                                                }`}>
-                                                    <MoreHorizontal size={20} />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <h5 className="text-sm font-bold text-[#0b2d49]">Bank Account Linking</h5>
-                                                    <p className="text-xs text-[#5a5b44] mt-0.5">{selectedVendor.checks.bankAccount.message}</p>
-                                                </div>
-                                                <button className="text-xs font-bold text-[#708aa0] hover:text-[#0b2d49] hover:underline">
-                                                    Resend<br/>Link
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Supporting Documents */}
+                        <div className="p-6 flex flex-col flex-1">
+                            <div className="flex items-start justify-between mb-4">
                                 <div>
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <div className="w-1 h-5 bg-[#0b2d49] rounded-full"></div>
-                                        <h4 className="text-xs font-bold text-[#708aa0] uppercase tracking-wider">Supporting Documents</h4>
-                                    </div>
-                                    <div className="flex gap-4 overflow-x-auto pb-2">
-                                        <div className="min-w-[140px] h-[180px] bg-[#EAE0D5] rounded-xl flex items-center justify-center relative group cursor-pointer overflow-hidden shadow-sm">
-                                            <div className="w-3/4 h-3/4 bg-white/90 shadow-md rounded-lg flex items-center justify-center transform group-hover:-translate-y-1 transition-transform">
-                                                 <FileText className="text-gray-400 opacity-50" size={32} />
-                                            </div>
-                                        </div>
-                                        <div className="min-w-[140px] h-[180px] bg-[#e9eff1] rounded-xl flex items-center justify-center relative group cursor-pointer overflow-hidden shadow-sm">
-                                             <div className="w-3/4 h-3/4 bg-white/50 rounded-lg flex items-center justify-center">
-                                                 <FileText className="text-gray-500 opacity-50" size={32} />
-                                            </div>
-                                        </div>
-                                        <div className="min-w-[140px] h-[180px] bg-[#f8fafc] border-2 border-dashed border-[#e9eff1] rounded-xl flex flex-col items-center justify-center text-[#708aa0] hover:border-[#d7a444] hover:text-[#d7a444] hover:bg-[#f3ddb1]/20 transition-all cursor-pointer">
-                                            <div className="w-10 h-10 rounded-full bg-white group-hover:bg-white flex items-center justify-center mb-2">
-                                                <Plus size={20} />
-                                            </div>
-                                            <span className="text-xs font-medium">Request More</span>
-                                        </div>
-                                    </div>
+                                    <h3 className="font-black text-[#0b2d49] text-xl group-hover:text-[#d7a444] transition-colors leading-tight line-clamp-1">{vendor.name}</h3>
+                                    <p className="text-[10px] font-bold text-[#708aa0] mt-1 uppercase tracking-widest">{vendor.location}</p>
+                                </div>
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold shadow-inner shrink-0 ${vendor.logoColor || 'bg-[#0b2d49]/5 text-[#d7a444]'}`}>
+                                    <Building2 size={20} />
                                 </div>
                             </div>
 
-                            {/* Footer Actions */}
-                            <div className="p-6 border-t border-[#e9eff1] flex gap-4 bg-white rounded-b-2xl shrink-0">
-                                <button className="flex-1 py-3 px-4 bg-red-50 text-red-600 rounded-xl font-bold text-sm hover:bg-red-100 transition-colors flex items-center justify-center gap-2">
-                                    <XCircle size={18} />
-                                    Reject Application
-                                </button>
-                                 <button className="flex-1 py-3 px-4 bg-[#f8fafc] text-[#5a5b44] rounded-xl font-bold text-sm hover:bg-[#e9eff1] transition-colors flex items-center justify-center gap-2">
-                                    <MoreHorizontal size={18} />
-                                    Request Info
-                                </button>
-                                <button className="flex-[1.5] py-3 px-4 bg-[#0b2d49] text-white rounded-xl font-bold text-sm hover:bg-[#0b2d49]/90 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2">
-                                    <CheckCircle size={18} />
-                                    Approve Vendor
+                            <p className="text-[#5a5b44] text-xs font-medium mb-6 leading-relaxed line-clamp-2 h-8">
+                                {vendor.description}
+                            </p>
+
+                            <div className="mt-auto space-y-4">
+                                <div className="flex items-center justify-between p-4 bg-[#f8fafc] rounded-2xl border border-[#e9eff1]">
+                                    <div className="flex items-center gap-2 text-[9px] font-black text-[#0b2d49] uppercase tracking-widest">
+                                        <Clock size={14} className="text-[#d7a444]" />
+                                        {vendor.submittedDate}
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 rounded-full bg-[#10b981]"></div>
+                                        <span className="text-[9px] font-black text-[#708aa0] uppercase tracking-widest">KYC Ready</span>
+                                    </div>
+                                </div>
+
+                                <button 
+                                    onClick={() => navigate(`/admin/vendors/${vendor.id}`)}
+                                    className="w-full py-4 bg-[#0b2d49] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-[#d7a444] transition-all shadow-lg shadow-[#0b2d49]/10 active:scale-95 flex items-center justify-center gap-2 group/btn"
+                                >
+                                    view Details 
+                                    <ExternalLink size={14} className="group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />
                                 </button>
                             </div>
-                        </>
-                    )}
-                </div>
+                        </div>
+                    </div>
+                ))
+                ) : (
+                    <div className="col-span-full py-20 flex flex-col items-center justify-center text-[#708aa0] bg-white rounded-[2.5rem] border-2 border-dashed border-[#e9eff1]">
+                        <Search size={40} className="mb-4 opacity-10" />
+                        <p className="text-xl font-bold text-[#0b2d49]">No vendors found</p>
+                        <button 
+                            onClick={() => setSearchQuery("")}
+                            className="mt-6 text-[#d7a444] font-black uppercase tracking-widest text-[10px] hover:underline"
+                        >
+                            Clear Search
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
-      </div>
+
+        {/* Applications Modal */}
+        {showApplicationsModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+                <div 
+                    className="absolute inset-0 bg-[#0b2d49]/40 backdrop-blur-md transition-opacity"
+                    onClick={() => setShowApplicationsModal(false)}
+                />
+                <div className="relative w-full max-w-2xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-300">
+                    {/* Modal Header */}
+                    <div className="px-8 py-6 border-b border-[#e9eff1] flex items-center justify-between bg-white sticky top-0 z-10">
+                        <div>
+                            <h3 className="text-xl font-black text-[#0b2d49] flex items-center gap-3">
+                                <FileText className="text-[#d7a444]" />
+                                Pending Applications
+                            </h3>
+                            <p className="text-xs font-bold text-[#708aa0] uppercase tracking-widest mt-1">
+                                {pendingApplications.length} Request{pendingApplications.length !== 1 ? 's' : ''} awaiting review
+                            </p>
+                        </div>
+                        <button 
+                            onClick={() => setShowApplicationsModal(false)}
+                            className="p-2 hover:bg-[#f8fafc] rounded-xl text-[#708aa0] hover:text-[#0b2d49] transition-all"
+                        >
+                            <X size={24} />
+                        </button>
+                    </div>
+
+                    {/* Modal Content */}
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar space-y-4">
+                        {pendingApplications.map((v) => (
+                            <div 
+                                key={v.id}
+                                className="group flex items-center justify-between p-5 bg-[#f8fafc] hover:bg-white rounded-3xl border border-transparent hover:border-[#e9eff1] transition-all hover:shadow-lg"
+                            >
+                                <div className="flex items-center gap-5">
+                                    <div className="w-16 h-16 rounded-2xl overflow-hidden relative shadow-inner">
+                                        <img src={v.image} alt={v.name} className="w-full h-full object-cover" />
+                                        <div className="absolute inset-0 bg-[#0b2d49]/20"></div>
+                                    </div>
+                                    <div>
+                                        <h4 className="font-black text-[#0b2d49] text-base group-hover:text-[#d7a444] transition-colors">{v.name}</h4>
+                                        <div className="flex items-center gap-3 mt-1">
+                                            <span className="text-[9px] font-black text-[#708aa0] uppercase tracking-widest">{v.location}</span>
+                                            <div className="w-1 h-1 bg-[#e9eff1] rounded-full"></div>
+                                            <span className="text-[9px] font-black text-[#d7a444] uppercase tracking-widest flex items-center gap-1">
+                                                <Clock size={10} /> {v.submittedDate}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => {
+                                        setShowApplicationsModal(false);
+                                        navigate(`/admin/vendors/${v.id}`);
+                                    }}
+                                    className="px-6 py-3 bg-[#0b2d49] hover:bg-[#d7a444] text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md active:scale-95 flex items-center gap-2"
+                                >
+                                    Review <ArrowRight size={14} />
+                                </button>
+                            </div>
+                        ))}
+
+                        {pendingApplications.length === 0 && (
+                            <div className="py-20 flex flex-col items-center justify-center text-center">
+                                <CheckCircle size={48} className="text-[#10b981] opacity-20 mb-4" />
+                                <h4 className="text-lg font-black text-[#0b2d49]">All Caught Up!</h4>
+                                <p className="text-sm text-[#708aa0] mt-1 font-medium">No pending vendor applications at the moment.</p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Modal Footer */}
+                    <div className="px-8 py-5 bg-[#f8fafc] border-t border-[#e9eff1] flex justify-end">
+                        <button 
+                            onClick={() => setShowApplicationsModal(false)}
+                            className="px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-[#5a5b44] hover:text-[#0b2d49] transition-colors"
+                        >
+                            Close Window
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+    </div>
   );
 };
 
