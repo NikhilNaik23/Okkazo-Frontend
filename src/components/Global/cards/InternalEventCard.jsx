@@ -1,4 +1,4 @@
-import { Calendar, Clock, User, ChevronRight, ShieldCheck, MapPin, CheckCircle, X } from 'lucide-react';
+import { Calendar, Clock, User, ChevronRight, ShieldCheck, MapPin, CheckCircle, X, FileText } from 'lucide-react';
 
 const InternalEventCard = ({ 
   image = 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?q=80&w=1000&auto=format&fit=crop', // Better placeholder
@@ -30,13 +30,15 @@ const InternalEventCard = ({
             <span className="w-1.5 h-1.5 rounded-full bg-[#d7a444] animate-pulse"></span>
             {category}
           </span>
-          <span className={`${
-            status === 'VERIFIED' ? 'bg-emerald-500/90' : 
-            status === 'REJECTED' ? 'bg-rose-500/90' : 
-            'bg-[#0b2d49]/80'
-          } backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-bold text-white shadow-sm border border-white/10 uppercase tracking-wider`}>
-            {status}
-          </span>
+          {status && !['URGENT', 'PENDING', 'REVIEWING'].includes(status.toUpperCase()) && (
+            <span className={`${
+              status === 'VERIFIED' ? 'bg-emerald-500/90' : 
+              status === 'REJECTED' ? 'bg-rose-500/90' : 
+              'bg-[#0b2d49]/80'
+            } backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-bold text-white shadow-sm border border-white/10 uppercase tracking-wider`}>
+              {status}
+            </span>
+          )}
         </div>
       </div>
 
@@ -82,29 +84,11 @@ const InternalEventCard = ({
         {/* Action Buttons */}
         <div className="flex gap-2 mt-auto">
           <button 
-            onClick={onVerify}
-            className={`flex-1 ${
-              status === 'VERIFIED' ? 'bg-[#28a785]' : 
-              status === 'REJECTED' ? 'bg-rose-500' : 
-              'bg-[#0b2d49]'
-            } hover:opacity-90 text-white font-semibold py-2 px-3 rounded-lg transition-all duration-300 shadow-md flex items-center justify-center gap-1.5 group/btn text-xs`}
-          >
-            {status === 'VERIFIED' ? <CheckCircle size={14} /> : 
-             status === 'REJECTED' ? <X size={14} /> : 
-             <ShieldCheck size={14} />}
-            <span>
-              {status === 'VERIFIED' ? 'Verified' : 
-               status === 'REJECTED' ? 'Rejected' : 
-               'Verify'}
-            </span>
-          </button>
-          
-          <button 
             onClick={onDetails}
-            className="w-10 flex items-center justify-center border border-[#e9eff1] hover:border-[#d7a444] text-[#708aa0] hover:text-[#d7a444] hover:bg-[#f3ddb1]/20 font-semibold rounded-lg transition-all duration-300"
-            aria-label="View Details"
+            className="flex-1 bg-[#0b2d49] hover:bg-[#d7a444] text-white font-black py-3 px-4 rounded-xl transition-all duration-300 shadow-md flex items-center justify-center gap-2 group/btn text-[10px] uppercase tracking-widest active:scale-95"
           >
-           <ChevronRight size={18} />
+            <FileText size={14} className="group-hover/btn:scale-110 transition-transform" />
+            <span>View Details</span>
           </button>
         </div>
       </div>

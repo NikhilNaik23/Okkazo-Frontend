@@ -4,17 +4,18 @@ import { mockAdminEvents } from "../../../data/adminData";
 
 import InternalEventCard from "../../../components/Global/cards/InternalEventCard";
 import { 
-  Filter, 
-  RotateCcw, 
-  Search, 
+  ChevronDown,
+  Filter,
+  Search,
   Plus,
-  Music,
-  Mic,
-  Palette,
-  Briefcase,
   CheckSquare,
   Square,
-  ChevronDown
+  FileText,
+  X,
+  ArrowRight,
+  Clock,
+  CheckCircle,
+  FileSearch
 } from "lucide-react";
 
 const MOCK_EVENTS = mockAdminEvents;
@@ -82,17 +83,12 @@ const AdminEvents = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("Events");
     const [searchQuery, setSearchQuery] = useState("");
-    const [selectedStatuses, setSelectedStatuses] = useState(["Upcoming"]);
-    const [tempSelectedStatuses, setTempSelectedStatuses] = useState(["Upcoming"]);
-    const [showFilters, setShowFilters] = useState(false);
+    const [showApplicationsModal, setShowApplicationsModal] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     const handleRefresh = () => {
         setIsRefreshing(true);
-        // Reset all filters
         setSearchQuery("");
-        setSelectedStatuses(["Upcoming"]);
-        setTempSelectedStatuses(["Upcoming"]);
         setActiveTab("Events");
         
         // Mock refresh delay
@@ -101,40 +97,12 @@ const AdminEvents = () => {
         }, 600);
     };
 
-    const toggleTempStatus = (status) => {
-        if (tempSelectedStatuses.includes(status)) {
-            if (tempSelectedStatuses.length > 1) {
-                setTempSelectedStatuses(tempSelectedStatuses.filter(s => s !== status));
-            }
-        } else {
-            setTempSelectedStatuses([...tempSelectedStatuses, status]);
-        }
-    };
-
-    const applyFilters = () => {
-        setSelectedStatuses(tempSelectedStatuses);
-        setShowFilters(false);
-    };
-
     const filteredEvents = MOCK_EVENTS.filter(event => {
         // Tab Filtering
-        if (activeTab === "Verified") return event.status === "VERIFIED";
         if (activeTab === "Rejected") return event.status === "REJECTED";
         if (activeTab === "Events") {
-            if (event.status === "VERIFIED" || event.status === "REJECTED") return false;
+            if (event.status !== "VERIFIED") return false;
         }
-
-        // Dropdown Multi-Status Filtering
-        const isMatch = selectedStatuses.some(status => {
-            if (status === "Upcoming") {
-                const today = new Date("2026-02-11"); // Contextually present date
-                const eventDate = new Date(event.date);
-                return eventDate >= today;
-            }
-            return event.status === status.toUpperCase();
-        });
-
-        if (!isMatch) return false;
 
         // Search Filtering
         const query = searchQuery.toLowerCase();
@@ -142,20 +110,13 @@ const AdminEvents = () => {
                event.organizer.toLowerCase().includes(query) ||
                event.id.toString().includes(query);
     });
+    
+    const pendingApplications = MOCK_EVENTS.filter(v => 
+        v.status === "PENDING" || v.status === "REVIEWING" || v.status === "URGENT"
+    );
 
     return (
         <div className="h-full flex flex-col">
-             {/* Page Title */}
-             <div className="px-6 py-6 pb-2 shrink-0">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
-                    <div>
-                        <h2 className="text-2xl font-bold text-[#0b2d49] tracking-tight">
-                            Event Verification
-                        </h2>
-                    </div>
-                </div>
-            </div>
-
             <div className="px-6 pb-8 flex-1">
                 {/* Header Section */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
@@ -165,67 +126,18 @@ const AdminEvents = () => {
                         </h2>
                         <p className="text-[#5a5b44]">Review and verify events before they go live on the platform.</p>
                     </div>
-                    <div className="flex gap-3 relative">
-                        <div className="relative">
+                        <div className="flex gap-2">
                             <button 
-                                onClick={() => {
-                                    setShowFilters(!showFilters);
-                                    setTempSelectedStatuses(selectedStatuses);
-                                }}
-                                className={`flex items-center gap-2 px-4 py-2 bg-white border border-[#e9eff1] text-[#5a5b44] font-medium rounded-xl hover:bg-[#e9eff1] transition-colors shadow-sm ${showFilters ? 'ring-2 ring-[#d7a444]/20 border-[#d7a444]' : ''}`}
+                                onClick={() => setShowApplicationsModal(true)}
+                                className="flex items-center gap-2 px-5 py-2.5 bg-[#0b2d49] text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md shadow-[#0b2d49]/10 hover:bg-[#d7a444] transition-all whitespace-nowrap active:scale-95"
                             >
-                                <Filter size={18} className={selectedStatuses.length > 0 && !(selectedStatuses.length === 1 && selectedStatuses[0] === "Upcoming") ? "text-[#d7a444]" : "text-[#708aa0]"} />
-                                {selectedStatuses.length === 1 && selectedStatuses[0] === "Upcoming" ? "Filter" : `Filtered (${selectedStatuses.length})`}
-                                <ChevronDown size={14} className={`ml-1 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+                                <FileText size={14} />
+                                Applications
+                                {pendingApplications.length > 0 && (
+                                    <span className="ml-1 px-1.5 py-0.5 bg-[#d7a444] text-white rounded-md text-[8px]">{pendingApplications.length}</span>
+                                )}
                             </button>
-
-                            {showFilters && (
-                                <div className="absolute right-0 mt-2 w-56 bg-white border border-[#e9eff1] rounded-2xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                                    <div className="p-2 border-b border-[#f0f2f5] bg-[#f8fafc]/50">
-                                        <p className="text-[10px] font-black text-[#94a3b8] uppercase tracking-widest px-2 py-1">Selection Status</p>
-                                    </div>
-                                    <div className="py-2">
-                                        {["Upcoming", "Pending", "Reviewing", "Urgent"].map((option) => (
-                                            <button
-                                                key={option}
-                                                onClick={() => toggleTempStatus(option)}
-                                                className="w-full text-left px-4 py-2.5 text-sm font-medium text-[#5a5b44] hover:bg-[#f8fafc] hover:text-[#0b2d49] transition-colors flex items-center gap-3"
-                                            >
-                                                {tempSelectedStatuses.includes(option) ? (
-                                                    <CheckSquare size={18} className="text-[#d7a444]" />
-                                                ) : (
-                                                    <Square size={18} className="text-[#cbd5e1]" />
-                                                )}
-                                                {option}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <div className="p-3 bg-[#f8fafc] border-t border-[#f0f2f5] flex gap-2">
-                                        <button 
-                                            onClick={() => setShowFilters(false)}
-                                            className="flex-1 px-3 py-2 text-xs font-bold text-[#5a5b44] hover:bg-[#e9eff1] rounded-lg transition-colors"
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button 
-                                            onClick={applyFilters}
-                                            className="flex-1 px-3 py-2 text-xs font-bold bg-[#0b2d49] text-white rounded-lg hover:bg-[#0b2d49]/90 transition-colors shadow-sm"
-                                        >
-                                            Confirm
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
                         </div>
-                        <button 
-                            onClick={handleRefresh}
-                            disabled={isRefreshing}
-                            className={`flex items-center gap-2 px-4 py-2 bg-[#0b2d49] text-white font-medium rounded-xl hover:bg-[#0b2d49]/90 transition-colors shadow-sm shadow-[#0b2d49]/20 disabled:opacity-70 disabled:cursor-not-allowed`}
-                        >
-                            <RotateCcw size={18} className={isRefreshing ? "animate-spin" : ""} />
-                            {isRefreshing ? "Refreshing..." : "Refresh List"}
-                        </button>
-                    </div>
                 </div>
 
                 {/* Tabs & Search Bar */}
@@ -233,7 +145,7 @@ const AdminEvents = () => {
                     <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
                         {/* Tabs */}
                         <div className="flex p-1 bg-[#e9eff1] rounded-xl w-full md:w-auto overflow-x-auto no-scrollbar">
-                            {["Events", "Verified", "Rejected"].map((tab) => (
+                            {["Events", "Rejected"].map((tab) => (
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab)}
@@ -284,7 +196,7 @@ const AdminEvents = () => {
                              <Search size={48} className="mb-4 opacity-20" />
                              <p className="text-lg font-medium">No requests found matching your criteria</p>
                              <button 
-                                onClick={() => {setSearchQuery(""); setSelectedStatuses(["Upcoming"]); setTempSelectedStatuses(["Upcoming"]); setActiveTab("Events");}}
+                                onClick={() => {setSearchQuery(""); setActiveTab("Events");}}
                                 className="mt-4 text-[#d7a444] font-bold hover:underline"
                              >
                                 Clear all filters
@@ -294,6 +206,96 @@ const AdminEvents = () => {
                     <ManualEntryCard />
                 </div>
             </div>
+
+            {/* Applications Modal */}
+            {showApplicationsModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+                    <div 
+                        className="absolute inset-0 bg-[#0b2d49]/40 backdrop-blur-md transition-opacity"
+                        onClick={() => setShowApplicationsModal(false)}
+                    />
+                    <div className="relative w-full max-w-2xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-300">
+                        {/* Modal Header */}
+                        <div className="px-8 py-6 border-b border-[#e9eff1] flex items-center justify-between bg-white sticky top-0 z-10">
+                            <div>
+                                <h3 className="text-xl font-black text-[#0b2d49] flex items-center gap-3">
+                                    <FileSearch className="text-[#d7a444]" />
+                                    Event Applications
+                                </h3>
+                                <p className="text-xs font-bold text-[#708aa0] uppercase tracking-widest mt-1">
+                                    {pendingApplications.length} Request{pendingApplications.length !== 1 ? 's' : ''} awaiting review
+                                </p>
+                            </div>
+                            <button 
+                                onClick={() => setShowApplicationsModal(false)}
+                                className="p-2 hover:bg-[#f8fafc] rounded-xl text-[#708aa0] hover:text-[#0b2d49] transition-all"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        {/* Modal Content */}
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar space-y-4">
+                            {pendingApplications.map((v) => (
+                                <div 
+                                    key={v.id}
+                                    className="group flex flex-col sm:flex-row sm:items-center justify-between p-5 bg-[#f8fafc] hover:bg-white rounded-3xl border border-transparent hover:border-[#e9eff1] transition-all hover:shadow-lg gap-4"
+                                >
+                                    <div className="flex items-center gap-5">
+                                        <div className="w-16 h-16 rounded-2xl overflow-hidden relative shadow-inner shrink-0">
+                                            <img src={v.image} alt={v.title} className="w-full h-full object-cover" />
+                                            <div className="absolute inset-0 bg-[#0b2d49]/20"></div>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-black text-[#0b2d49] text-base group-hover:text-[#d7a444] transition-colors">{v.title}</h4>
+                                            <div className="flex flex-wrap items-center gap-3 mt-1">
+                                                <span className="text-[9px] font-black text-[#708aa0] uppercase tracking-widest">{v.organizer}</span>
+                                                <div className="w-1 h-1 bg-[#e9eff1] rounded-full"></div>
+                                                <span className="text-[9px] font-black text-[#d7a444] uppercase tracking-widest flex items-center gap-1">
+                                                    <Clock size={10} /> {v.submitted}
+                                                </span>
+                                                <div className="w-1 h-1 bg-[#e9eff1] rounded-full"></div>
+                                                <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${
+                                                    v.status === 'URGENT' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
+                                                }`}>
+                                                    {v.status}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => {
+                                            setShowApplicationsModal(false);
+                                            navigate(`${v.id}`);
+                                        }}
+                                        className="px-6 py-3 bg-[#0b2d49] hover:bg-[#d7a444] text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md active:scale-95 flex items-center gap-2 justify-center"
+                                    >
+                                        Verify <ArrowRight size={14} />
+                                    </button>
+                                </div>
+                            ))}
+
+                            {pendingApplications.length === 0 && (
+                                <div className="py-20 flex flex-col items-center justify-center text-center">
+                                    <CheckCircle size={48} className="text-[#10b981] opacity-20 mb-4" />
+                                    <h4 className="text-lg font-black text-[#0b2d49]">All Caught Up!</h4>
+                                    <p className="text-sm text-[#708aa0] mt-1 font-medium">No pending event applications at the moment.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="px-8 py-5 bg-[#f8fafc] border-t border-[#e9eff1] flex justify-end">
+                            <button 
+                                onClick={() => setShowApplicationsModal(false)}
+                                className="px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-[#5a5b44] hover:text-[#0b2d49] transition-colors"
+                            >
+                                Close Window
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
