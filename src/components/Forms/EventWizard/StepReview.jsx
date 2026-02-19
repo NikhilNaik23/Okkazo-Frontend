@@ -160,10 +160,7 @@ const StepReview = ({ formData, onRemoveVendor }) => {
                         <div className="relative z-10">
                             <p className="text-[10px] font-black tracking-[0.3em] text-primary uppercase mb-4">Estimated Total Investment</p>
                             <div className="text-5xl md:text-6xl font-black text-primary mb-4 font-serif-premium">
-                                ₹{totalMin.toLocaleString()}
-                            </div>
-                            <div className="text-sm md:text-xl font-bold text-primary/60 uppercase tracking-widest mb-4">
-                                – ₹{totalMax.toLocaleString()}
+                                ₹{totalMin.toLocaleString()} – ₹{totalMax.toLocaleString()}
                             </div>
                             <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-8">
                                 Across {Object.keys(formData.vendors).length} Artisan Partners

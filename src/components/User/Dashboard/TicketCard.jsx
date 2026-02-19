@@ -30,7 +30,10 @@ const TicketCard = ({ ticket, idx }) => {
                         <BsGeoAlt /> {ticket.location}
                     </div>
 
-                    <button className="w-full bg-[#EBF4F6] text-[#09637E] py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-[#7AB2B2] hover:text-white transition-all flex items-center justify-center gap-3 shadow-lg">
+                    <button
+                        onClick={() => window.location.href = `/user/ticket/${ticket.id}`}
+                        className="w-full bg-[#EBF4F6] text-[#09637E] py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-[#7AB2B2] hover:text-white transition-all flex items-center justify-center gap-3 shadow-lg"
+                    >
                         <BsQrCode size={16} />
                         View Ticket
                     </button>

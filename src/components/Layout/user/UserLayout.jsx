@@ -6,8 +6,8 @@ import Footer from './Footer';
 
 const UserLayout = () => {
   const location = useLocation();
-  const isWizard = location.pathname === '/user/planning-wizard';
-  const showFooter = !isWizard;
+  const hideFooterPaths = ['/user/planning-wizard', '/user/promote'];
+  const showFooter = !hideFooterPaths.includes(location.pathname);
 
   return (
     <div className={`flex flex-col min-h-screen bg-[#EBF4F6]`}>

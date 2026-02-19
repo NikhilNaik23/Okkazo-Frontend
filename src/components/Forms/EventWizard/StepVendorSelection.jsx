@@ -102,10 +102,14 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
             );
         }
 
+        if (activeCategory === "Venue" && formData.guests) {
+            allVendors = allVendors.filter(v => (v.capacity || 1000) >= formData.guests);
+        }
+
         allVendors = allVendors.filter(v => {
             const vendorMax = v.priceMax || (v.priceMin * 1.5);
             return v.priceMin <= priceRange.max && vendorMax >= priceRange.min;
-        });
+        }).map(v => ({ ...v, category: activeCategory }));
 
         switch (sortOption) {
             case 'Top Rated':
@@ -122,6 +126,12 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                 break;
             case 'Price: High to Low':
                 allVendors = [...allVendors].sort((a, b) => b.priceMin - a.priceMin);
+                break;
+            case 'Capacity: High to Low':
+                allVendors = [...allVendors].sort((a, b) => (b.capacity || 0) - (a.capacity || 0));
+                break;
+            case 'Capacity: Low to High':
+                allVendors = [...allVendors].sort((a, b) => (a.capacity || 0) - (b.capacity || 0));
                 break;
             default:
                 break;
@@ -147,9 +157,10 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                     <VendorDetailsModal
                         vendor={selectedVendorForDetails}
                         onClose={() => setSelectedVendorForDetails(null)}
-                        onSelect={() => handleSelectVendorWrapper(activeCategory, selectedVendorForDetails)}
+                        onSelect={(v) => handleSelectVendorWrapper(activeCategory, v || selectedVendorForDetails)}
                         isSelected={formData.vendors[activeCategory]?.id === selectedVendorForDetails.id}
                         priceMultiplier={priceMultiplier}
+                        guestCount={formData.guests}
                     />
                 )}
             </AnimatePresence>
@@ -307,7 +318,13 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                                 <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide flex-1 pb-2 -mb-2">
                                         <span className="text-[9px] font-bold uppercase tracking-widest text-primary/30 mr-2 shrink-0">Filter By</span>
-                                        {filterOptions.map(filter => (
+                                        {(() => {
+                                            const options = [...filterOptions];
+                                            if (activeCategory === "Venue") {
+                                                options.push("Capacity: High to Low", "Capacity: Low to High");
+                                            }
+                                            return options;
+                                        })().map(filter => (
                                             <button
                                                 key={filter}
                                                 onClick={() => setSortOption(filter)}

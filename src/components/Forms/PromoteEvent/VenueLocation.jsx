@@ -7,14 +7,14 @@ const VenueLocation = ({ formData, setFormData }) => {
             ...prev,
             lat,
             lng,
-            address: address || prev.address 
+            address: address || prev.address
         }));
     };
 
     return (
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
             <h2 className="flex items-center gap-3 font-bold text-lg mb-6">
-                <div className="text-[#0b2d49] font-bold text-xl">📍</div>
+                <div className="text-[#09637E] font-bold text-xl">📍</div>
                 Venue Location
             </h2>
             <div className="space-y-4">
@@ -29,10 +29,10 @@ const VenueLocation = ({ formData, setFormData }) => {
                         onClick={() => alert("Please click on the map below to select the precise location.")}
                     />
                 </div>
-                
-                <LocationPicker 
-                    lat={formData.lat} 
-                    lng={formData.lng} 
+
+                <LocationPicker
+                    lat={formData.lat}
+                    lng={formData.lng}
                     onLocationSelect={handleLocationSelect}
                     className="h-80 w-full rounded-2xl overflow-hidden border border-gray-200 relative z-0"
                 />

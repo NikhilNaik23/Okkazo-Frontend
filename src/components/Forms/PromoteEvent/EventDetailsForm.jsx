@@ -10,7 +10,7 @@ const EventDetailsForm = ({ formData, setFormData }) => {
     return (
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
             <h2 className="flex items-center gap-3 font-bold text-lg mb-6">
-                <div className="text-[#0b2d49]"><BsCheck2 size={24} /></div>
+                <div className="text-[#09637E]"><BsCheck2 size={24} /></div>
                 Event Details
             </h2>
             <div className="space-y-6">
@@ -19,7 +19,7 @@ const EventDetailsForm = ({ formData, setFormData }) => {
                     <input
                         type="text"
                         placeholder="Enter the name of your event..."
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-[#d7a444] transition-all"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-[#088395] transition-all"
                         value={formData.eventName}
                         onChange={(e) => setFormData({ ...formData, eventName: e.target.value })}
                     />
@@ -31,7 +31,7 @@ const EventDetailsForm = ({ formData, setFormData }) => {
                             <input
                                 type="datetime-local"
                                 min={minDate}
-                                className="w-full pl-4 pr-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-[#d7a444] transition-all"
+                                className="w-full pl-4 pr-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-[#088395] transition-all"
                                 value={formData.startDate}
                                 onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                             />
@@ -42,7 +42,7 @@ const EventDetailsForm = ({ formData, setFormData }) => {
                         <input
                             type="datetime-local"
                             min={formData.startDate || minDate}
-                            className="w-full pl-4 pr-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-[#d7a444] transition-all"
+                            className="w-full pl-4 pr-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-[#088395] transition-all"
                             value={formData.endDate}
                             onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                         />
@@ -52,7 +52,7 @@ const EventDetailsForm = ({ formData, setFormData }) => {
                     <label className="block text-[10px] font-extrabold text-gray-400 uppercase tracking-wider mb-2">Total Number of Tickets to be Sold</label>
                     <input
                         type="number"
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-[#d7a444] transition-all"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-[#088395] transition-all"
                         value={formData.totalTickets}
                         onChange={(e) => setFormData({ ...formData, totalTickets: e.target.value })}
                     />

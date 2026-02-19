@@ -2,7 +2,7 @@ import React from 'react';
 
 const RevenueCard = ({ projectedRevenue, totalTicketValue, serviceCharge, platformFee }) => {
     return (
-        <div className="bg-[#0b2d49]  rounded-3xl p-6 text-white shadow-xl shadow-blue-900/20 relative overflow-hidden">
+        <div className="bg-[#09637E]  rounded-3xl p-6 text-white shadow-xl shadow-blue-900/20 relative overflow-hidden">
             <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/10 rounded-full blur-3xl"></div>
             <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 mb-2">Projected Revenue</p>
             <div className="flex items-baseline gap-2 mb-8">

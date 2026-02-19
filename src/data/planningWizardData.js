@@ -45,3 +45,5 @@ export const isDateHighDemand = (dateString) => {
     // High demand window: 6 to 20 days from now
     return diffDays >= 6 && diffDays <= 20;
 };
+
+

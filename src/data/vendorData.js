@@ -65,7 +65,8 @@ export const dummyVendors = {
     priceMax: (100000 + (i % 10) * 25000) * 1.5,
     image: itemImages.Venue[i % itemImages.Venue.length],
     location: getRandomLocation(),
-    isPopular: i < 6
+    isPopular: i < 6,
+    capacity: 100 + Math.floor(Math.random() * 1900) // Random capacity 100-2000
   })),
   "Catering & Drinks": Array.from({ length: 30 }, (_, i) => ({
     id: `catering-${i}`,

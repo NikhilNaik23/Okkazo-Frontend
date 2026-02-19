@@ -23,6 +23,7 @@ const MyEvents = () => {
     const [draftEvents, setDraftEvents] = useState([]);
     const [myTickets, setMyTickets] = useState([]);
     const [savedEvents, setSavedEvents] = useState([]);
+    const [campaigns, setCampaigns] = useState([]); // Campaigns state
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const searchQuery = searchParams.get("search")?.toLowerCase() || "";
@@ -68,8 +69,15 @@ const MyEvents = () => {
                     day: t.date.split(' ')[1] || "01"
                 }));
                 setMyTickets(enhancedTickets);
+
+                // Load stored campaigns
+                const storedCampaigns = JSON.parse(localStorage.getItem('promoted_campaigns') || '[]');
+                const mergedCampaigns = [...(Array.isArray(storedCampaigns) ? storedCampaigns : []), ...promotedCampaigns];
+                setCampaigns(mergedCampaigns);
+
                 fetchSaved();
             } catch (error) {
+                console.error("Fetch Data Error:", error);
                 toast.error("Failed to load your events");
             } finally {
                 setIsLoading(false);
@@ -84,6 +92,11 @@ const MyEvents = () => {
             window.removeEventListener('savedUpdated', fetchSaved);
         };
     }, []);
+
+    const [showCampaignFilters, setShowCampaignFilters] = useState(false);
+    const [campaignFilterStatus, setCampaignFilterStatus] = useState("All");
+    const [campaignPage, setCampaignPage] = useState(1);
+    const CAMPAIGNS_PER_PAGE = 12;
 
     // Filter Logic
     const allOrganized = [...draftEvents, ...createdEvents, ...organizedEvents];
@@ -107,10 +120,22 @@ const MyEvents = () => {
         return matchesSearch && matchesStatus && matchesType && matchesDate && matchesLocation;
     });
 
-    const filteredCampaigns = promotedCampaigns.filter(c =>
-        c.title.toLowerCase().includes(searchQuery) ||
-        c.subtitle.toLowerCase().includes(searchQuery)
-    );
+    const filteredCampaigns = campaigns.filter(c => {
+        const matchesSearch = c.title.toLowerCase().includes(searchQuery) || c.subtitle.toLowerCase().includes(searchQuery);
+        const matchesStatus = campaignFilterStatus === "All" || c.status === campaignFilterStatus;
+        return matchesSearch && matchesStatus;
+    });
+
+    // Pagination Logic for Campaigns
+    const totalPages = Math.ceil(filteredCampaigns.length / CAMPAIGNS_PER_PAGE);
+    const currentCampaigns = filteredCampaigns.slice((campaignPage - 1) * CAMPAIGNS_PER_PAGE, campaignPage * CAMPAIGNS_PER_PAGE);
+
+    // Pagination Logic for Organized Events
+    const [organizedPage, setOrganizedPage] = useState(1);
+    const ORGANIZED_PER_PAGE = 9;
+    const totalOrganizedPages = Math.ceil(filteredOrganized.length / ORGANIZED_PER_PAGE);
+    const currentOrganized = filteredOrganized.slice((organizedPage - 1) * ORGANIZED_PER_PAGE, organizedPage * ORGANIZED_PER_PAGE);
+
     const filteredTickets = myTickets.filter(t =>
         t.title.toLowerCase().includes(searchQuery) ||
         t.location.toLowerCase().includes(searchQuery)
@@ -302,7 +327,7 @@ const MyEvents = () => {
                                                     label="Status"
                                                     value={filterStatus}
                                                     options={["All", "Draft", "Immediate Action", "Pending Approval", "Approved", "Live", "Rejected"]}
-                                                    onChange={setFilterStatus}
+                                                    onChange={(val) => { setFilterStatus(val); setOrganizedPage(1); }}
                                                 />
 
                                                 {/* Type Filter */}
@@ -310,7 +335,7 @@ const MyEvents = () => {
                                                     label="Listing Type"
                                                     value={filterType}
                                                     options={["All", "Public", "Private"]}
-                                                    onChange={setFilterType}
+                                                    onChange={(val) => { setFilterType(val); setOrganizedPage(1); }}
                                                 />
 
                                                 {/* Date Filter */}
@@ -322,7 +347,7 @@ const MyEvents = () => {
                                                             type="text"
                                                             placeholder="e.g. NOV, 2026"
                                                             value={filterDate}
-                                                            onChange={(e) => setFilterDate(e.target.value)}
+                                                            onChange={(e) => { setFilterDate(e.target.value); setOrganizedPage(1); }}
                                                             className="w-full bg-[#EBF4F6] border-none rounded-xl pl-10 pr-4 py-3 text-xs font-bold text-[#09637E] placeholder:text-[#09637E]/30 focus:ring-2 focus:ring-[#09637E]/20"
                                                         />
                                                     </div>
@@ -337,7 +362,7 @@ const MyEvents = () => {
                                                             type="text"
                                                             placeholder="Search location..."
                                                             value={filterLocation}
-                                                            onChange={(e) => setFilterLocation(e.target.value)}
+                                                            onChange={(e) => { setFilterLocation(e.target.value); setOrganizedPage(1); }}
                                                             className="w-full bg-[#EBF4F6] border-none rounded-xl pl-10 pr-4 py-3 text-xs font-bold text-[#09637E] placeholder:text-[#09637E]/30 focus:ring-2 focus:ring-[#09637E]/20"
                                                         />
                                                     </div>
@@ -350,7 +375,7 @@ const MyEvents = () => {
                                 {/* Events Grid */}
                                 {filteredOrganized.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                        {filteredOrganized.map((event, idx) => (
+                                        {currentOrganized.map((event, idx) => (
                                             <div key={event.id} className="group relative h-[500px] bg-white rounded-[40px] overflow-hidden shadow-sm hover:shadow-[0_20px_40px_-12px_rgba(9,99,126,0.2)] transition-all duration-500 border border-[#7AB2B2]/10">
                                                 {/* Image & Gradient */}
                                                 <div className="absolute inset-0">
@@ -457,6 +482,40 @@ const MyEvents = () => {
                                     </div>
                                 )}
 
+                                {/* Organized Page Pagination */}
+                                {totalOrganizedPages > 1 && (
+                                    <div className="flex justify-center items-center gap-4 mt-8 mb-8">
+                                        <button
+                                            onClick={() => setOrganizedPage(p => Math.max(1, p - 1))}
+                                            disabled={organizedPage === 1}
+                                            className="px-4 py-2 text-xs font-bold uppercase tracking-widest text-[#09637E] disabled:opacity-30 hover:bg-[#EBF4F6] rounded-lg transition-colors"
+                                        >
+                                            Previous
+                                        </button>
+                                        <div className="flex gap-2">
+                                            {[...Array(totalOrganizedPages)].map((_, i) => (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => setOrganizedPage(i + 1)}
+                                                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-all ${organizedPage === i + 1
+                                                        ? "bg-[#09637E] text-white shadow-md"
+                                                        : "bg-white text-[#09637E] hover:bg-[#EBF4F6]"
+                                                        }`}
+                                                >
+                                                    {i + 1}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <button
+                                            onClick={() => setOrganizedPage(p => Math.min(totalOrganizedPages, p + 1))}
+                                            disabled={organizedPage === totalOrganizedPages}
+                                            className="px-4 py-2 text-xs font-bold uppercase tracking-widest text-[#09637E] disabled:opacity-30 hover:bg-[#EBF4F6] rounded-lg transition-colors"
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                )}
+
                                 {searchQuery === "" && (
                                     <div className="mt-12 p-8 bg-gradient-to-r from-[#7AB2B2] to-[#088395] rounded-[40px] flex items-center justify-between relative overflow-hidden group shadow-lg">
                                         <div className="absolute inset-0 bg-white/10 opacity-30 mix-blend-overlay" />
@@ -491,23 +550,92 @@ const MyEvents = () => {
                                             A curated overview of your high-performance ticket marketing and brand outreach.
                                         </p>
                                     </div>
-                                    <button className="flex items-center gap-3 bg-[#09637E] text-white px-8 py-4 rounded-full font-black text-xs uppercase tracking-widest hover:bg-[#088395] transition-all shadow-lg hover:shadow-xl hover:-translate-y-1">
-                                        <BsPlusLg className="text-sm" />
-                                        New Promotion
-                                    </button>
+                                    <div className="flex items-center gap-4">
+                                        <button
+                                            onClick={() => setShowCampaignFilters(!showCampaignFilters)}
+                                            className={`hidden md:flex items-center gap-2 px-6 py-3 rounded-xl border transition-all text-xs font-bold uppercase tracking-widest ${showCampaignFilters ? "bg-[#09637E] text-white border-[#09637E]" : "bg-white text-[#09637E]/60 border-[#7AB2B2]/30 hover:border-[#09637E]"}`}
+                                        >
+                                            <BsThreeDotsVertical className="rotate-90" />
+                                            Filters
+                                        </button>
+                                        <button
+                                            onClick={() => navigate('/user/promote')}
+                                            className="flex items-center gap-3 bg-[#09637E] text-white px-8 py-4 rounded-full font-black text-xs uppercase tracking-widest hover:bg-[#088395] transition-all shadow-lg hover:shadow-xl hover:-translate-y-1"
+                                        >
+                                            <BsPlusLg className="text-sm" />
+                                            New Promotion
+                                        </button>
+                                    </div>
                                 </div>
 
+                                {/* Campaign Filter Panel */}
+                                <AnimatePresence>
+                                    {showCampaignFilters && (
+                                        <motion.div
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: "auto", opacity: 1 }}
+                                            exit={{ height: 0, opacity: 0 }}
+                                            className="overflow-hidden mb-8"
+                                        >
+                                            <div className="bg-white p-6 rounded-[30px] shadow-sm border border-[#09637E]/10 grid grid-cols-1 md:grid-cols-4 gap-6">
+                                                <FilterDropdown
+                                                    label="Status"
+                                                    value={campaignFilterStatus}
+                                                    options={["All", "Live", "Pending Review", "Sold Out"]}
+                                                    onChange={(val) => {
+                                                        setCampaignFilterStatus(val);
+                                                        setCampaignPage(1); // Reset to first page on filter change
+                                                    }}
+                                                />
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 min-h-[600px]">
-                                    {searchQuery === "" && <StrategyLeadCard />}
-                                    {filteredCampaigns.map((camp) => (
+                                    {currentCampaigns.map((camp) => (
                                         <CampaignCard key={camp.id} camp={camp} />
                                     ))}
-                                    {filteredCampaigns.length === 0 && searchQuery !== "" && (
+                                    {filteredCampaigns.length === 0 && (
                                         <div className="col-span-4 text-center py-20 opacity-40">
                                             <p className="font-serif-premium text-2xl">No campaigns match your search.</p>
                                         </div>
                                     )}
                                 </div>
+
+                                {/* Pagination Controls */}
+                                {totalPages > 1 && (
+                                    <div className="flex justify-center items-center gap-4 mt-12">
+                                        <button
+                                            onClick={() => setCampaignPage(p => Math.max(1, p - 1))}
+                                            disabled={campaignPage === 1}
+                                            className="px-4 py-2 text-xs font-bold uppercase tracking-widest text-[#09637E] disabled:opacity-30 hover:bg-[#EBF4F6] rounded-lg transition-colors"
+                                        >
+                                            Previous
+                                        </button>
+                                        <div className="flex gap-2">
+                                            {[...Array(totalPages)].map((_, i) => (
+                                                <button
+                                                    key={i}
+                                                    onClick={() => setCampaignPage(i + 1)}
+                                                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-all ${campaignPage === i + 1
+                                                        ? "bg-[#09637E] text-white shadow-md"
+                                                        : "bg-white text-[#09637E] hover:bg-[#EBF4F6]"
+                                                        }`}
+                                                >
+                                                    {i + 1}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <button
+                                            onClick={() => setCampaignPage(p => Math.min(totalPages, p + 1))}
+                                            disabled={campaignPage === totalPages}
+                                            className="px-4 py-2 text-xs font-bold uppercase tracking-widest text-[#09637E] disabled:opacity-30 hover:bg-[#EBF4F6] rounded-lg transition-colors"
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                )}
                             </motion.div>
                         )}
 

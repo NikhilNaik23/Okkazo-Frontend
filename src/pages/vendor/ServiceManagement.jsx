@@ -183,29 +183,39 @@ const ServiceManagement = () => {
 
                         <div className="mb-6 pb-6 border-b border-dashed border-gray-200">
                             <span className="text-3xl font-black text-[#0b2d49]">{item.price}</span>
-                            <span className="text-sm text-[#708aa0] font-medium ml-1">approx.</span>
+                            <span className="text-sm text-[#708aa0] font-medium ml-1">/ plate approx.</span>
                         </div>
 
                         <div className="space-y-3 mb-8 flex-grow">
-                            {item.items && (expandedServices[item.id] ? item.items : item.items.slice(0, 5)).map((inc, i) => (
-                                <div key={i} className="flex items-start gap-3">
-                                    <div className="mt-1 min-w-[16px] flex items-center justify-center text-[#d7a444]">
-                                        <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 16 16" height="14" width="14" xmlns="http://www.w3.org/2000/svg"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"></path></svg>
-                                    </div>
-                                    <span className="text-[#5a5b44] font-medium text-sm leading-snug">{inc}</span>
-                                </div>
-                            ))}
-                            {item.items && item.items.length > 5 && (
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setExpandedServices(prev => ({ ...prev, [item.id]: !prev[item.id] }));
-                                    }}
-                                    className="text-xs font-bold text-[#708aa0] pl-7 hover:text-[#0b2d49] transition-colors focus:outline-none"
-                                >
-                                    {expandedServices[item.id] ? "Show Less" : `+ ${item.items.length - 5} more items`}
-                                </button>
-                            )}
+                            {(() => {
+                                const itemsList = typeof item.items === 'string'
+                                    ? item.items.split(',').map(i => i.trim()).filter(Boolean)
+                                    : (Array.isArray(item.items) ? item.items : []);
+
+                                return (
+                                    <>
+                                        {(expandedServices[item.id] ? itemsList : itemsList.slice(0, 5)).map((inc, i) => (
+                                            <div key={i} className="flex items-start gap-3">
+                                                <div className="mt-1 min-w-[16px] flex items-center justify-center text-[#d7a444]">
+                                                    <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 16 16" height="14" width="14" xmlns="http://www.w3.org/2000/svg"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"></path></svg>
+                                                </div>
+                                                <span className="text-[#5a5b44] font-medium text-sm leading-snug">{inc}</span>
+                                            </div>
+                                        ))}
+                                        {itemsList.length > 5 && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setExpandedServices(prev => ({ ...prev, [item.id]: !prev[item.id] }));
+                                                }}
+                                                className="text-xs font-bold text-[#708aa0] pl-7 hover:text-[#0b2d49] transition-colors focus:outline-none"
+                                            >
+                                                {expandedServices[item.id] ? "Show Less" : `+ ${itemsList.length - 5} more items`}
+                                            </button>
+                                        )}
+                                    </>
+                                );
+                            })()}
                         </div>
 
 
@@ -287,16 +297,38 @@ const ServiceManagement = () => {
                 <div key={item.id} className="relative bg-white rounded-[2rem] border-2 border-[#e9eff1] overflow-hidden group hover:border-[#d7a444] transition-all duration-300 hover:shadow-xl p-8 flex flex-col">
                     <Menu />
                     <div className="flex justify-between items-start mb-4 pr-8">
-                        <h3 className="text-2xl font-black text-[#0b2d49]">{item.name}</h3>
-                        <span className="px-3 py-1 bg-[#e9eff1] text-[#708aa0] rounded-lg text-xs font-bold uppercase">{activeCategory}</span>
+                        <div className="flex flex-col">
+                            <span className="px-2 py-1 bg-[#e9eff1] text-[#708aa0] rounded-lg text-[10px] font-bold uppercase w-fit mb-2">{item.tier || activeCategory}</span>
+                            <h3 className="text-xl font-black text-[#0b2d49] line-clamp-2">{item.name}</h3>
+                        </div>
                     </div>
-                    <div className="mb-6">
-                        <span className="text-3xl font-black text-[#0b2d49]">{item.price}</span>
+                    <div className="mb-6 border-b border-dashed border-gray-200 pb-4">
+                        <span className="text-3xl font-black text-[#0b2d49]">₹{item.price}</span>
+                        <span className="text-sm text-[#708aa0] font-medium ml-1">
+                            {activeCategory === 'catering' ? '/ plate' :
+                                activeCategory === 'makeup' ? '/ person' :
+                                    activeCategory === 'security' ? '/ team' :
+                                        activeCategory === 'transport' ? '/ vehicle' :
+                                            activeCategory === 'cakes' ? '/ kg' :
+                                                activeCategory === 'invitations' ? '/ 100 units' :
+                                                    '/ event'}
+                        </span>
                     </div>
-                    <div className="flex-grow text-[#708aa0] font-medium mb-6">
-                        {item.description || "No description provided."}
+                    <div className="flex-grow mb-6">
+                        <p className="text-[#708aa0] font-medium text-sm line-clamp-3 mb-4">{item.description || "No description provided."}</p>
+                        {item.items && (
+                            <div className="flex flex-wrap gap-2">
+                                {typeof item.items === 'string'
+                                    ? item.items.split(',').slice(0, 3).map((tag, i) => (
+                                        <span key={i} className="px-2 py-1 bg-gray-50 border border-gray-100 rounded text-[10px] font-bold text-[#5a5b44] uppercase tracking-wide">{tag.trim()}</span>
+                                    ))
+                                    : Array.isArray(item.items) && item.items.slice(0, 3).map((tag, i) => (
+                                        <span key={i} className="px-2 py-1 bg-gray-50 border border-gray-100 rounded text-[10px] font-bold text-[#5a5b44] uppercase tracking-wide">{tag}</span>
+                                    ))
+                                }
+                            </div>
+                        )}
                     </div>
-
                 </div>
             );
         }
