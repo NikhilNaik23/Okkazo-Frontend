@@ -125,7 +125,7 @@ const LocationPicker = ({ lat: initialLat, lng: initialLng, onSelect, className 
         try {
             const response = await fetch(
                 `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`,
-                { headers: { 'User-Agent': 'Okkazo-Frontend/1.0 (nikhilnaik023@gmail.com)' } }
+                { headers: { 'User-Agent': 'Okkazo-Frontend/1.0 (legendash@gmail.com)' } }
             );
             const data = await response.json();
             setSuggestions(data);
