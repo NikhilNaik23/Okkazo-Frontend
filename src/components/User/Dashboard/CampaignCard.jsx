@@ -46,18 +46,12 @@ const CampaignCard = ({ camp }) => {
                 <p className="text-[9px] font-black uppercase tracking-widest opacity-50 mb-1 text-[#09637E]">{camp.revenueLabel}</p>
                 <h4 className="text-3xl font-serif-premium mb-4 text-[#09637E]">{camp.revenue}</h4>
 
-                <div className="flex justify-between items-end">
-                    <div>
-                        {camp.conversion && (
-                            <div className="bg-white/30 backdrop-blur-md px-3 py-2 rounded-xl border border-white/40">
-                                <p className="text-[8px] font-black uppercase tracking-widest opacity-60 mb-0.5 text-[#09637E]">ROI</p>
-                                <p className="text-xs font-bold text-[#09637E]">{camp.conversion}</p>
-                            </div>
-                        )}
-                    </div>
-                    <button className={`px-4 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${camp.status === 'Sold Out' ? 'bg-[#09637E] text-white hover:bg-[#074d63]' : 'bg-white text-[#09637E] hover:bg-gray-100 shadow-lg'
-                        }`}>
-                        {camp.buttonText}
+                <div className="flex justify-end items-end">
+                    <button
+                        onClick={() => window.location.href = `/user/promote-event/${camp.id}`}
+                        className={`px-6 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${camp.status === 'Sold Out' ? 'bg-[#09637E] text-white hover:bg-[#074d63]' : 'bg-white text-[#09637E] hover:bg-gray-100 shadow-lg'
+                            }`}>
+                        View
                     </button>
                 </div>
             </div>

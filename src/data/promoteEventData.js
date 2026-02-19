@@ -4,7 +4,8 @@ export const promoteEventSteps = [
     { id: 3, label: "Tickets", desc: "Pricing & availability" },
     { id: 4, label: "Schedule", desc: "Dates & timing" },
     { id: 5, label: "Promote", desc: "Optional boost" },
-    { id: 6, label: "Review", desc: "Final verification" }
+    { id: 6, label: "Verify", desc: "Authenticity & Permissions" },
+    { id: 7, label: "Review", desc: "Final verification" }
 ];
 
 export const initialPromoteEventState = {
@@ -20,6 +21,7 @@ export const initialPromoteEventState = {
     ticketType: "paid", // "paid" or "free"
     tickets: [],
     banner: null,
+    authDocuments: [], // Array of files { name, size, type, preview }
     promotions: {
         featured: false,
         email: false,

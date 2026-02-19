@@ -1,12 +1,11 @@
 import React from 'react';
-import { BsClock, BsGeoAlt, BsInfoCircle } from "react-icons/bs";
+import { BsClock, BsGeoAlt, BsInfoCircle, BsTicketPerforated } from "react-icons/bs";
 import LocationPicker from "../../../Map/LocationPicker";
+import CustomDatePicker from './CustomDatePicker';
 
 const StepSchedule = ({ formData, setFormData }) => {
-    // Get current date string in format YYYY-MM-DDTHH:mm for min attribute
-    const now = new Date();
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    const minDate = now.toISOString().slice(0, 16);
+    // Current date for min attribute
+    const minDate = new Date();
 
     const handleLocationSelect = ({ lat, lng, address }) => {
         setFormData({
@@ -49,46 +48,85 @@ const StepSchedule = ({ formData, setFormData }) => {
             </div>
 
             {/* Date & Time Section - TOP */}
-            <div className="bg-white rounded-[2.5rem] p-10 border border-[#09637E]/10 shadow-xl relative overflow-hidden group">
-                <div className="absolute right-0 top-0 w-64 h-64 bg-[#088395]/5 rounded-full blur-3xl -mr-32 -mt-32 group-hover:bg-[#088395]/10 transition-all duration-700" />
+            <div className="bg-white rounded-[2.5rem] p-10 border border-[#09637E]/10 shadow-xl relative group space-y-10">
+                <div className="absolute inset-0 overflow-hidden rounded-[2.5rem] pointer-events-none">
+                    <div className="absolute right-0 top-0 w-64 h-64 bg-[#088395]/5 rounded-full blur-3xl -mr-32 -mt-32 group-hover:bg-[#088395]/10 transition-all duration-700" />
+                </div>
 
-                <div className="relative z-10">
-                    <div className="flex items-center gap-4 mb-10 text-[#088395]">
+                {/* Event Schedule */}
+                <div className="relative z-30">
+                    <div className="flex items-center gap-4 mb-8 text-[#088395]">
                         <div className="w-12 h-12 rounded-2xl bg-[#088395]/10 flex items-center justify-center">
                             <BsClock size={24} />
                         </div>
                         <h3 className="font-serif-premium italic text-3xl text-[#09637E]">Event Schedule</h3>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-3">
                             <p className="text-[#088395] font-black uppercase tracking-[0.2em] text-[10px] ml-1">Starts</p>
-                            <input
-                                type="datetime-local"
-                                min={minDate}
-                                value={formData.startDate}
-                                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                                className="w-full bg-[#EBF4F6] text-[#09637E] p-5 rounded-2xl border border-[#09637E]/5 outline-none focus:border-[#088395] focus:bg-white transition-all font-mono text-sm [color-scheme:light] shadow-inner"
+                            <CustomDatePicker
+                                selected={formData.startDate ? new Date(formData.startDate) : null}
+                                onChange={(date) => setFormData({ ...formData, startDate: date })}
+                                minDate={minDate}
+                                placeholderText="Select Event Start..."
+                                className="w-full"
                             />
                         </div>
                         <div className="space-y-3">
                             <p className="text-[#088395] font-black uppercase tracking-[0.2em] text-[10px] ml-1">Ends</p>
-                            <input
-                                type="datetime-local"
-                                min={formData.startDate || minDate}
-                                value={formData.endDate}
-                                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                                className="w-full bg-[#EBF4F6] text-[#09637E] p-5 rounded-2xl border border-[#09637E]/5 outline-none focus:border-[#088395] focus:bg-white transition-all font-mono text-sm [color-scheme:light] shadow-inner"
+                            <CustomDatePicker
+                                selected={formData.endDate ? new Date(formData.endDate) : null}
+                                onChange={(date) => setFormData({ ...formData, endDate: date })}
+                                minDate={formData.startDate ? new Date(formData.startDate) : minDate}
+                                placeholderText="Select Event End..."
+                                className="w-full"
                             />
                         </div>
                     </div>
+                </div>
 
-                    <div className="mt-10 bg-[#088395]/5 p-6 rounded-2xl flex gap-4 items-start border border-[#088395]/10">
-                        <BsInfoCircle className="text-[#088395] mt-1 shrink-0" size={18} />
-                        <p className="text-[#09637E]/70 text-[11px] font-bold uppercase tracking-wider leading-relaxed">
-                            Scheduled in your local timezone. Attendees will see the time converted to their local time automatically.
-                        </p>
+                {/* Divider */}
+                <div className="h-px bg-[#09637E]/5 w-full relative z-20" />
+
+                {/* Ticket Release Schedule */}
+                <div className="relative z-20">
+                    <div className="flex items-center gap-4 mb-8 text-[#088395]">
+                        <div className="w-12 h-12 rounded-2xl bg-[#088395]/10 flex items-center justify-center">
+                            <BsTicketPerforated size={24} />
+                        </div>
+                        <h3 className="font-serif-premium italic text-3xl text-[#09637E]">Ticket Availability</h3>
                     </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-3">
+                            <p className="text-[#088395] font-black uppercase tracking-[0.2em] text-[10px] ml-1">Sales Start</p>
+                            <CustomDatePicker
+                                selected={formData.ticketReleaseDate ? new Date(formData.ticketReleaseDate) : null}
+                                onChange={(date) => setFormData({ ...formData, ticketReleaseDate: date })}
+                                minDate={minDate}
+                                placeholderText="When to publish tickets..."
+                                className="w-full"
+                            />
+                        </div>
+                        <div className="space-y-3">
+                            <p className="text-[#088395] font-black uppercase tracking-[0.2em] text-[10px] ml-1">Sales End (Optional)</p>
+                            <CustomDatePicker
+                                selected={formData.ticketSalesEndDate ? new Date(formData.ticketSalesEndDate) : null}
+                                onChange={(date) => setFormData({ ...formData, ticketSalesEndDate: date })}
+                                minDate={formData.ticketReleaseDate ? new Date(formData.ticketReleaseDate) : minDate}
+                                placeholderText="When to close sales..."
+                                className="w-full"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-[#088395]/5 p-6 rounded-2xl flex gap-4 items-start border border-[#088395]/10 relative z-10">
+                    <BsInfoCircle className="text-[#088395] mt-1 shrink-0" size={18} />
+                    <p className="text-[#09637E]/70 text-[11px] font-bold uppercase tracking-wider leading-relaxed">
+                        Scheduled in your local timezone. Attendees will see the time converted to their local time automatically.
+                    </p>
                 </div>
             </div>
 

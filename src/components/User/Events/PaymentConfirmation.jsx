@@ -67,17 +67,17 @@ const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaym
                                 <ul className="space-y-5">
                                     <li className="flex justify-between items-center text-[#09637E]/70">
                                         <span className="text-xs font-bold uppercase tracking-wider">Platform</span>
-                                        <span className="font-mono text-sm leading-none">₹{platformFee.toFixed(2)}</span>
+                                        <span className="font-mono text-sm leading-none">₹{platformFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </li>
                                     {promoCosts > 0 && (
                                         <li className="flex justify-between items-center text-[#09637E]/70">
                                             <span className="text-xs font-bold uppercase tracking-wider">Marketing</span>
-                                            <span className="font-mono text-sm leading-none">₹{promoCosts.toFixed(2)}</span>
+                                            <span className="font-mono text-sm leading-none">₹{promoCosts.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                         </li>
                                     )}
                                     <li className="flex justify-between items-center text-[#09637E]/70">
                                         <span className="text-xs font-bold uppercase tracking-wider">Tax (5%)</span>
-                                        <span className="font-mono text-sm leading-none">₹{tax.toFixed(2)}</span>
+                                        <span className="font-mono text-sm leading-none">₹{tax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </li>
                                 </ul>
                             </div>

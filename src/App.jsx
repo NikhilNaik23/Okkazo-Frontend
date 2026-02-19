@@ -45,7 +45,9 @@ import EventDetails from "./pages/user/Events/EventDetails";
 import EventCheckout from "./pages/user/Events/EventCheckout";
 import UserEventManagement from "./pages/user/Events/UserEventManagement";
 import MyEvents from "./pages/user/Dashboard/MyEvents";
+import TicketDetails from "./pages/user/Events/TicketDetails";
 import UserProfile from "./pages/user/Profile/UserProfile";
+import ViewProof from "./pages/user/Events/ViewProof";
 import Notifications from "./pages/user/Dashboard/Notifications";
 import EditProfile from "./pages/user/Profile/EditProfile";
 import AccountSettings from "./pages/user/Profile/AccountSettings";
@@ -298,9 +300,11 @@ const App = () => {
             <Route path="dashboard" element={<UserDashboard />} />
             <Route path="planning-wizard" element={<PlanningWizard />} />
             <Route path="promote" element={<PromoteEvent />} />
+            <Route path="promote-event/:id" element={<ViewProof />} />
             <Route path="event/:eventId" element={<EventDetails />} />
             <Route path="checkout/:eventId" element={<EventCheckout />} />
             <Route path="my-events" element={<MyEvents />} />
+            <Route path="ticket/:id" element={<TicketDetails />} />
             <Route path="event-management/:eventId" element={<UserEventManagement />} />
             <Route path="profile" element={<UserProfile />} />
             <Route path="notifications" element={<Notifications />} />

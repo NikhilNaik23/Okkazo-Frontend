@@ -17,13 +17,13 @@ const SuccessConfirmation = () => {
             </div>
 
             <div className="space-y-6 max-w-2xl mx-auto">
-                <p className="text-[#088395] font-black uppercase tracking-[0.4em] text-xs">Acknowledge Reality</p>
+                <p className="text-[#088395] font-black uppercase tracking-[0.4em] text-xs">Under Review</p>
                 <h2 className="text-6xl md:text-8xl font-serif-premium text-[#09637E] italic leading-tight">
                     Your event <br />
-                    <span className="not-italic">is now live.</span>
+                    <span className="not-italic">is submitted.</span>
                 </h2>
                 <p className="text-[#09637E]/60 text-lg leading-relaxed font-medium pt-4">
-                    The invitations have been broadcast. The digital realm now anticipates your event. Prepare for the extraordinary journey ahead.
+                    Our team is verifying your details. Once approved, your event will go live on given date.
                 </p>
             </div>
 
@@ -47,7 +47,7 @@ const SuccessConfirmation = () => {
             <div className="mt-20 pt-12 border-t border-[#09637E]/5 grid grid-cols-2 md:grid-cols-4 gap-8 max-w-3xl mx-auto">
                 <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/40 mb-1">Status</p>
-                    <p className="text-xs font-bold text-[#088395]">LIVE & ACTIVE</p>
+                    <p className="text-xs font-bold text-[#088395]">PENDING REVIEW</p>
                 </div>
                 <div>
                     <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/40 mb-1">Promotion</p>

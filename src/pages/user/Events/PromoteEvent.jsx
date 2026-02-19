@@ -9,6 +9,7 @@ import StepMedia from "../../../components/Forms/PromoteEvent/Wizard/StepMedia";
 import StepTickets from "../../../components/Forms/PromoteEvent/Wizard/StepTickets";
 import StepSchedule from "../../../components/Forms/PromoteEvent/Wizard/StepSchedule";
 import StepPromote from "../../../components/Forms/PromoteEvent/Wizard/StepPromote";
+import StepVerify from "../../../components/Forms/PromoteEvent/Wizard/StepVerify";
 import StepReview from "../../../components/Forms/PromoteEvent/Wizard/StepReview";
 import PaymentConfirmation from "../../../components/User/Events/PaymentConfirmation";
 import SuccessConfirmation from "../../../components/User/Events/SuccessConfirmation";
@@ -36,7 +37,8 @@ const PromoteEvent = () => {
             ) ||
             (step.id === 4 && !!formData.startDate && !!formData.endDate) ||
             (step.id === 5) || // Promote is optional
-            (step.id === 6)
+            (step.id === 6 && formData.authDocuments?.length > 0) || // Verify: at least 1 doc
+            (step.id === 7) // Review
         )
     }));
 
@@ -95,7 +97,7 @@ const PromoteEvent = () => {
 
     // Navigation
     const handleNext = () => {
-        if (currentStep < 6) {
+        if (currentStep < 7) {
             setCurrentStep(prev => prev + 1);
         } else {
             setIsPaymentStep(true);
@@ -113,6 +115,35 @@ const PromoteEvent = () => {
     };
 
     const handlePaymentSuccess = () => {
+        // Create new campaign object
+        // Create new campaign object
+        const isFree = formData.tickets.every(t => !t.price || parseFloat(t.price) === 0);
+
+        const newCampaign = {
+            id: `new_${Date.now()}`,
+            title: formData.eventName || "Untitled Event",
+            subtitle: (formData.category || "Uncategorized").toUpperCase(),
+            status: "Pending Review",
+            revenue: isFree ? "-" : "₹0.00",
+            revenueLabel: isFree ? "Free Event" : "Projected Revenue",
+            conversion: null,
+            centerText: "In Review",
+            gradient: "bg-gradient-to-b from-[#EBF4F6]/80 via-[#7AB2B2]/20 to-white/90",
+            buttonText: "View Submission",
+            createdAt: new Date().toISOString()
+        };
+
+        // Save to localStorage
+        try {
+            const existing = JSON.parse(localStorage.getItem('promoted_campaigns') || '[]');
+            const updated = [newCampaign, ...(Array.isArray(existing) ? existing : [])];
+            localStorage.setItem('promoted_campaigns', JSON.stringify(updated));
+            // Dispatch event for any active listeners
+            window.dispatchEvent(new Event('savedUpdated'));
+        } catch (e) {
+            console.error("Failed to save campaign", e);
+        }
+
         setIsPaymentStep(false);
         setIsSuccessStep(true);
         localStorage.removeItem('promoteEventDraft_v3');
@@ -149,7 +180,7 @@ const PromoteEvent = () => {
                         {isPaymentStep ? (
                             <PaymentConfirmation
                                 formData={formData}
-                                platformFee={150}
+                                platformFee={15000}
                                 setCurrentStep={() => setIsPaymentStep(false)}
                                 handlePaymentSuccess={handlePaymentSuccess}
                             />
@@ -169,7 +200,8 @@ const PromoteEvent = () => {
                                 )}
                                 {currentStep === 4 && <StepSchedule formData={formData} setFormData={setFormData} />}
                                 {currentStep === 5 && <StepPromote formData={formData} setFormData={setFormData} />}
-                                {currentStep === 6 && <StepReview formData={formData} />}
+                                {currentStep === 6 && <StepVerify formData={formData} setFormData={setFormData} />}
+                                {currentStep === 7 && <StepReview formData={formData} />}
                             </div>
                         )}
                     </div>
@@ -194,7 +226,7 @@ const PromoteEvent = () => {
                                 : 'bg-[#09637E]/10 text-[#09637E]/40 cursor-not-allowed'
                                 }`}
                         >
-                            <span>{currentStep === 6 ? 'Finalize & Pay' : 'Next Step'}</span>
+                            <span>{currentStep === 7 ? 'Finalize & Pay' : 'Next Step'}</span>
                             <BsArrowRight size={18} className={`${isCurrentStepCompleted ? 'group-hover:translate-x-1' : ''} transition-transform`} />
                         </button>
                     </div>

@@ -5,7 +5,9 @@ import { promotePrices } from '../../../../data/promoteEventData';
 const StepReview = ({ formData }) => {
     // Calculate totals
     const totalTickets = formData.tickets.reduce((acc, t) => acc + (t.quantity || 0), 0);
-    const estimatedTicketRevenue = formData.tickets.reduce((acc, t) => acc + ((t.price * t.quantity) || 0), 0);
+    const grossRevenue = formData.tickets.reduce((acc, t) => acc + ((t.price * t.quantity) || 0), 0);
+    const serviceCharge = grossRevenue * 0.025;
+    const netRevenue = grossRevenue - serviceCharge;
 
     // Promotion costs
     const promoCosts = Object.keys(formData.promotions).reduce((acc, key) => {
@@ -15,7 +17,7 @@ const StepReview = ({ formData }) => {
         return acc;
     }, 0);
 
-    const platformFee = 150;
+    const platformFee = 15000;
     const subtotal = platformFee + promoCosts;
     const tax = subtotal * 0.05;
     const finalTotal = subtotal + tax;
@@ -25,7 +27,7 @@ const StepReview = ({ formData }) => {
             <h1 className="font-serif-premium text-6xl md:text-8xl italic text-[#7AB2B2] opacity-10 mb-8 absolute -top-20 -left-20 pointer-events-none select-none">Manifest</h1>
 
             <div className="mb-12 relative">
-                <p className="text-[#088395] font-black uppercase tracking-[0.3em] text-[10px] mb-4">Step 06 — Final Review</p>
+                <p className="text-[#088395] font-black uppercase tracking-[0.3em] text-[10px] mb-4">Step 07 — Final Review</p>
                 <h2 className="text-4xl md:text-5xl font-serif-premium text-[#09637E] italic leading-tight">Ready to launch?</h2>
             </div>
 
@@ -71,10 +73,11 @@ const StepReview = ({ formData }) => {
                                 <BsTicketPerforated className="text-[#088395] opacity-50" />
                             </div>
                         </div>
-                        <div className="bg-white p-6 rounded-2xl shadow-lg border border-[#09637E]/5">
-                            <p className="text-[10px] text-[#09637E]/60 font-black uppercase tracking-widest mb-2">Est. Revenue</p>
-                            <div className="flex items-baseline gap-2">
-                                <span className="text-3xl font-serif-premium text-[#09637E] italic">₹{estimatedTicketRevenue.toLocaleString()}</span>
+                        <div className="bg-white p-6 rounded-2xl shadow-lg border border-[#09637E]/5 relative overflow-hidden">
+                            <p className="text-[10px] text-[#09637E]/60 font-black uppercase tracking-widest mb-2">Est. Net Revenue</p>
+                            <div className="flex flex-col">
+                                <span className="text-3xl font-serif-premium text-[#09637E] italic">₹{netRevenue.toLocaleString()}</span>
+                                <span className="text-[9px] font-bold text-[#09637E]/40 uppercase tracking-wider mt-1">Post 2.5% Service Fee</span>
                             </div>
                         </div>
                     </div>
@@ -87,7 +90,7 @@ const StepReview = ({ formData }) => {
                         <ul className="space-y-4 text-sm font-bold opacity-80">
                             <li className="flex justify-between border-b border-[#09637E]/20 pb-2">
                                 <span>Platform Fee</span>
-                                <span>₹150.00</span>
+                                <span>₹15,000.00</span>
                             </li>
                             {promoCosts > 0 && (
                                 <li className="flex justify-between border-b border-[#09637E]/20 pb-2">
