@@ -5,113 +5,106 @@ const PaymentMethod = ({ onConfirm, platformFee }) => {
     const [paymentMode, setPaymentMode] = useState("card");
 
     return (
-        <div className="bg-white rounded-[2.5rem] p-8 md:p-10 shadow-sm border border-gray-100 h-full">
-            <div className="flex items-center gap-3 mb-8">
-                <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center text-green-600">
-                    <BsCreditCard size={20} />
+        <div className="bg-white rounded-[2.5rem] p-8 md:p-12 shadow-[0_20px_50px_-10px_rgba(9,99,126,0.1)] border border-[#09637E]/5 h-full relative overflow-hidden">
+            {/* Background Accent */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-[#EBF4F6] rounded-full blur-[80px] -mr-32 -mt-32 pointer-events-none"></div>
+
+            {/* Header */}
+            <div className="flex items-center gap-5 mb-10 relative z-10">
+                <div className="w-14 h-14 bg-[#EBF4F6] rounded-2xl flex items-center justify-center text-[#09637E] shadow-sm border border-[#09637E]/5">
+                    <BsCreditCard size={24} />
                 </div>
-                <h2 className="text-2xl font-bold text-[#0b2d49]">Payment Method</h2>
+                <h2 className="text-3xl font-serif-premium italic text-[#09637E]">Payment Method</h2>
             </div>
 
             {/* Payment Mode Selector */}
-            <div className="grid grid-cols-2 gap-4 mb-8">
-                <button 
+            <div className="flex gap-4 mb-12 relative z-10 bg-[#EBF4F6]/50 p-1.5 rounded-full border border-[#09637E]/5">
+                <button
                     onClick={() => setPaymentMode("card")}
-                    className={`flex items-center justify-center gap-3 py-4 rounded-2xl border-2 transition-all ${
-                        paymentMode === "card" 
-                        ? "border-[#d7a444] bg-[#fdf8ee] text-[#d7a444]" 
-                        : "border-gray-100 hover:border-gray-200 text-gray-500"
-                    }`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-full transition-all text-xs font-black uppercase tracking-widest ${paymentMode === "card"
+                            ? "bg-white text-[#09637E] shadow-md border border-[#09637E]/10"
+                            : "text-[#09637E]/40 hover:text-[#09637E]/60"
+                        }`}
                 >
-                    <BsCreditCard size={20} />
-                    <span className="font-bold">Card</span>
-                    {paymentMode === "card" && <BsCheckCircleFill className="ml-1" size={14} />}
+                    <BsCreditCard size={14} className="mb-0.5" />
+                    <span>Card</span>
                 </button>
-                <button 
+                <button
                     onClick={() => setPaymentMode("transfer")}
-                    className={`flex items-center justify-center gap-3 py-4 rounded-2xl border-2 transition-all ${
-                        paymentMode === "transfer" 
-                        ? "border-[#d7a444] bg-[#fdf8ee] text-[#d7a444]" 
-                        : "border-gray-100 hover:border-gray-200 text-gray-500"
-                    }`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-full transition-all text-xs font-black uppercase tracking-widest ${paymentMode === "transfer"
+                            ? "bg-white text-[#09637E] shadow-md border border-[#09637E]/10"
+                            : "text-[#09637E]/40 hover:text-[#09637E]/60"
+                        }`}
                 >
-                    <BsArrowLeftRight size={20} />
-                    <span className="font-bold">Transfer</span>
+                    <BsArrowLeftRight size={14} className="mb-0.5" />
+                    <span>Transfer</span>
                 </button>
             </div>
 
-            {/* Card Form */}
-            <div className="space-y-6">
-                <div>
-                    <label className="block text-sm font-bold text-[#0b2d49] mb-2 px-1">Card Information</label>
-                    <div className="relative group">
-                        <input 
-                            type="text" 
-                            placeholder="0000 0000 0000 0000" 
-                            className="w-full pl-12 pr-12 py-4 rounded-2xl border border-gray-100 bg-gray-50/50 focus:bg-white focus:border-[#d7a444] focus:ring-4 focus:ring-[#d7a444]/5 outline-none transition-all"
+            {/* Minimalist Card Form */}
+            <div className="space-y-10 relative z-10">
+                <div className="group">
+                    <label className="block text-[10px] font-black text-[#09637E]/30 uppercase tracking-[0.2em] mb-3 group-focus-within:text-[#088395] transition-colors pl-1">Card Information</label>
+                    <input
+                        type="text"
+                        placeholder="0000 0000 0000 0000"
+                        className="w-full py-2 bg-transparent border-b border-[#09637E]/10 text-xl font-medium font-serif-premium text-[#0b2d49] placeholder:text-[#0b2d49]/20 focus:outline-none focus:border-[#088395] transition-all"
+                    />
+                </div>
+
+                <div className="grid grid-cols-2 gap-10">
+                    <div className="group">
+                        <label className="block text-[10px] font-black text-[#09637E]/30 uppercase tracking-[0.2em] mb-3 group-focus-within:text-[#088395] transition-colors pl-1">Expiry Date</label>
+                        <input
+                            type="text"
+                            placeholder="MM / YY"
+                            className="w-full py-2 bg-transparent border-b border-[#09637E]/10 text-xl font-medium font-serif-premium text-[#0b2d49] placeholder:text-[#0b2d49]/20 focus:outline-none focus:border-[#088395] transition-all"
                         />
-                        <BsCreditCard className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#2da77d] transition-colors" />
-                        <div className="absolute right-5 top-1/2 -translate-y-1/2 flex gap-1">
-                            <div className="w-6 h-4 bg-gray-200 rounded-sm"></div>
-                            <div className="w-6 h-4 bg-gray-300 rounded-sm"></div>
-                        </div>
                     </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-bold text-[#0b2d49] mb-2 px-1">Expiry Date</label>
-                        <div className="relative group">
-                            <input 
-                                type="text" 
-                                placeholder="MM / YY" 
-                                className="w-full pl-12 py-4 rounded-2xl border border-gray-100 bg-gray-50/50 focus:bg-white focus:border-[#d7a444] outline-none transition-all"
-                            />
-                            <span className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400">📅</span>
+                    <div className="group">
+                        <div className="flex justify-between items-center mb-3">
+                            <label className="block text-[10px] font-black text-[#09637E]/30 uppercase tracking-[0.2em] group-focus-within:text-[#088395] transition-colors pl-1">CVC</label>
+                            <BsQuestionCircle className="text-[#09637E]/20 hover:text-[#088395] cursor-help transition-colors" size={14} />
                         </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-bold text-[#0b2d49] mb-2 px-1">CVC</label>
-                        <div className="relative group">
-                            <input 
-                                type="text" 
-                                placeholder="123" 
-                                className="w-full pl-12 pr-10 py-4 rounded-2xl border border-gray-100 bg-gray-50/50 focus:bg-white focus:border-[#d7a444] outline-none transition-all"
-                            />
-                            <span className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400">🔒</span>
-                            <BsQuestionCircle className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-300 cursor-help hover:text-gray-400 transition-colors" />
-                        </div>
-                    </div>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-bold text-[#0b2d49] mb-2 px-1">Cardholder Name</label>
-                    <div className="relative group">
-                        <input 
-                            type="text" 
-                            placeholder="Name on card" 
-                            className="w-full pl-12 py-4 rounded-2xl border border-gray-100 bg-gray-50/50 focus:bg-white focus:border-[#2da77d] outline-none transition-all"
+                        <input
+                            type="password"
+                            placeholder="123"
+                            className="w-full py-2 bg-transparent border-b border-[#09637E]/10 text-xl font-medium font-serif-premium text-[#0b2d49] placeholder:text-[#0b2d49]/20 focus:outline-none focus:border-[#088395] transition-all"
                         />
-                        <span className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400">👤</span>
                     </div>
                 </div>
 
-                <label className="flex items-center gap-3 cursor-pointer group py-2">
-                    <input type="checkbox" className="w-5 h-5 rounded-lg border-gray-300 text-[#2da77d] focus:ring-[#2da77d] cursor-pointer" />
-                    <span className="text-sm font-medium text-gray-600 group-hover:text-[#0b2d49] transition-colors">Save my payment details for future bookings</span>
+                <div className="group">
+                    <label className="block text-[10px] font-black text-[#09637E]/30 uppercase tracking-[0.2em] mb-3 group-focus-within:text-[#088395] transition-colors pl-1">Cardholder Name</label>
+                    <input
+                        type="text"
+                        placeholder="Name on card"
+                        className="w-full py-2 bg-transparent border-b border-[#09637E]/10 text-xl font-medium font-serif-premium text-[#0b2d49] placeholder:text-[#0b2d49]/20 focus:outline-none focus:border-[#088395] transition-all"
+                    />
+                </div>
+
+                <label className="flex items-center gap-3 cursor-pointer group pt-2 select-none">
+                    <div className="relative flex items-center justify-center w-5 h-5">
+                        <input type="checkbox" className="peer sr-only" />
+                        <div className="w-5 h-5 border-2 border-[#09637E]/20 rounded-md transition-all peer-checked:bg-[#088395] peer-checked:border-[#088395] peer-checked:shadow-sm"></div>
+                        <BsCheckCircleFill className="absolute text-white opacity-0 peer-checked:opacity-100 transition-all transform scale-50 peer-checked:scale-100" size={10} />
+                    </div>
+                    <span className="text-xs font-bold text-[#09637E]/50 group-hover:text-[#088395] transition-colors">Save details for future bookings</span>
                 </label>
 
-                <button 
+                <button
                     onClick={onConfirm}
-                    className="w-full py-5 bg-[#0b2d49] text-white font-bold rounded-[1.25rem] shadow-xl shadow-[#0b2d49]/10 hover:bg-[#d7a444] hover:-translate-y-1 active:scale-[0.98] transition-all flex items-center justify-center gap-3 mt-4"
+                    className="w-full py-5 mt-6 bg-[#088395] text-white rounded-2xl shadow-xl shadow-[#088395]/20 hover:bg-[#066a7a] hover:-translate-y-1 active:scale-[0.98] transition-all flex items-center justify-center gap-3 group relative overflow-hidden"
                 >
-                    <BsCheckCircleFill className="text-white/80" />
-                    Confirm Payment
+                    <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                    <BsCheckCircleFill className="text-white/80 group-hover:text-white transition-colors relative z-10" />
+                    <span className="font-black uppercase tracking-[0.2em] text-xs relative z-10">Confirm Payment</span>
                 </button>
 
-                <p className="text-center text-[10px] text-gray-400 flex items-center justify-center gap-2 mt-4">
-                    <BsCheckCircleFill className="text-[#d7a444]" /> Your transaction is secured with 256-bit SSL encryption.
-                </p>
+                <div className="flex items-center justify-center gap-2 text-[9px] font-bold text-[#09637E]/30 uppercase tracking-widest mt-8">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#088395]"></div>
+                    Your transaction is encrypted securely
+                </div>
             </div>
         </div>
     );
