@@ -83,9 +83,9 @@ const EventCheckout = () => {
 
                                 <div className="relative z-10 flex flex-col items-center">
                                     <div className="w-24 h-24 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center mb-8 border border-white/20 shadow-2xl">
-                                        <BsCheckCircleFill className="text-[#088395] drop-shadow-lg" size={48} />
+                                        <BsCheckCircleFill className="text-[#22c55e] drop-shadow-lg" size={48} />
                                     </div>
-                                    <p className="text-[#088395] font-black uppercase tracking-[0.3em] text-[10px] mb-4">Payment Successful</p>
+                                    <p className="text-[#22c55e] font-black uppercase tracking-[0.3em] text-[10px] mb-4">Payment Successful</p>
                                     <h2 className="text-5xl md:text-6xl font-serif-premium italic mb-4">You're Going!</h2>
                                     <p className="text-white/80 font-light text-lg tracking-wide max-w-md">Your tickets for <strong className="text-white font-serif-premium">{event.title}</strong> have been confirmed.</p>
                                 </div>
