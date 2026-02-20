@@ -103,7 +103,7 @@ const CheckoutOrderSummary = ({ event, quantity = 1, category = "General" }) => 
                     </div>
 
                     <div className="flex items-center justify-center gap-2 pt-4">
-                        <BsCheckCircleFill className="text-[#088395]" size={12} />
+                        <BsCheckCircleFill className="text-[#22c55e]" size={12} />
                         <span className="text-[9px] font-black text-[#09637E]/40 uppercase tracking-[0.2em]">Bank-Level Security</span>
                     </div>
                 </div>
