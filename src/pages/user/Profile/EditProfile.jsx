@@ -218,7 +218,6 @@ const EditProfile = () => {
 
                     </div>
                     <p className="mt-4 text-xs font-black uppercase tracking-widest text-[#09637E]/50">Profile Curator</p>
-                    <p className="text-[10px] text-[#09637E]/40 italic mt-1">Format requirements: JPG, GIF, PNG (Max 2MB)</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-8">
