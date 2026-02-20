@@ -102,7 +102,6 @@ const EventDetails = () => {
     const handleProceed = () => {
         const totalTickets = getTotalTickets();
         if (totalTickets === 0) {
-            toast.error("Please select at least one ticket");
             return;
         }
 
@@ -206,7 +205,8 @@ const EventDetails = () => {
 
                         <button
                             onClick={handleProceed}
-                            className="w-full py-5 bg-[#09637E] text-white font-black rounded-[1.5rem] shadow-xl shadow-[#09637E]/20 hover:bg-[#074d63] hover:-translate-y-1 transition-all active:scale-[0.98] text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3"
+                            disabled={getTotalTickets() === 0}
+                            className="w-full py-5 bg-[#09637E] text-white font-black rounded-[1.5rem] shadow-xl shadow-[#09637E]/20 hover:bg-[#074d63] hover:-translate-y-1 transition-all active:scale-[0.98] text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 disabled:bg-gray-300 disabled:text-gray-500 disabled:shadow-none disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:active:scale-100"
                         >
                             Proceed to Booking <BsArrowLeft className="rotate-180" size={16} />
                         </button>
