@@ -5,7 +5,16 @@ import { FcGoogle } from "react-icons/fc";
 import { BsEye, BsEyeSlash } from "react-icons/bs";
 import { motion } from "framer-motion";
 import { toast } from "react-hot-toast";
-import { loginUser, fetchCurrentUser, clearError, selectIsLoading, selectError, selectIsAuthenticated, selectUserRole } from "../../../store/slices/authSlice";
+import {
+  loginUser,
+  clearError,
+  selectIsLoading,
+  selectError,
+  selectIsAuthenticated,
+  selectUserRole,
+  selectVendorApplication,
+  selectVendorApplicationLoading
+} from "../../../store/slices/authSlice";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -15,6 +24,8 @@ const Login = () => {
   const error = useSelector(selectError);
   const isAuthenticated = useSelector(selectIsAuthenticated);
   const userRole = useSelector(selectUserRole);
+  const vendorApplication = useSelector(selectVendorApplication);
+  const vendorApplicationLoading = useSelector(selectVendorApplicationLoading);
 
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -22,16 +33,29 @@ const Login = () => {
     password: "",
   });
 
-  // Redirect after successful login and user data is fetched
+  // Redirect after successful login based on role
   useEffect(() => {
-    if (isAuthenticated && userRole) {
-      if (userRole === 'ADMIN') {
+    if (isAuthenticated && userRole && !vendorApplicationLoading) {
+      if (userRole === 'VENDOR') {
+        // For vendors, check their application status
+        if (vendorApplication) {
+          const status = vendorApplication.status;
+          if (status === 'APPROVED') {
+            navigate("/vendor/dashboard");
+          } else {
+            // REJECTED, SUSPENDED, PENDING_REVIEW, DOCUMENTS_REQUESTED, UNDER_VERIFICATION
+            navigate("/vendor/application-status");
+          }
+        }
+      } else if (userRole === 'ADMIN') {
         navigate("/admin");
+      } else if (userRole === 'MANAGER') {
+        navigate("/manager");
       } else {
         navigate("/user/dashboard");
       }
     }
-  }, [isAuthenticated, userRole, navigate]);
+  }, [isAuthenticated, userRole, vendorApplication, vendorApplicationLoading, navigate]);
 
   // Show error toast when Redux error changes
   useEffect(() => {
@@ -52,15 +76,15 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const result = await dispatch(loginUser({
+    await dispatch(loginUser({
       email: formData.email,
       password: formData.password,
     }));
 
-    // If login was successful, fetch user data to get role
-    if (loginUser.fulfilled.match(result)) {
-      dispatch(fetchCurrentUser());
-    }
+    // Note: After login, the role is stored in Redux state.
+    // ProtectedRoute will automatically fetch the appropriate data based on role:
+    // - USER/ADMIN/MANAGER -> fetchCurrentUser() calls /api/users/me
+    // - VENDOR -> fetchVendorApplication() calls /api/vendor/me/application
   };
 
   return (
@@ -148,7 +172,7 @@ const Login = () => {
               <div className="space-y-2">
                 <div className="flex justify-between items-center mb-1">
                   <label className="text-xs font-black text-[#09637E] uppercase tracking-widest ml-1">Password</label>
-                  <Link to="/forgot-password" shaking className="text-xs font-bold text-[#088395] hover:text-[#09637E] transition-colors">Forgot password?</Link>
+                  <Link to="/forgot-password" className="text-xs font-bold text-[#088395] hover:text-[#09637E] transition-colors">Forgot password?</Link>
                 </div>
                 <div className="relative group">
                   <input

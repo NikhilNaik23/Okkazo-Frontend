@@ -9,17 +9,19 @@ const FileUploadField = ({ label, file, onFileChange, onRemove, inputRef }) => {
         if (!selectedFile) return;
 
         if (selectedFile.size > fileUploadConfig.maxFileSize) {
-            toast.error("File size must be less than 5MB.");
+            toast.error("File size too large! Please ensure each file is under 5MB. 📁");
+            e.target.value = ''; // Clear the input
             return;
         }
 
         if (!fileUploadConfig.allowedTypes.includes(selectedFile.type)) {
-            toast.error("Only PDF, JPG, and PNG files are allowed");
+            toast.error("Only PDF, JPG, and PNG files are allowed ⚠️");
+            e.target.value = ''; // Clear the input
             return;
         }
 
         onFileChange(selectedFile);
-        toast.success(`${label} uploaded`);
+        toast.success(`${label} uploaded ✅`);
     };
 
     return (
@@ -39,6 +41,7 @@ const FileUploadField = ({ label, file, onFileChange, onRemove, inputRef }) => {
                 >
                     <BsCloudUpload size={24} className="mx-auto mb-2 text-[#7AB2B2] group-hover:scale-110 transition-transform" />
                     <p className="text-[#09637E] font-bold text-xs">Tap to upload</p>
+                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB • PDF, JPG, PNG</p>
                 </div>
             ) : (
                 <div className="w-full bg-white rounded-2xl p-4 border border-[#7AB2B2]/20 flex items-center justify-between shadow-sm">
@@ -61,22 +64,25 @@ const MultiFileUpload = ({ files, onAddFile, onRemoveFile, inputRef, maxFiles = 
         if (!selectedFile) return;
 
         if (files.length >= maxFiles) {
-            toast.error(`Maximum ${maxFiles} additional documents allowed`);
+            toast.error(`Maximum ${maxFiles} additional documents allowed 📎`);
+            e.target.value = ''; // Clear the input
             return;
         }
 
         if (selectedFile.size > fileUploadConfig.maxFileSize) {
-            toast.error("File size must be less than 5MB.");
+            toast.error("File size too large! Please ensure each file is under 5MB. 📁");
+            e.target.value = ''; // Clear the input
             return;
         }
 
         if (!fileUploadConfig.allowedTypes.includes(selectedFile.type)) {
-            toast.error("Only PDF, JPG, and PNG files are allowed");
+            toast.error("Only PDF, JPG, and PNG files are allowed ⚠️");
+            e.target.value = ''; // Clear the input
             return;
         }
 
         onAddFile(selectedFile);
-        toast.success("Document uploaded");
+        toast.success("Document uploaded ✅");
     };
 
     return (
@@ -106,10 +112,13 @@ const MultiFileUpload = ({ files, onAddFile, onRemoveFile, inputRef, maxFiles = 
                 {files.length < maxFiles && (
                     <div
                         onClick={() => inputRef.current?.click()}
-                        className="w-full bg-[#EBF4F6]/50 rounded-2xl p-4 border-2 border-dashed border-[#7AB2B2]/30 hover:border-[#7AB2B2] hover:bg-white transition-all duration-300 cursor-pointer group flex items-center justify-center gap-3"
+                        className="w-full bg-[#EBF4F6]/50 rounded-2xl p-4 border-2 border-dashed border-[#7AB2B2]/30 hover:border-[#7AB2B2] hover:bg-white transition-all duration-300 cursor-pointer group flex flex-col items-center justify-center gap-1"
                     >
-                        <BsCloudUpload size={18} className="text-[#7AB2B2] group-hover:scale-110 transition-transform" />
-                        <p className="text-[#09637E] font-bold text-xs">Add Document ({files.length}/{maxFiles})</p>
+                        <div className="flex items-center gap-2">
+                            <BsCloudUpload size={18} className="text-[#7AB2B2] group-hover:scale-110 transition-transform" />
+                            <p className="text-[#09637E] font-bold text-xs">Add Document ({files.length}/{maxFiles})</p>
+                        </div>
+                        <p className="text-[#708aa0] text-[9px]">Max 5MB each</p>
                     </div>
                 )}
             </div>

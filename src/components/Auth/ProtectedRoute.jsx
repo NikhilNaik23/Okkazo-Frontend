@@ -3,10 +3,12 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import {
   fetchCurrentUser,
+  fetchVendorApplication,
   selectIsAuthenticated,
   selectUserRole,
   selectIsLoading,
   selectUser,
+  selectVendorApplication,
 } from "../../store/slices/authSlice";
 
 /**
@@ -28,19 +30,31 @@ const ProtectedRoute = ({
   const userRole = useSelector(selectUserRole);
   const isLoading = useSelector(selectIsLoading);
   const user = useSelector(selectUser);
+  const vendorApplication = useSelector(selectVendorApplication);
 
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    // If we have a token but no user data, fetch the user
-    if (isAuthenticated && !user) {
-      dispatch(fetchCurrentUser()).finally(() => {
+    // Fetch appropriate data based on user role
+    if (isAuthenticated && userRole) {
+      if (userRole === 'VENDOR' && !vendorApplication) {
+        // For vendors, fetch vendor application data
+        dispatch(fetchVendorApplication()).finally(() => {
+          setIsChecking(false);
+        });
+      } else if ((userRole === 'USER' || userRole === 'ADMIN' || userRole === 'MANAGER') && !user) {
+        // For non-vendor roles, fetch user profile
+        dispatch(fetchCurrentUser()).finally(() => {
+          setIsChecking(false);
+        });
+      } else {
+        // Data already loaded
         setIsChecking(false);
-      });
-    } else {
+      }
+    } else if (!isAuthenticated) {
       setIsChecking(false);
     }
-  }, [dispatch, isAuthenticated, user]);
+  }, [dispatch, isAuthenticated, userRole, user, vendorApplication]);
 
   // Show loading spinner while checking authentication
   if (isLoading || isChecking) {

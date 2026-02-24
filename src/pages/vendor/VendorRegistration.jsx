@@ -1,4 +1,5 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import {
     BsShop,
     BsEnvelope,
@@ -8,18 +9,41 @@ import {
     BsArrowRight
 } from "react-icons/bs";
 import { toast } from "react-hot-toast";
-import { vendorServiceCategories } from "../../data/planningWizardData";
 import { termsOfService, privacyPolicy } from "../../data/vendorRegistrationData";
+import {
+    registerVendor,
+    fetchServiceCategories,
+    clearVendorRegisterSuccess,
+    clearError,
+    selectIsLoading,
+    selectError,
+    selectVendorRegisterSuccess,
+    selectVendorRegisterMessage,
+    selectVendorRegisterData,
+    selectServiceCategories,
+    selectServiceCategoriesLoading
+} from "../../store/slices/authSlice";
 
 // Components
 import Modal from "../../components/Global/Modal";
 import { RegistrationSuccess, FileUploadField, MultiFileUpload, SidePanel } from "../../components/Vendor/Registration";
+import PhoneInput from 'react-phone-input-2';
+import 'react-phone-input-2/lib/style.css';
 
 const VendorRegistration = () => {
-    const [step, setStep] = useState(1);
+    const dispatch = useDispatch();
+    const isLoading = useSelector(selectIsLoading);
+    const error = useSelector(selectError);
+    const vendorRegisterSuccess = useSelector(selectVendorRegisterSuccess);
+    const vendorRegisterMessage = useSelector(selectVendorRegisterMessage);
+    const vendorRegisterData = useSelector(selectVendorRegisterData);
+    const serviceCategories = useSelector(selectServiceCategories);
+    const serviceCategoriesLoading = useSelector(selectServiceCategoriesLoading);
+
     const [formData, setFormData] = useState({
         businessName: "",
         serviceCategory: "",
+        customService: "",
         email: "",
         phone: "",
         location: "",
@@ -31,6 +55,11 @@ const VendorRegistration = () => {
     const [showTermsModal, setShowTermsModal] = useState(false);
     const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
+    // Location states
+    const [isLocating, setIsLocating] = useState(false);
+    const [locationSuggestions, setLocationSuggestions] = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+
     // File upload states
     const [businessLicense, setBusinessLicense] = useState(null);
     const [ownerIdentity, setOwnerIdentity] = useState(null);
@@ -41,47 +70,172 @@ const VendorRegistration = () => {
     const ownerIdentityRef = useRef(null);
     const otherProofsRef = useRef(null);
 
+    // Fetch service categories on mount
+    useEffect(() => {
+        dispatch(fetchServiceCategories());
+    }, [dispatch]);
+
+    // Location suggestion logic
+    useEffect(() => {
+        const timer = setTimeout(async () => {
+            if (showSuggestions && formData.location && formData.location.length > 2) {
+                try {
+                    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.location)}&limit=5&addressdetails=1`);
+                    const data = await response.json();
+                    setLocationSuggestions(data);
+                } catch (error) {
+                    console.error("Error fetching suggestions:", error);
+                }
+            } else {
+                setLocationSuggestions([]);
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [formData.location, showSuggestions]);
+
+    const handleLocationSelect = (suggestion) => {
+        const address = suggestion.display_name;
+        const parts = address.split(',').slice(0, 3).join(',');
+
+        setFormData(prev => ({ ...prev, location: parts }));
+        setShowSuggestions(false);
+        setLocationSuggestions([]);
+    };
+
+    const handleUseLocation = () => {
+        if (!navigator.geolocation) {
+            toast.error("Geolocation is not supported by your browser");
+            return;
+        }
+
+        setIsLocating(true);
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                try {
+                    const { latitude, longitude } = position.coords;
+                    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+                    const data = await response.json();
+
+                    if (data && data.address) {
+                        const city = data.address.city || data.address.town || data.address.village || data.address.county || "";
+                        const state = data.address.state || "";
+                        const country = data.address.country || "";
+
+                        const locationComponents = [city, state, country].filter(part => part && part.trim().length > 0);
+                        const locationString = locationComponents.join(", ");
+
+                        setFormData(prev => ({ ...prev, location: locationString }));
+                        toast.success("Location updated from browser");
+                    } else {
+                        toast.error("Could not determine address from coordinates");
+                    }
+                } catch (err) {
+                    console.error("Geocoding error:", err);
+                    toast.error("Failed to fetch location details");
+                } finally {
+                    setIsLocating(false);
+                }
+            },
+            (error) => {
+                setIsLocating(false);
+                let msg = "Location error";
+                switch (error.code) {
+                    case 1: msg = "Location permission denied"; break;
+                    case 2: msg = "Location unavailable"; break;
+                    case 3: msg = "Location request timed out"; break;
+                    default: msg = "An unknown error occurred"; break;
+                }
+                toast.error(msg);
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+    };
+
+    // Handle success/error states
+    useEffect(() => {
+        if (error) {
+            toast.error(error);
+            dispatch(clearError());
+        }
+    }, [error, dispatch]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            dispatch(clearError());
+            dispatch(clearVendorRegisterSuccess());
+        };
+    }, [dispatch]);
+
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData({ ...formData, [name]: value });
+        if (name === 'location') {
+            setShowSuggestions(true);
+        }
+    };
+
+    const handlePhoneChange = (value) => {
+        setFormData(prev => ({ ...prev, phone: value }));
     };
 
     const isFormValid = () => {
+        // Basic phone validation: at least 10 digits (including country code)
+        const isPhoneValid = formData.phone && formData.phone.length >= 10;
+
         return (
             formData.businessName &&
             formData.serviceCategory &&
             (formData.serviceCategory !== "Other" || formData.customService) &&
             formData.email &&
-            formData.phone &&
+            isPhoneValid &&
             agreed
         );
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         if (!isFormValid()) {
             toast.error("Please fill in all required fields.");
             return;
         }
 
-        toast.promise(
-            new Promise((resolve) => setTimeout(resolve, 2000)),
-            {
-                loading: 'Submitting your application...',
-                success: () => {
-                    setStep(2);
-                    return <b>Application sent successfully!</b>;
-                },
-                error: <b>Submission failed. Please try again.</b>,
-            },
-            {
-                style: { borderRadius: '16px', background: '#09637E', color: '#fff' }
-            }
-        );
+        // Create FormData object for multipart/form-data
+        const formDataToSend = new FormData();
+        formDataToSend.append('businessName', formData.businessName);
+        formDataToSend.append('serviceCategory', formData.serviceCategory);
+        if (formData.serviceCategory === 'Other' && formData.customService) {
+            formDataToSend.append('customService', formData.customService);
+        }
+        formDataToSend.append('email', formData.email);
+        formDataToSend.append('phone', formData.phone);
+        formDataToSend.append('location', formData.location || '');
+        if (formData.description) {
+            formDataToSend.append('description', formData.description);
+        }
+
+        // Append files if they exist
+        if (businessLicense) {
+            formDataToSend.append('businessLicense', businessLicense);
+        }
+        if (ownerIdentity) {
+            formDataToSend.append('ownerIdentity', ownerIdentity);
+        }
+        if (otherProofs.length > 0) {
+            otherProofs.forEach(file => {
+                formDataToSend.append('otherProofs', file);
+            });
+        }
+
+        formDataToSend.append('agreedToTerms', agreed);
+
+        // Dispatch Redux action
+        dispatch(registerVendor(formDataToSend));
     };
 
-    if (step === 2) {
-        return <RegistrationSuccess email={formData.email} />;
+    if (vendorRegisterSuccess) {
+        return <RegistrationSuccess email={formData.email} message={vendorRegisterMessage} data={vendorRegisterData} />;
     }
 
     return (
@@ -141,10 +295,13 @@ const VendorRegistration = () => {
                                                 required
                                                 value={formData.serviceCategory}
                                                 onChange={handleInputChange}
-                                                className="w-full bg-white rounded-2xl py-3.5 px-5 border border-gray-100 focus:border-[#7AB2B2] focus:ring-4 focus:ring-[#7AB2B2]/10 outline-none transition-all duration-300 font-medium text-sm text-[#09637E] cursor-pointer"
+                                                disabled={serviceCategoriesLoading}
+                                                className="w-full bg-white rounded-2xl py-3.5 px-5 border border-gray-100 focus:border-[#7AB2B2] focus:ring-4 focus:ring-[#7AB2B2]/10 outline-none transition-all duration-300 font-medium text-sm text-[#09637E] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
-                                                <option value="" disabled>Select Category</option>
-                                                {vendorServiceCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                                <option value="" disabled>
+                                                    {serviceCategoriesLoading ? 'Loading categories...' : 'Select Category'}
+                                                </option>
+                                                {serviceCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                                             </select>
                                         </div>
                                     </div>
@@ -156,6 +313,8 @@ const VendorRegistration = () => {
                                                 type="text"
                                                 name="customService"
                                                 required
+                                                value={formData.customService}
+                                                onChange={handleInputChange}
                                                 placeholder="e.g. Drone Photography, Pet Sitting"
                                                 className="w-full bg-white rounded-2xl py-3.5 px-5 border border-gray-100 focus:border-[#7AB2B2] focus:ring-4 focus:ring-[#7AB2B2]/10 outline-none transition-all duration-300 font-medium text-sm placeholder:text-[#708aa0]"
                                             />
@@ -200,38 +359,84 @@ const VendorRegistration = () => {
                                                 <BsEnvelope className="absolute left-4 top-1/2 -translate-y-1/2 text-[#708aa0] group-focus-within:text-[#09637E] transition-colors" />
                                             </div>
                                         </div>
-                                        <div className="space-y-2 relative group">
+                                        <div className="space-y-2 relative group flex flex-col">
                                             <label className="text-xs font-black text-[#09637E] uppercase tracking-widest ml-1">Phone Number *</label>
-                                            <div className="relative">
-                                                <input
-                                                    type="tel"
-                                                    name="phone"
-                                                    required
+                                            <div className="relative phone-input-container">
+                                                <PhoneInput
+                                                    country={'in'}
                                                     value={formData.phone}
-                                                    onChange={handleInputChange}
-                                                    placeholder="+1 (555) 000-0000"
-                                                    className="w-full bg-white rounded-2xl py-3.5 px-5 border border-gray-100 focus:border-[#7AB2B2] focus:ring-4 focus:ring-[#7AB2B2]/10 outline-none transition-all duration-300 font-medium text-sm placeholder:text-[#708aa0] pl-12"
+                                                    onChange={handlePhoneChange}
+                                                    inputProps={{
+                                                        name: 'phone',
+                                                        required: true,
+                                                    }}
+                                                    containerClass="!w-full"
+                                                    inputClass="!w-full !h-auto !bg-white !rounded-2xl !py-3.5 !px-5 !pl-14 !border !border-gray-100 focus:!border-[#7AB2B2] focus:!ring-4 focus:!ring-[#7AB2B2]/10 !outline-none !transition-all !duration-300 !font-medium !text-sm !placeholder:text-[#708aa0]"
+                                                    buttonClass="!bg-transparent !border-none !rounded-2xl !pl-4"
+                                                    dropdownClass="!bg-white !rounded-xl !shadow-2xl !border-none !mt-2 !text-[#09637E]"
+                                                    searchClass="!bg-white !p-2"
+                                                    enableSearch={true}
+                                                    disableSearchIcon={true}
                                                 />
-                                                <BsPhone className="absolute left-4 top-1/2 -translate-y-1/2 text-[#708aa0] group-focus-within:text-[#09637E] transition-colors" />
                                             </div>
                                         </div>
                                     </div>
                                     <div className="space-y-2 relative group">
-                                        <label className="text-xs font-black text-[#09637E] uppercase tracking-widest ml-1">Primary Location *</label>
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-xs font-black text-[#09637E] uppercase tracking-widest ml-1">Primary Location *</label>
+                                            <button
+                                                type="button"
+                                                onClick={handleUseLocation}
+                                                disabled={isLocating}
+                                                className="text-[10px] font-black uppercase tracking-widest text-[#088395] hover:text-[#09637E] flex items-center gap-2 pr-1 transition-colors disabled:opacity-50"
+                                            >
+                                                {isLocating ? (
+                                                    <div className="w-3 h-3 border-2 border-[#088395] border-t-transparent rounded-full animate-spin" />
+                                                ) : (
+                                                    <BsMap size={10} />
+                                                )}
+                                                {isLocating ? "Locating..." : "Use Current Location"}
+                                            </button>
+                                        </div>
                                         <div className="relative">
                                             <input
                                                 type="text"
                                                 name="location"
                                                 required
+                                                autoComplete="off"
                                                 value={formData.location}
                                                 onChange={handleInputChange}
+                                                onFocus={() => { if (formData.location.length > 2) setShowSuggestions(true); }}
+                                                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                                                 placeholder="City, State (e.g., New York, NY)"
                                                 className="w-full bg-white rounded-2xl py-3.5 px-5 border border-gray-100 focus:border-[#7AB2B2] focus:ring-4 focus:ring-[#7AB2B2]/10 outline-none transition-all duration-300 font-medium text-sm placeholder:text-[#708aa0] pl-12"
                                             />
                                             <BsMap className="absolute left-4 top-1/2 -translate-y-1/2 text-[#708aa0] group-focus-within:text-[#09637E] transition-colors" />
+
+                                            {/* Location Suggestions Dropdown */}
+                                            {showSuggestions && locationSuggestions.length > 0 && (
+                                                <div className="absolute top-[calc(100%+8px)] left-0 w-full bg-white/95 backdrop-blur-xl shadow-2xl rounded-2xl z-50 max-h-60 overflow-y-auto border border-gray-100/50 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                    {locationSuggestions.map((item, idx) => (
+                                                        <button
+                                                            key={idx}
+                                                            type="button"
+                                                            onClick={() => handleLocationSelect(item)}
+                                                            className="w-full text-left px-5 py-3.5 hover:bg-[#09637E]/5 transition-colors border-b border-gray-50 last:border-0"
+                                                        >
+                                                            <p className="text-sm font-bold text-[#09637E] truncate">
+                                                                {item.display_name.split(',')[0]}
+                                                            </p>
+                                                            <p className="text-[10px] text-[#708aa0] font-medium truncate mt-0.5">
+                                                                {item.display_name}
+                                                            </p>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </section>
+
 
                                 {/* Documents Upload */}
                                 <section className="space-y-5">
@@ -290,11 +495,20 @@ const VendorRegistration = () => {
 
                                     <button
                                         type="submit"
-                                        disabled={!isFormValid()}
-                                        className={`w-full py-5 rounded-[1.25rem] font-black text-base transition-all duration-300 flex items-center justify-center gap-3 ${isFormValid() ? 'bg-gradient-to-r from-[#09637E] to-[#088395] text-white shadow-xl shadow-[#09637E]/20 hover:scale-[1.02] active:scale-[0.98]' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+                                        disabled={!isFormValid() || isLoading}
+                                        className={`w-full py-5 rounded-[1.25rem] font-black text-base transition-all duration-300 flex items-center justify-center gap-3 ${isFormValid() && !isLoading ? 'bg-gradient-to-r from-[#09637E] to-[#088395] text-white shadow-xl shadow-[#09637E]/20 hover:scale-[1.02] active:scale-[0.98]' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
                                     >
-                                        <span>Submit Application</span>
-                                        <BsArrowRight size={20} />
+                                        {isLoading ? (
+                                            <>
+                                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                <span>Submitting...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span>Submit Application</span>
+                                                <BsArrowRight size={20} />
+                                            </>
+                                        )}
                                     </button>
                                 </div>
                             </div>
