@@ -1,7 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { selectIsAuthenticated, selectUserRole } from '../../store/slices/authSlice';
+import { selectIsAuthenticated, selectUserRole, selectVendorApplication } from '../../store/slices/authSlice';
 
 /**
  * PublicRoute - Redirects authenticated users away from public pages (login, register)
@@ -13,6 +13,7 @@ const PublicRoute = ({ children, restricted = false }) => {
     const location = useLocation();
     const isAuthenticated = useSelector(selectIsAuthenticated);
     const userRole = useSelector(selectUserRole);
+    const vendorApplication = useSelector(selectVendorApplication);
 
     // If route is restricted and user is authenticated, redirect based on role
     if (restricted && isAuthenticated) {
@@ -28,6 +29,14 @@ const PublicRoute = ({ children, restricted = false }) => {
             return <Navigate to="/admin" replace />;
         } else if (userRole === 'USER') {
             return <Navigate to="/user/dashboard" replace />;
+        } else if (userRole === 'VENDOR') {
+            // For vendors, check their application status
+            if (vendorApplication?.status === 'APPROVED') {
+                return <Navigate to="/vendor/dashboard" replace />;
+            } else {
+                // For all other statuses (PENDING_REVIEW, DOCUMENTS_REQUESTED, UNDER_VERIFICATION, REJECTED, SUSPENDED)
+                return <Navigate to="/vendor/application-status" replace />;
+            }
         } else {
             return <Navigate to="/" replace />;
         }

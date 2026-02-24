@@ -22,6 +22,7 @@ export const vendorServiceCategories = [
   "Transportation",
   "Live Streaming & Media",
   "Cake & Desserts",
+  "Other"
 ];
 
 // High Demand Logic:

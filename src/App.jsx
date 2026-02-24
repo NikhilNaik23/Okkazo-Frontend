@@ -3,7 +3,7 @@ import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { useDispatch, useSelector } from 'react-redux';
 import { Toaster } from 'react-hot-toast';
-import { fetchCurrentUser, refreshAccessToken, selectIsAuthenticated, selectUser } from './store/slices/authSlice';
+import { fetchCurrentUser, fetchVendorApplication, refreshAccessToken, selectIsAuthenticated, selectUser } from './store/slices/authSlice';
 
 // Route Guards
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -53,6 +53,7 @@ import EditProfile from "./pages/user/Profile/EditProfile";
 import AccountSettings from "./pages/user/Profile/AccountSettings";
 import VendorRegistration from "./pages/vendor/VendorRegistration";
 import VendorDashboard from "./pages/vendor/VendorDashboard";
+import VendorApplicationStatus from "./pages/vendor/VendorApplicationStatus";
 import VendorLayout from "./components/Layout/vendor/VendorLayout";
 import BookedEvents from "./pages/vendor/BookedEvents";
 import ServiceManagement from "./pages/vendor/ServiceManagement";
@@ -79,18 +80,26 @@ const App = () => {
     const initAuth = async () => {
       const refreshToken = localStorage.getItem('refreshToken');
       const accessToken = localStorage.getItem('accessToken');
-
+      const userRole = localStorage.getItem('userRole');
 
       if (refreshToken && !accessToken) {
         // We have refresh token but no access token - try to refresh
         const result = await dispatch(refreshAccessToken());
         if (refreshAccessToken.fulfilled.match(result)) {
-          // Successfully got new access token, fetch user data
-          dispatch(fetchCurrentUser());
+          // Successfully got new access token, fetch appropriate data based on role
+          if (userRole === 'VENDOR') {
+            dispatch(fetchVendorApplication());
+          } else {
+            dispatch(fetchCurrentUser());
+          }
         }
       } else if (accessToken) {
-        // We have access token - fetch user
-        dispatch(fetchCurrentUser());
+        // We have access token - fetch data based on role
+        if (userRole === 'VENDOR') {
+          dispatch(fetchVendorApplication());
+        } else {
+          dispatch(fetchCurrentUser());
+        }
       }
 
 
@@ -102,7 +111,8 @@ const App = () => {
 
   // Fetch user data when authenticated but no user data
   useEffect(() => {
-    if (isAuthenticated && !user && !isInitializing) {
+    const userRole = localStorage.getItem('userRole');
+    if (isAuthenticated && !user && !isInitializing && userRole !== 'VENDOR') {
       dispatch(fetchCurrentUser());
     }
   }, [dispatch, isAuthenticated, user, isInitializing]);
@@ -325,6 +335,14 @@ const App = () => {
               <PublicRoute>
                 <VendorRegistration />
               </PublicRoute>
+            }
+          />
+          <Route
+            path="/vendor/application-status"
+            element={
+              <ProtectedRoute allowedRoles={['VENDOR']}>
+                <VendorApplicationStatus />
+              </ProtectedRoute>
             }
           />
           <Route
