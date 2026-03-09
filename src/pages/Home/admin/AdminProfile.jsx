@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { 
   User, 
   Mail, 
@@ -14,22 +15,147 @@ import {
   LogOut,
   Twitter,
   Linkedin,
-  Github
+  Github,
+  X,
+  Loader2,
+  Save
 } from "lucide-react";
+import { toast } from "react-hot-toast";
+import {
+  fetchCurrentUser,
+  updateProfile,
+  logout,
+  selectUser,
+  selectIsLoading,
+  selectError,
+  selectUpdateSuccess,
+  clearUpdateSuccess,
+  clearError
+} from "../../../store/slices/authSlice";
 
 const AdminProfile = () => {
+    const dispatch = useDispatch();
+    const user = useSelector(selectUser);
+    const isLoading = useSelector(selectIsLoading);
+    const error = useSelector(selectError);
+    const updateSuccess = useSelector(selectUpdateSuccess);
+
     const [isEditing, setIsEditing] = useState(false);
+    const [isUpdating, setIsUpdating] = useState(false);
+    const [formData, setFormData] = useState({
+        name: "",
+        fullName: "",
+        phone: "",
+        location: "",
+        bio: "",
+        avatar: ""
+    });
+
+    // Fetch user data on mount
+    useEffect(() => {
+        dispatch(fetchCurrentUser());
+    }, [dispatch]);
+
+    // Populate form when user data loads
+    useEffect(() => {
+        if (user) {
+            setFormData({
+                name: user.name || "",
+                fullName: user.fullName || "",
+                phone: user.phone || "",
+                location: user.location || "",
+                bio: user.bio || "",
+                avatar: user.avatar || ""
+            });
+        }
+    }, [user]);
+
+    // Handle update success
+    useEffect(() => {
+        if (updateSuccess) {
+            toast.success("Profile updated successfully!");
+            setIsEditing(false);
+            setIsUpdating(false);
+            dispatch(clearUpdateSuccess());
+        }
+    }, [updateSuccess, dispatch]);
+
+    // Handle errors
+    useEffect(() => {
+        if (error) {
+            toast.error(error);
+            setIsUpdating(false);
+            dispatch(clearError());
+        }
+    }, [error, dispatch]);
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsUpdating(true);
+        
+        // Only send changed fields
+        const updatedFields = {};
+        Object.keys(formData).forEach(key => {
+            if (formData[key] !== (user[key] || "")) {
+                updatedFields[key] = formData[key];
+            }
+        });
+
+        if (Object.keys(updatedFields).length === 0) {
+            toast.error("No changes to save");
+            setIsUpdating(false);
+            return;
+        }
+
+        dispatch(updateProfile(updatedFields));
+    };
+
+    const handleLogout = () => {
+        dispatch(logout());
+        window.location.href = "/login";
+    };
+
+    const getInitials = (name) => {
+        if (!name) return "AD";
+        return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+    };
+
+    const formatMemberSince = (date) => {
+        if (!date) return "Unknown";
+        return new Date(date).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    };
+
+    const calculateYears = (date) => {
+        if (!date) return "0";
+        const years = Math.floor((new Date() - new Date(date)) / (365.25 * 24 * 60 * 60 * 1000));
+        return years > 0 ? `${years} Year${years > 1 ? 's' : ''}+` : "< 1 Year";
+    };
+
+    // Loading state
+    if (isLoading && !user) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-[#f8fafc]">
+                <Loader2 className="w-8 h-8 animate-spin text-[#0b2d49]" />
+            </div>
+        );
+    }
 
     const userInfo = {
-        name: "Marcus Aurelius",
-        role: "System Administrator",
-        email: "marcus.a@okkazo.com",
-        phone: "+1 (555) 928-4021",
-        location: "Seattle, Washington, US",
-        memberSince: "May 2022",
+        name: user?.name || "Admin User",
+        fullName: user?.fullName || user?.name || "Admin User",
+        role: user?.role === "ADMIN" ? "System Administrator" : user?.role || "Administrator",
+        email: user?.email || "admin@okkazo.com",
+        phone: user?.phone || "Not provided",
+        location: user?.location || "Not provided",
+        memberSince: formatMemberSince(user?.memberSince),
         permissions: ["Full Access", "Financial Audit", "Team Lead"],
-        avatar: "MA",
-        bio: "Veteran system architect focused on event management scalability and platform security infrastructure. Passionate about automated workflows and data-driven decision making."
+        avatar: user?.avatar || getInitials(user?.name),
+        bio: user?.bio || "No biography provided."
     };
 
     return (
@@ -46,9 +172,17 @@ const AdminProfile = () => {
                     <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-end gap-6">
                         <div className="relative group shrink-0">
                             <div className="w-32 h-32 md:w-36 md:h-36 rounded-3xl bg-white p-1.5 shadow-2xl relative">
-                                <div className="w-full h-full rounded-2xl bg-gradient-to-br from-[#f3ddb1] to-[#e6c382] flex items-center justify-center text-[#0b2d49] text-4xl font-black">
-                                    {userInfo.avatar}
-                                </div>
+                                {user?.avatar ? (
+                                    <img 
+                                        src={user.avatar} 
+                                        alt={userInfo.name}
+                                        className="w-full h-full rounded-2xl object-cover"
+                                    />
+                                ) : (
+                                    <div className="w-full h-full rounded-2xl bg-gradient-to-br from-[#f3ddb1] to-[#e6c382] flex items-center justify-center text-[#0b2d49] text-4xl font-black">
+                                        {getInitials(userInfo.name)}
+                                    </div>
+                                )}
                                 <button className="absolute -bottom-2 -right-2 p-2 bg-[#0b2d49] text-[#d7a444] rounded-xl shadow-lg border-4 border-white opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-95">
                                     <Camera size={20} />
                                 </button>
@@ -140,7 +274,7 @@ const AdminProfile = () => {
                                 </div>
                                 <h3 className="text-sm font-bold uppercase tracking-widest">Service Tenure</h3>
                             </div>
-                            <p className="text-3xl font-black mb-1">2 Years+</p>
+                            <p className="text-3xl font-black mb-1">{calculateYears(user?.memberSince)}</p>
                             <p className="text-white/60 text-xs font-medium">Joined Okkazo in {userInfo.memberSince}</p>
                         </div>
                     </div>
@@ -196,7 +330,10 @@ const AdminProfile = () => {
                                 <button className="px-5 py-2.5 bg-white text-[#0b2d49] text-xs font-bold rounded-xl border border-[#e9eff1] shadow-sm hover:shadow-md transition-all">
                                     Change Password
                                 </button>
-                                <button className="px-5 py-2.5 bg-rose-50 text-rose-600 text-xs font-bold rounded-xl border border-rose-100 hover:bg-rose-100 transition-all flex items-center gap-2">
+                                <button 
+                                    onClick={handleLogout}
+                                    className="px-5 py-2.5 bg-rose-50 text-rose-600 text-xs font-bold rounded-xl border border-rose-100 hover:bg-rose-100 transition-all flex items-center gap-2"
+                                >
                                     <LogOut size={16} />
                                     Logout Session
                                 </button>
@@ -206,6 +343,150 @@ const AdminProfile = () => {
 
                 </div>
             </div>
+
+            {/* Edit Profile Modal */}
+            {isEditing && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+                        <div className="sticky top-0 bg-white p-6 border-b border-[#e9eff1] flex items-center justify-between rounded-t-3xl">
+                            <h2 className="text-xl font-black text-[#1a1c1e]">Edit Profile</h2>
+                            <button 
+                                onClick={() => setIsEditing(false)}
+                                className="p-2 hover:bg-[#f8fafc] rounded-xl transition-colors"
+                            >
+                                <X size={20} className="text-[#64748b]" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-xs font-bold text-[#64748b] uppercase tracking-wider mb-2">
+                                        Display Name *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="name"
+                                        value={formData.name}
+                                        onChange={handleInputChange}
+                                        className="w-full px-4 py-3 border border-[#e9eff1] rounded-xl focus:ring-2 focus:ring-[#d7a444] focus:border-transparent outline-none transition-all text-sm"
+                                        placeholder="Enter display name"
+                                        minLength={2}
+                                        maxLength={50}
+                                        required
+                                    />
+                                    <p className="text-xs text-[#94a3b8] mt-1">2-50 characters</p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-[#64748b] uppercase tracking-wider mb-2">
+                                        Full Name
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="fullName"
+                                        value={formData.fullName}
+                                        onChange={handleInputChange}
+                                        className="w-full px-4 py-3 border border-[#e9eff1] rounded-xl focus:ring-2 focus:ring-[#d7a444] focus:border-transparent outline-none transition-all text-sm"
+                                        placeholder="Enter full name"
+                                        maxLength={100}
+                                    />
+                                    <p className="text-xs text-[#94a3b8] mt-1">Max 100 characters</p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-[#64748b] uppercase tracking-wider mb-2">
+                                        Phone Number
+                                    </label>
+                                    <input
+                                        type="tel"
+                                        name="phone"
+                                        value={formData.phone}
+                                        onChange={handleInputChange}
+                                        className="w-full px-4 py-3 border border-[#e9eff1] rounded-xl focus:ring-2 focus:ring-[#d7a444] focus:border-transparent outline-none transition-all text-sm"
+                                        placeholder="+1 (555) 123-4567"
+                                    />
+                                    <p className="text-xs text-[#94a3b8] mt-1">Format: +1 (555) 123-4567</p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-[#64748b] uppercase tracking-wider mb-2">
+                                        Location
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="location"
+                                        value={formData.location}
+                                        onChange={handleInputChange}
+                                        className="w-full px-4 py-3 border border-[#e9eff1] rounded-xl focus:ring-2 focus:ring-[#d7a444] focus:border-transparent outline-none transition-all text-sm"
+                                        placeholder="City, State, Country"
+                                        maxLength={100}
+                                    />
+                                    <p className="text-xs text-[#94a3b8] mt-1">Max 100 characters</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-[#64748b] uppercase tracking-wider mb-2">
+                                    Avatar URL
+                                </label>
+                                <input
+                                    type="url"
+                                    name="avatar"
+                                    value={formData.avatar}
+                                    onChange={handleInputChange}
+                                    className="w-full px-4 py-3 border border-[#e9eff1] rounded-xl focus:ring-2 focus:ring-[#d7a444] focus:border-transparent outline-none transition-all text-sm"
+                                    placeholder="https://example.com/avatar.jpg"
+                                />
+                                <p className="text-xs text-[#94a3b8] mt-1">Must be a valid URL</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-[#64748b] uppercase tracking-wider mb-2">
+                                    Biography
+                                </label>
+                                <textarea
+                                    name="bio"
+                                    value={formData.bio}
+                                    onChange={handleInputChange}
+                                    rows={4}
+                                    className="w-full px-4 py-3 border border-[#e9eff1] rounded-xl focus:ring-2 focus:ring-[#d7a444] focus:border-transparent outline-none transition-all text-sm resize-none"
+                                    placeholder="Tell us about yourself..."
+                                    maxLength={500}
+                                />
+                                <p className="text-xs text-[#94a3b8] mt-1">{formData.bio.length}/500 characters</p>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-4 pt-4 border-t border-[#e9eff1]">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsEditing(false)}
+                                    className="px-6 py-2.5 bg-[#f8fafc] text-[#64748b] rounded-xl text-sm font-bold hover:bg-[#e9eff1] transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isUpdating}
+                                    className="px-6 py-2.5 bg-[#0b2d49] text-white rounded-xl text-sm font-bold hover:bg-[#0a2540] transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isUpdating ? (
+                                        <>
+                                            <Loader2 size={16} className="animate-spin" />
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save size={16} />
+                                            Save Changes
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

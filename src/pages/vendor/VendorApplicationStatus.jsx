@@ -1,8 +1,9 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import {
     BsCheckCircleFill,
+    BsXCircleFill,
     BsClockFill,
     BsFileEarmarkTextFill,
     BsShop,
@@ -12,21 +13,36 @@ import {
     BsTelephoneFill,
     BsGeoAltFill,
     BsInfoCircleFill,
-    BsArrowLeft
+    BsArrowLeft,
+    BsCloudUpload,
+    BsFileEarmarkText,
+    BsTrash,
+    BsShieldExclamation
 } from "react-icons/bs";
+import { toast } from "react-hot-toast";
 import {
     selectVendorApplication,
     selectVendorApplicationLoading,
     selectIsAuthenticated,
-    selectUserRole
+    selectUserRole,
+    selectIsLoading,
+    uploadVendorDocument
 } from "../../store/slices/authSlice";
 
 const VendorApplicationStatus = () => {
     const navigate = useNavigate();
+    const dispatch = useDispatch();
     const isAuthenticated = useSelector(selectIsAuthenticated);
     const userRole = useSelector(selectUserRole);
     const vendorApplication = useSelector(selectVendorApplication);
     const isLoading = useSelector(selectVendorApplicationLoading);
+    const isUploading = useSelector(selectIsLoading);
+
+    // File upload states
+    const [businessLicense, setBusinessLicense] = useState(null);
+    const [ownerIdentity, setOwnerIdentity] = useState(null);
+    const businessLicenseRef = useRef(null);
+    const ownerIdentityRef = useRef(null);
 
     useEffect(() => {
         if (!isAuthenticated) {
@@ -44,6 +60,46 @@ const VendorApplicationStatus = () => {
             navigate("/vendor/dashboard");
         }
     }, [isAuthenticated, userRole, vendorApplication, navigate]);
+
+
+
+    const handleFileSelect = (e, type) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error("File size too large! Max 5MB.");
+            e.target.value = '';
+            return;
+        }
+        const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+        if (!allowed.includes(file.type)) {
+            toast.error("Only PDF, JPG, and PNG files are allowed.");
+            e.target.value = '';
+            return;
+        }
+        if (type === 'businessLicense') setBusinessLicense(file);
+        else setOwnerIdentity(file);
+    };
+
+    const handleUpload = async (documentType) => {
+        const file = documentType === 'businessLicense' ? businessLicense : ownerIdentity;
+        if (!file) {
+            toast.error('Please select a file first');
+            return;
+        }
+        const result = await dispatch(uploadVendorDocument({
+            applicationId: vendorApplication.applicationId,
+            documentType,
+            file,
+        }));
+        if (uploadVendorDocument.fulfilled.match(result)) {
+            toast.success(`${documentType === 'businessLicense' ? 'Business License' : 'Owner Identity'} uploaded successfully!`);
+            if (documentType === 'businessLicense') { setBusinessLicense(null); if (businessLicenseRef.current) businessLicenseRef.current.value = ''; }
+            else { setOwnerIdentity(null); if (ownerIdentityRef.current) ownerIdentityRef.current.value = ''; }
+        } else {
+            toast.error(result.payload || 'Upload failed. Please try again.');
+        }
+    };
 
     const formatDate = (dateString) => {
         if (!dateString) return 'Pending';
@@ -128,7 +184,7 @@ const VendorApplicationStatus = () => {
                         {/* Vertical Line */}
                         <div className="absolute left-[23px] top-2 bottom-2 w-0.5 bg-gradient-to-b from-[#088395] via-[#7AB2B2]/30 to-[#7AB2B2]/10" />
 
-                        {timelineSteps.map((step, idx) => (
+                        {timelineSteps.map((step) => (
                             <div key={step.id} className="relative pl-16 pb-12 last:pb-0 group">
                                 {/* Dot/Icon */}
                                 <div className={`absolute left-0 top-0 w-12 h-12 rounded-full border-2 flex items-center justify-center z-10 transition-all duration-500 ${getStepColor(step.status)} shadow-lg`}>
@@ -157,14 +213,180 @@ const VendorApplicationStatus = () => {
 
                     {/* Final Status Action */}
                     <div className="mt-12 pt-10 border-t border-[#7AB2B2]/20">
-                        {vendorApplication?.status === 'REJECTED' ? (
-                            <div className="bg-red-50 p-6 rounded-2xl border border-red-100 mb-8">
-                                <h4 className="flex items-center gap-2 text-red-700 font-black mb-2 uppercase tracking-wide text-sm">
-                                    <BsExclamationTriangleFill /> Application Rejected
+                        {vendorApplication?.status === 'SUSPENDED' ? (
+                            <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 mb-8">
+                                <h4 className="flex items-center gap-2 text-gray-700 font-black mb-2 uppercase tracking-wide text-sm">
+                                    <BsShieldExclamation /> Application Suspended
                                 </h4>
-                                <p className="text-red-600/80 text-sm leading-relaxed">
-                                    {vendorApplication.reviewNotes || "Your application profile did not meet our current requirements. Please contact support for specific details."}
+                                <p className="text-gray-600 text-sm leading-relaxed mb-4">
+                                    Your application has been suspended. Please contact our support team for more information and next steps.
                                 </p>
+                                <button
+                                    onClick={() => window.location.href = "mailto:support@okkazo.com"}
+                                    className="bg-[#09637E] text-white font-black text-xs px-6 py-4 rounded-xl hover:bg-[#088395] transition-all uppercase tracking-widest"
+                                >
+                                    Contact Support Team
+                                </button>
+                            </div>
+                        ) : vendorApplication?.status === 'REJECTED' ? (
+                            <div className="space-y-6">
+                                <div className="bg-red-50 p-6 rounded-2xl border border-red-100">
+                                    <h4 className="flex items-center gap-2 text-red-700 font-black mb-2 uppercase tracking-wide text-sm">
+                                        <BsExclamationTriangleFill /> Application Rejected
+                                    </h4>
+                                    <p className="text-red-600/80 text-sm leading-relaxed">
+                                        {vendorApplication.reviewNotes || "Your application did not meet our current requirements. You can re-upload your documents below."}
+                                    </p>
+                                </div>
+                                {/* Document Upload Section */}
+                                <div className="bg-white p-6 rounded-2xl border border-[#7AB2B2]/20 shadow-sm">
+                                    <h4 className="text-[#09637E] font-black uppercase tracking-widest text-xs mb-4 flex items-center gap-2">
+                                        <BsCloudUpload /> Re-upload Documents
+                                    </h4>
+                                    <p className="text-[#088395]/70 text-sm mb-6">Upload corrected documents to resubmit your application for review.</p>
+                                    <div className="space-y-4">
+                                        {/* Business License Upload */}
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-[#09637E] uppercase tracking-widest">Business License</label>
+                                            <input type="file" ref={businessLicenseRef} onChange={(e) => handleFileSelect(e, 'businessLicense')} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
+                                            {!businessLicense ? (
+                                                <div onClick={() => businessLicenseRef.current?.click()} className="w-full bg-[#EBF4F6]/50 rounded-2xl p-5 border-2 border-dashed border-[#7AB2B2]/30 hover:border-[#7AB2B2] hover:bg-white transition-all cursor-pointer group text-center">
+                                                    <BsCloudUpload size={24} className="mx-auto mb-2 text-[#7AB2B2] group-hover:scale-110 transition-transform" />
+                                                    <p className="text-[#09637E] font-bold text-xs">Tap to upload</p>
+                                                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB &bull; PDF, JPG, PNG</p>
+                                                </div>
+                                            ) : (
+                                                <div className="w-full bg-white rounded-2xl p-4 border border-[#7AB2B2]/20 flex items-center justify-between shadow-sm">
+                                                    <div className="flex items-center gap-3 overflow-hidden">
+                                                        <BsFileEarmarkText className="text-[#09637E] shrink-0" />
+                                                        <p className="text-[#09637E] font-bold text-xs truncate">{businessLicense.name}</p>
+                                                    </div>
+                                                    <button onClick={() => { setBusinessLicense(null); if (businessLicenseRef.current) businessLicenseRef.current.value = ''; }} className="text-red-500 hover:scale-110 transition-transform"><BsTrash size={14} /></button>
+                                                </div>
+                                            )}
+                                            {businessLicense && (
+                                                <button onClick={() => handleUpload('businessLicense')} disabled={isUploading} className="w-full py-3 bg-[#088395] text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-[#09637E] transition-all disabled:opacity-50">
+                                                    {isUploading ? 'Uploading...' : 'Upload Business License'}
+                                                </button>
+                                            )}
+                                        </div>
+                                        {/* Owner Identity Upload */}
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-[#09637E] uppercase tracking-widest">Owner Identity</label>
+                                            <input type="file" ref={ownerIdentityRef} onChange={(e) => handleFileSelect(e, 'ownerIdentity')} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
+                                            {!ownerIdentity ? (
+                                                <div onClick={() => ownerIdentityRef.current?.click()} className="w-full bg-[#EBF4F6]/50 rounded-2xl p-5 border-2 border-dashed border-[#7AB2B2]/30 hover:border-[#7AB2B2] hover:bg-white transition-all cursor-pointer group text-center">
+                                                    <BsCloudUpload size={24} className="mx-auto mb-2 text-[#7AB2B2] group-hover:scale-110 transition-transform" />
+                                                    <p className="text-[#09637E] font-bold text-xs">Tap to upload</p>
+                                                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB &bull; PDF, JPG, PNG</p>
+                                                </div>
+                                            ) : (
+                                                <div className="w-full bg-white rounded-2xl p-4 border border-[#7AB2B2]/20 flex items-center justify-between shadow-sm">
+                                                    <div className="flex items-center gap-3 overflow-hidden">
+                                                        <BsFileEarmarkText className="text-[#09637E] shrink-0" />
+                                                        <p className="text-[#09637E] font-bold text-xs truncate">{ownerIdentity.name}</p>
+                                                    </div>
+                                                    <button onClick={() => { setOwnerIdentity(null); if (ownerIdentityRef.current) ownerIdentityRef.current.value = ''; }} className="text-red-500 hover:scale-110 transition-transform"><BsTrash size={14} /></button>
+                                                </div>
+                                            )}
+                                            {ownerIdentity && (
+                                                <button onClick={() => handleUpload('ownerIdentity')} disabled={isUploading} className="w-full py-3 bg-[#088395] text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-[#09637E] transition-all disabled:opacity-50">
+                                                    {isUploading ? 'Uploading...' : 'Upload Owner Identity'}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : vendorApplication?.status === 'DOCUMENTS_REQUESTED' ? (
+                            <div className="space-y-6">
+                                <div className="bg-amber-50 p-6 rounded-2xl border border-amber-200">
+                                    <h4 className="flex items-center gap-2 text-amber-700 font-black mb-2 uppercase tracking-wide text-sm">
+                                        <BsExclamationTriangleFill /> Documents Requested
+                                    </h4>
+                                    <p className="text-amber-600/80 text-sm leading-relaxed">
+                                        {vendorApplication.reviewNotes || "Our team has requested additional documents. Please upload them below."}
+                                    </p>
+                                </div>
+                                {/* Document Upload Section - only show for non-VERIFIED docs */}
+                                <div className="bg-white p-6 rounded-2xl border border-[#7AB2B2]/20 shadow-sm">
+                                    <h4 className="text-[#09637E] font-black uppercase tracking-widest text-xs mb-4 flex items-center gap-2">
+                                        <BsCloudUpload /> Upload Requested Documents
+                                    </h4>
+                                    <p className="text-[#088395]/70 text-sm mb-6">Upload only the documents that need attention.</p>
+                                    <div className="space-y-4">
+                                        {/* Business License Upload - only if not VERIFIED */}
+                                        {vendorApplication?.documents?.businessLicense?.status !== 'VERIFIED' && (
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-[#09637E] uppercase tracking-widest">Business License</label>
+                                            {vendorApplication?.documents?.businessLicense?.status === 'REJECTED' && vendorApplication?.documents?.businessLicense?.rejectionReason && (
+                                                <p className="text-xs text-red-500 bg-red-50 p-3 rounded-xl border border-red-100">
+                                                    <span className="font-bold">Rejected:</span> {vendorApplication.documents.businessLicense.rejectionReason}
+                                                </p>
+                                            )}
+                                            <input type="file" ref={businessLicenseRef} onChange={(e) => handleFileSelect(e, 'businessLicense')} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
+                                            {!businessLicense ? (
+                                                <div onClick={() => businessLicenseRef.current?.click()} className="w-full bg-[#EBF4F6]/50 rounded-2xl p-5 border-2 border-dashed border-[#7AB2B2]/30 hover:border-[#7AB2B2] hover:bg-white transition-all cursor-pointer group text-center">
+                                                    <BsCloudUpload size={24} className="mx-auto mb-2 text-[#7AB2B2] group-hover:scale-110 transition-transform" />
+                                                    <p className="text-[#09637E] font-bold text-xs">Tap to upload</p>
+                                                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB &bull; PDF, JPG, PNG</p>
+                                                </div>
+                                            ) : (
+                                                <div className="w-full bg-white rounded-2xl p-4 border border-[#7AB2B2]/20 flex items-center justify-between shadow-sm">
+                                                    <div className="flex items-center gap-3 overflow-hidden">
+                                                        <BsFileEarmarkText className="text-[#09637E] shrink-0" />
+                                                        <p className="text-[#09637E] font-bold text-xs truncate">{businessLicense.name}</p>
+                                                    </div>
+                                                    <button onClick={() => { setBusinessLicense(null); if (businessLicenseRef.current) businessLicenseRef.current.value = ''; }} className="text-red-500 hover:scale-110 transition-transform"><BsTrash size={14} /></button>
+                                                </div>
+                                            )}
+                                            {businessLicense && (
+                                                <button onClick={() => handleUpload('businessLicense')} disabled={isUploading} className="w-full py-3 bg-[#088395] text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-[#09637E] transition-all disabled:opacity-50">
+                                                    {isUploading ? 'Uploading...' : 'Upload Business License'}
+                                                </button>
+                                            )}
+                                        </div>
+                                        )}
+                                        {/* Owner Identity Upload - only if not VERIFIED */}
+                                        {vendorApplication?.documents?.ownerIdentity?.status !== 'VERIFIED' && (
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-[#09637E] uppercase tracking-widest">Owner Identity</label>
+                                            {vendorApplication?.documents?.ownerIdentity?.status === 'REJECTED' && vendorApplication?.documents?.ownerIdentity?.rejectionReason && (
+                                                <p className="text-xs text-red-500 bg-red-50 p-3 rounded-xl border border-red-100">
+                                                    <span className="font-bold">Rejected:</span> {vendorApplication.documents.ownerIdentity.rejectionReason}
+                                                </p>
+                                            )}
+                                            <input type="file" ref={ownerIdentityRef} onChange={(e) => handleFileSelect(e, 'ownerIdentity')} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
+                                            {!ownerIdentity ? (
+                                                <div onClick={() => ownerIdentityRef.current?.click()} className="w-full bg-[#EBF4F6]/50 rounded-2xl p-5 border-2 border-dashed border-[#7AB2B2]/30 hover:border-[#7AB2B2] hover:bg-white transition-all cursor-pointer group text-center">
+                                                    <BsCloudUpload size={24} className="mx-auto mb-2 text-[#7AB2B2] group-hover:scale-110 transition-transform" />
+                                                    <p className="text-[#09637E] font-bold text-xs">Tap to upload</p>
+                                                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB &bull; PDF, JPG, PNG</p>
+                                                </div>
+                                            ) : (
+                                                <div className="w-full bg-white rounded-2xl p-4 border border-[#7AB2B2]/20 flex items-center justify-between shadow-sm">
+                                                    <div className="flex items-center gap-3 overflow-hidden">
+                                                        <BsFileEarmarkText className="text-[#09637E] shrink-0" />
+                                                        <p className="text-[#09637E] font-bold text-xs truncate">{ownerIdentity.name}</p>
+                                                    </div>
+                                                    <button onClick={() => { setOwnerIdentity(null); if (ownerIdentityRef.current) ownerIdentityRef.current.value = ''; }} className="text-red-500 hover:scale-110 transition-transform"><BsTrash size={14} /></button>
+                                                </div>
+                                            )}
+                                            {ownerIdentity && (
+                                                <button onClick={() => handleUpload('ownerIdentity')} disabled={isUploading} className="w-full py-3 bg-[#088395] text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-[#09637E] transition-all disabled:opacity-50">
+                                                    {isUploading ? 'Uploading...' : 'Upload Owner Identity'}
+                                                </button>
+                                            )}
+                                        </div>
+                                        )}
+                                        {/* Show message if all docs are verified */}
+                                        {vendorApplication?.documents?.businessLicense?.status === 'VERIFIED' && vendorApplication?.documents?.ownerIdentity?.status === 'VERIFIED' && (
+                                            <div className="bg-green-50 p-4 rounded-2xl border border-green-200 text-center">
+                                                <p className="text-green-700 font-bold text-sm">All documents are verified. Your application is being processed.</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         ) : (
                             <div className="bg-[#EBF4F6] p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 border border-[#7AB2B2]/20">
@@ -254,10 +476,11 @@ const VendorApplicationStatus = () => {
                             ].map((item) => (
                                 <div key={item.id} className="flex items-center justify-between p-4 bg-[#EBF4F6]/30 rounded-2xl border border-[#7AB2B2]/10">
                                     <div className="flex items-center gap-3">
-                                        <BsCheckCircleFill className={item.doc?.status === 'APPROVED' ? 'text-[#088395]' : 'text-[#7AB2B2]/30'} />
+                                        {item.doc?.status === 'REJECTED' ? <BsXCircleFill className="text-red-400" /> : <BsCheckCircleFill className={item.doc?.status === 'VERIFIED' ? 'text-[#088395]' : 'text-[#7AB2B2]/30'} />}
                                         <span className="text-sm font-bold text-[#09637E]">{item.name}</span>
                                     </div>
-                                    <span className={`text-[9px] font-black px-3 py-1.5 rounded-full tracking-[0.1em] border ${item.doc?.status === 'APPROVED' ? 'bg-[#088395] border-[#088395] text-white' :
+                                    <span className={`text-[9px] font-black px-3 py-1.5 rounded-full tracking-[0.1em] border ${item.doc?.status === 'VERIFIED' ? 'bg-[#088395] border-[#088395] text-white' :
+                                        item.doc?.status === 'REJECTED' ? 'bg-red-100 border-red-300 text-red-600' :
                                         'bg-white border-[#7AB2B2]/30 text-[#088395]'
                                         }`}>
                                         {(item.doc?.status || 'PENDING').replace('_', ' ')}

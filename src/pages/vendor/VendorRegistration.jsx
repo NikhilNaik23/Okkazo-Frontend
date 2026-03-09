@@ -6,7 +6,8 @@ import {
     BsPhone,
     BsMap,
     BsFileEarmarkText,
-    BsArrowRight
+    BsArrowRight,
+    BsGeoAlt
 } from "react-icons/bs";
 import { toast } from "react-hot-toast";
 import { termsOfService, privacyPolicy } from "../../data/vendorRegistrationData";
@@ -27,6 +28,7 @@ import {
 // Components
 import Modal from "../../components/Global/Modal";
 import { RegistrationSuccess, FileUploadField, MultiFileUpload, SidePanel } from "../../components/Vendor/Registration";
+import LocationPicker from "../../components/Map/LocationPicker";
 import PhoneInput from 'react-phone-input-2';
 import 'react-phone-input-2/lib/style.css';
 
@@ -47,6 +49,10 @@ const VendorRegistration = () => {
         email: "",
         phone: "",
         location: "",
+        place: "",
+        country: "",
+        latitude: null,
+        longitude: null,
         description: ""
     });
     const [agreed, setAgreed] = useState(false);
@@ -59,6 +65,7 @@ const VendorRegistration = () => {
     const [isLocating, setIsLocating] = useState(false);
     const [locationSuggestions, setLocationSuggestions] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
 
     // File upload states
     const [businessLicense, setBusinessLicense] = useState(null);
@@ -78,27 +85,46 @@ const VendorRegistration = () => {
     // Location suggestion logic
     useEffect(() => {
         const timer = setTimeout(async () => {
-            if (showSuggestions && formData.location && formData.location.length > 2) {
+            if (formData.location && formData.location.length > 2) {
+                setIsFetchingSuggestions(true);
                 try {
                     const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.location)}&limit=5&addressdetails=1`);
                     const data = await response.json();
                     setLocationSuggestions(data);
+                    if (data.length > 0) {
+                        setShowSuggestions(true);
+                    }
                 } catch (error) {
                     console.error("Error fetching suggestions:", error);
+                } finally {
+                    setIsFetchingSuggestions(false);
                 }
             } else {
                 setLocationSuggestions([]);
+                setShowSuggestions(false);
             }
         }, 500);
 
         return () => clearTimeout(timer);
-    }, [formData.location, showSuggestions]);
+    }, [formData.location]);
 
     const handleLocationSelect = (suggestion) => {
         const address = suggestion.display_name;
-        const parts = address.split(',').slice(0, 3).join(',');
+        const parts = address.split(',');
+        const place = parts[0]?.trim() || '';
+        const country = parts[parts.length - 1]?.trim() || '';
+        const displayLocation = parts.slice(0, 3).join(', ');
+        const latitude = parseFloat(suggestion.lat);
+        const longitude = parseFloat(suggestion.lon);
 
-        setFormData(prev => ({ ...prev, location: parts }));
+        setFormData(prev => ({ 
+            ...prev, 
+            location: displayLocation,
+            place,
+            country,
+            latitude,
+            longitude
+        }));
         setShowSuggestions(false);
         setLocationSuggestions([]);
     };
@@ -124,8 +150,16 @@ const VendorRegistration = () => {
 
                         const locationComponents = [city, state, country].filter(part => part && part.trim().length > 0);
                         const locationString = locationComponents.join(", ");
+                        const place = city || state || "";
 
-                        setFormData(prev => ({ ...prev, location: locationString }));
+                        setFormData(prev => ({ 
+                            ...prev, 
+                            location: locationString,
+                            place,
+                            country,
+                            latitude,
+                            longitude
+                        }));
                         toast.success("Location updated from browser");
                     } else {
                         toast.error("Could not determine address from coordinates");
@@ -170,14 +204,59 @@ const VendorRegistration = () => {
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setFormData({ ...formData, [name]: value });
         if (name === 'location') {
-            setShowSuggestions(true);
+            // When user manually types, clear the coordinates until they select from suggestions
+            setFormData({ 
+                ...formData, 
+                [name]: value,
+                place: '',
+                country: '',
+                latitude: null,
+                longitude: null
+            });
+        } else {
+            setFormData({ ...formData, [name]: value });
         }
     };
 
     const handlePhoneChange = (value) => {
         setFormData(prev => ({ ...prev, phone: value }));
+    };
+
+    const handleMapLocationSelect = async (data) => {
+        try {
+            // Fetch detailed address information
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${data.lat}&lon=${data.lng}&addressdetails=1`,
+                { headers: { 'User-Agent': 'Okkazo-Frontend/1.0' } }
+            );
+            const geoData = await response.json();
+            
+            if (geoData && geoData.address) {
+                const place = geoData.address.city || geoData.address.town || geoData.address.village || geoData.address.suburb || '';
+                const country = geoData.address.country || '';
+                
+                setFormData(prev => ({
+                    ...prev,
+                    location: data.address || `${data.lat.toFixed(4)}, ${data.lng.toFixed(4)}`,
+                    place,
+                    country,
+                    latitude: data.lat,
+                    longitude: data.lng
+                }));
+                toast.success('Location selected successfully');
+            }
+        } catch (error) {
+            console.error('Error fetching location details:', error);
+            // Still set basic location data
+            setFormData(prev => ({
+                ...prev,
+                location: data.address || `${data.lat.toFixed(4)}, ${data.lng.toFixed(4)}`,
+                latitude: data.lat,
+                longitude: data.lng
+            }));
+            toast.success('Location selected successfully');
+        }
     };
 
     const isFormValid = () => {
@@ -210,7 +289,17 @@ const VendorRegistration = () => {
         }
         formDataToSend.append('email', formData.email);
         formDataToSend.append('phone', formData.phone);
-        formDataToSend.append('location', formData.location || '');
+        
+        // Consolidate location data into JSON to reduce field count
+        const locationData = {
+            location: formData.location || '',
+            place: formData.place || '',
+            country: formData.country || '',
+            latitude: formData.latitude,
+            longitude: formData.longitude
+        };
+        formDataToSend.append('locationData', JSON.stringify(locationData));
+        
         if (formData.description) {
             formDataToSend.append('description', formData.description);
         }
@@ -228,7 +317,7 @@ const VendorRegistration = () => {
             });
         }
 
-        formDataToSend.append('agreedToTerms', agreed);
+        formDataToSend.append('agreedToTerms', String(agreed));
 
         // Dispatch Redux action
         dispatch(registerVendor(formDataToSend));
@@ -393,7 +482,7 @@ const VendorRegistration = () => {
                                                 {isLocating ? (
                                                     <div className="w-3 h-3 border-2 border-[#088395] border-t-transparent rounded-full animate-spin" />
                                                 ) : (
-                                                    <BsMap size={10} />
+                                                    <BsGeoAlt size={10} />
                                                 )}
                                                 {isLocating ? "Locating..." : "Use Current Location"}
                                             </button>
@@ -406,16 +495,21 @@ const VendorRegistration = () => {
                                                 autoComplete="off"
                                                 value={formData.location}
                                                 onChange={handleInputChange}
-                                                onFocus={() => { if (formData.location.length > 2) setShowSuggestions(true); }}
-                                                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                                                onFocus={() => { if (formData.location.length > 2 && locationSuggestions.length > 0) setShowSuggestions(true); }}
+                                                onBlur={() => setTimeout(() => setShowSuggestions(false), 250)}
                                                 placeholder="City, State (e.g., New York, NY)"
                                                 className="w-full bg-white rounded-2xl py-3.5 px-5 border border-gray-100 focus:border-[#7AB2B2] focus:ring-4 focus:ring-[#7AB2B2]/10 outline-none transition-all duration-300 font-medium text-sm placeholder:text-[#708aa0] pl-12"
                                             />
                                             <BsMap className="absolute left-4 top-1/2 -translate-y-1/2 text-[#708aa0] group-focus-within:text-[#09637E] transition-colors" />
+                                            {isFetchingSuggestions && (
+                                                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                                    <div className="w-4 h-4 border-2 border-[#088395] border-t-transparent rounded-full animate-spin" />
+                                                </div>
+                                            )}
 
                                             {/* Location Suggestions Dropdown */}
                                             {showSuggestions && locationSuggestions.length > 0 && (
-                                                <div className="absolute top-[calc(100%+8px)] left-0 w-full bg-white/95 backdrop-blur-xl shadow-2xl rounded-2xl z-50 max-h-60 overflow-y-auto border border-gray-100/50 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                <div className="absolute top-[calc(100%+8px)] left-0 w-full bg-white shadow-2xl rounded-2xl z-[9999] max-h-60 overflow-y-auto border border-gray-200 animate-in fade-in slide-in-from-top-2 duration-200">
                                                     {locationSuggestions.map((item, idx) => (
                                                         <button
                                                             key={idx}
@@ -434,6 +528,29 @@ const VendorRegistration = () => {
                                                 </div>
                                             )}
                                         </div>
+
+                                        {/* Inline Map */}
+                                        <div className="mt-4 rounded-2xl overflow-hidden border border-gray-100 shadow-lg">
+                                            <LocationPicker
+                                                lat={formData.latitude}
+                                                lng={formData.longitude}
+                                                onSelect={handleMapLocationSelect}
+                                                className="h-[350px]"
+                                                hideSearch={true}
+                                            />
+                                        </div>
+                                        {formData.place && formData.country && (
+                                            <div className="mt-2 flex items-center justify-between text-xs ml-1">
+                                                <div className="text-[#708aa0]">
+                                                    <span className="font-bold text-[#09637E]">Selected:</span> {formData.place}, {formData.country}
+                                                </div>
+                                                {formData.latitude !== null && formData.longitude !== null && (
+                                                    <div className="text-[#708aa0] font-medium">
+                                                        <span className="font-bold text-[#088395]">Lat:</span> {formData.latitude.toFixed(4)}, <span className="font-bold text-[#088395]">Long:</span> {formData.longitude.toFixed(4)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 </section>
 

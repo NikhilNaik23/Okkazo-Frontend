@@ -104,7 +104,7 @@ const InternalLocationMarker = ({ lat, lng, onSelect }) => {
     );
 };
 
-const LocationPicker = ({ lat: initialLat, lng: initialLng, onSelect, className }) => {
+const LocationPicker = ({ lat: initialLat, lng: initialLng, onSelect, className, hideSearch = false }) => {
     const [searchQuery, setSearchQuery] = useState("");
     const [suggestions, setSuggestions] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -176,6 +176,7 @@ const LocationPicker = ({ lat: initialLat, lng: initialLng, onSelect, className 
     return (
         <div className={className || "h-80 w-full rounded-2xl overflow-visible border border-gray-200 relative z-0 bg-gray-100"}>
             {/* Search Bar Overlay - Integrated into the map area top-left */}
+            {!hideSearch && (
             <div className="absolute top-4 left-4 right-4 md:right-auto md:w-full md:max-w-md z-[1000]">
                 <div className="relative group">
                     <div className="absolute left-5 top-1/2 -translate-y-1/2 text-teal-900/30 group-focus-within:text-teal-700 transition-colors">
@@ -220,6 +221,7 @@ const LocationPicker = ({ lat: initialLat, lng: initialLng, onSelect, className 
                     )}
                 </div>
             </div>
+            )}
 
             <MapContainer
                 center={mapCenter}
