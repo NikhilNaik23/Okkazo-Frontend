@@ -209,7 +209,7 @@ const EventDetails = () => {
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition-all duration-300 ${
+                            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition-all duration-300 focus:outline-none select-none ${
                                 activeTab === tab.id 
                                 ? 'bg-white text-[#0b2d49] shadow-sm ring-1 ring-[#e9eff1]' 
                                 : 'text-[#708aa0] hover:text-[#0b2d49] hover:bg-white/50'
@@ -229,7 +229,7 @@ const EventDetails = () => {
                     {activeTab === "Details" ? (
                         <>
                             {/* Service Configuration */}
-                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#e9eff1] animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#e9eff1]">
                                 <div className="flex items-center justify-between mb-6">
                                     <div className="flex items-center gap-3">
                                         <Settings className="text-[#d7a444]" size={24} />
@@ -253,7 +253,7 @@ const EventDetails = () => {
                             </div>
 
                             {/* Financial Summary (Mini) */}
-                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#e9eff1] animate-in fade-in slide-in-from-bottom-4 duration-500 delay-150">
+                            <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#e9eff1]">
                                 <div className="flex items-center gap-3 mb-6">
                                     <CreditCard className="text-[#d7a444]" size={24} />
                                     <h3 className="text-lg font-bold text-[#0b2d49]">Recent Transactions</h3>
@@ -289,7 +289,7 @@ const EventDetails = () => {
                             </div>
                         </>
                     ) : activeTab === "Chat" ? (
-                        <div className="bg-white rounded-3xl shadow-sm border border-[#e9eff1] h-[600px] flex flex-col overflow-hidden animate-in fade-in slide-in-from-right-4 duration-500">
+                        <div className="bg-white rounded-3xl shadow-sm border border-[#e9eff1] h-[600px] flex flex-col overflow-hidden">
                             <div className="p-6 border-b border-[#e9eff1] flex items-center justify-between bg-white">
                                 <div className="flex items-center gap-4">
                                     <div className="w-12 h-12 rounded-2xl bg-[#0b2d49]/10 flex items-center justify-center">
@@ -340,7 +340,7 @@ const EventDetails = () => {
                             </div>
                         </div>
                     ) : activeTab === "Financial" ? (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                        <div className="space-y-6">
                              <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#e9eff1]">
                                 <div className="flex items-center justify-between mb-8">
                                     <div className="flex items-center gap-3">
@@ -400,7 +400,7 @@ const EventDetails = () => {
                              </div>
                         </div>
                     ) : (
-                        <div className="bg-white p-8 rounded-3xl shadow-sm border border-[#e9eff1] min-h-[500px] animate-in fade-in slide-in-from-right-4 duration-500">
+                        <div className="bg-white p-8 rounded-3xl shadow-sm border border-[#e9eff1] min-h-[500px]">
                              <div className="flex items-center justify-between mb-8">
                                 <div className="flex items-center gap-3">
                                     <FileText className="text-[#d7a444]" size={24} />

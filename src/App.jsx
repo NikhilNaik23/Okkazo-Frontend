@@ -67,6 +67,7 @@ import VendorEventTodoTab from "./components/Vendor/EventDetails/VendorEventTodo
 import VendorEventBillTab from "./components/Vendor/EventDetails/VendorEventBillTab";
 import AccountSettingsPage from "./pages/vendor/AccountSettings";
 import VendorNotifications from "./pages/vendor/Notifications";
+import Ledger from "./pages/vendor/Ledger";
 
 const App = () => {
   const location = useLocation();
@@ -369,6 +370,7 @@ const App = () => {
             </Route>
             <Route path="settings" element={<AccountSettingsPage />} />
             <Route path="notifications" element={<VendorNotifications />} />
+            <Route path="dashboard/ledger" element={<Ledger />} />
           </Route>
         </Routes>
       </AnimatePresence>
