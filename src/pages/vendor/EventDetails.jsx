@@ -309,7 +309,7 @@ const EventDetails = () => {
     };
 
     return (
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 min-w-0 overflow-x-hidden">
             {/* Header Navigation */}
             <div className="fixed top-0 right-0 left-72 z-30 bg-[#e9eff1]/90 backdrop-blur-md px-10 pt-6 pb-0 flex items-center justify-between gap-6 transition-all border-b border-white/20">
                 <div className="flex-1 flex items-center bg-white/50 backdrop-blur-md p-1.5 rounded-2xl border border-[#708aa0]/10 shadow-sm overflow-x-auto min-w-0">
