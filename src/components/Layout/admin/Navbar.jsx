@@ -10,8 +10,8 @@ const Navbar = ({ isOpen, onClose }) => {
   const bottomItems = adminBottomItems;
 
   const handleLogout = () => {
-    // Add your logout logic here
-    console.log("Logging out...");
+    localStorage.clear();
+    window.location.href = "/";
   };
 
   const isActive = (path) => location.pathname.startsWith(path);

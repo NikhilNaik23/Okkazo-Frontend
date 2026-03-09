@@ -94,7 +94,7 @@ export const loginUser = createAsyncThunk(
                 return rejectWithValue(data.message || 'Login failed');
             }
 
-            // Store tokens and role in localStorage immediately after successful login
+            // Store tokens and role in localStorage
             if (data.accessToken) {
                 localStorage.setItem('accessToken', data.accessToken);
             }
@@ -178,6 +178,39 @@ export const registerVendor = createAsyncThunk(
     }
 );
 
+// Async thunk for uploading a vendor document
+export const uploadVendorDocument = createAsyncThunk(
+    'auth/uploadVendorDocument',
+    async ({ applicationId, documentType, file, description }, { dispatch, rejectWithValue }) => {
+        try {
+            const token = localStorage.getItem('accessToken');
+            if (!token) return rejectWithValue('No access token found');
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('documentType', documentType);
+            if (description) formData.append('description', description);
+
+            const response = await fetch(`${API_BASE_URL}/api/vendor/registration/${applicationId}/documents`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: formData,
+            });
+
+            const data = await response.json();
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to upload document');
+
+            // Refresh application data
+            dispatch(fetchVendorApplication());
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
 // Async thunk for fetching vendor application
 export const fetchVendorApplication = createAsyncThunk(
     'auth/fetchVendorApplication',
@@ -232,11 +265,6 @@ export const fetchCurrentUser = createAsyncThunk(
             const data = await response.json();
 
             if (!response.ok) {
-                // If unauthorized, clear tokens
-                if (response.status === 401) {
-                    localStorage.removeItem('accessToken');
-                    localStorage.removeItem('refreshToken');
-                }
                 return rejectWithValue(data.message || 'Failed to fetch user');
             }
 
@@ -629,6 +657,19 @@ const authSlice = createSlice({
             })
             .addCase(fetchVendorApplication.rejected, (state, action) => {
                 state.vendorApplicationLoading = false;
+                state.error = action.payload;
+            })
+            // Upload Vendor Document
+            .addCase(uploadVendorDocument.pending, (state) => {
+                state.isLoading = true;
+                state.error = null;
+            })
+            .addCase(uploadVendorDocument.fulfilled, (state) => {
+                state.isLoading = false;
+                state.error = null;
+            })
+            .addCase(uploadVendorDocument.rejected, (state, action) => {
+                state.isLoading = false;
                 state.error = action.payload;
             });
     },

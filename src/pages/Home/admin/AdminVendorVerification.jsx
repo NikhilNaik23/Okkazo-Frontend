@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { mockVendors } from "../../../data/adminData";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchVendorApplications } from "../../../store/slices/adminSlice";
 
 import {
   Search,
@@ -13,28 +14,60 @@ import {
   Building2,
   FileText,
   X,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from "lucide-react";
 
-const MOCK_VENDORS = mockVendors;
+// Helper function to format date
+const formatDate = (dateString) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+// Helper function to get status display
+const getStatusDisplay = (status) => {
+  const statusMap = {
+    'PENDING_REVIEW': 'PENDING',
+    'DOCUMENTS_REQUESTED': 'DOCUMENTS REQUESTED',
+    'UNDER_VERIFICATION': 'REVIEWING',
+    'APPROVED': 'APPROVED',
+    'REJECTED': 'REJECTED',
+    'SUSPENDED': 'SUSPENDED'
+  };
+  return statusMap[status] || status;
+};
 
 const AdminVendorVerification = () => {
     const navigate = useNavigate();
+    const dispatch = useDispatch();
     const [searchQuery, setSearchQuery] = useState("");
     const [showApplicationsModal, setShowApplicationsModal] = useState(false);
 
-    const filteredVendors = MOCK_VENDORS.filter(vendor => {
+    const { vendorApplications, loading, error } = useSelector((state) => state.admin);
+
+    useEffect(() => {
+        dispatch(fetchVendorApplications());
+    }, [dispatch]);
+
+    // Filter approved vendors for main grid
+    const filteredVendors = vendorApplications.filter(vendor => {
         const query = searchQuery.toLowerCase();
         const matchesQuery = (
-            vendor.name.toLowerCase().includes(query) ||
-            vendor.id.toLowerCase().includes(query) ||
-            vendor.description.toLowerCase().includes(query) ||
-            vendor.location.toLowerCase().includes(query)
+            vendor.businessName?.toLowerCase().includes(query) ||
+            vendor.applicationId?.toLowerCase().includes(query) ||
+            vendor.description?.toLowerCase().includes(query) ||
+            vendor.location?.toLowerCase().includes(query) ||
+            vendor.serviceCategory?.toLowerCase().includes(query)
         );
         return matchesQuery && vendor.status === "APPROVED";
     });
 
-    const pendingApplications = MOCK_VENDORS.filter(v => v.status === "PENDING" || v.status === "REVIEWING");
+    // Filter pending/reviewing applications for modal
+    const pendingApplications = vendorApplications.filter(v => 
+        v.status === "PENDING_REVIEW" || 
+        v.status === "UNDER_VERIFICATION"
+    );
 
     return (
     <div className="flex flex-col h-full relative overflow-hidden bg-[#f8fafc]">
@@ -86,54 +119,73 @@ const AdminVendorVerification = () => {
 
         {/* Content Grid */}
         <div className="flex-1 px-6 pb-6 overflow-y-auto custom-scrollbar">
+            {loading ? (
+                <div className="flex items-center justify-center py-20">
+                    <Loader2 size={32} className="animate-spin text-[#d7a444]" />
+                </div>
+            ) : error ? (
+                <div className="col-span-full py-20 flex flex-col items-center justify-center text-[#708aa0] bg-white rounded-[2.5rem] border-2 border-dashed border-[#e9eff1]">
+                    <p className="text-xl font-bold text-red-500">Error loading vendors</p>
+                    <p className="text-sm text-[#708aa0] mt-2">{error}</p>
+                    <button 
+                        onClick={() => dispatch(fetchVendorApplications())}
+                        className="mt-6 text-[#d7a444] font-black uppercase tracking-widest text-[10px] hover:underline"
+                    >
+                        Retry
+                    </button>
+                </div>
+            ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredVendors.length > 0 ? (
                     filteredVendors.map((vendor) => (
                     <div 
-                        key={vendor.id}
+                        key={vendor.applicationId}
                         className="bg-white rounded-[2rem] border border-[#708aa0]/10 shadow-sm hover:shadow-2xl hover:shadow-[#0b2d49]/10 transition-all group overflow-hidden flex flex-col h-full"
                     >
-                        <div className="h-48 w-full relative overflow-hidden">
-                            <img 
-                                src={vendor.image} 
-                                alt={vendor.name}
-                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                            />
+                        <div className="h-48 w-full relative overflow-hidden bg-gradient-to-br from-[#0b2d49] to-[#1a4a6e]">
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <Building2 size={64} className="text-white/20" />
+                            </div>
                             <div className="absolute inset-0 bg-linear-to-t from-[#0b2d49]/80 via-[#0b2d49]/20 to-transparent"></div>
                             <div className="absolute bottom-5 left-6">
-                                <p className="text-[9px] font-black text-white/90 uppercase tracking-[0.2em]">ID: #{vendor.id}</p>
+                                <p className="text-[9px] font-black text-white/90 uppercase tracking-[0.2em]">ID: #{vendor.applicationId}</p>
+                            </div>
+                            <div className="absolute top-5 right-6">
+                                <span className="px-3 py-1 bg-white/10 backdrop-blur-sm rounded-full text-[9px] font-black text-white uppercase tracking-widest">
+                                    {vendor.serviceCategory}
+                                </span>
                             </div>
                         </div>
 
                         <div className="p-6 flex flex-col flex-1">
                             <div className="flex items-start justify-between mb-4">
                                 <div>
-                                    <h3 className="font-black text-[#0b2d49] text-xl group-hover:text-[#d7a444] transition-colors leading-tight line-clamp-1">{vendor.name}</h3>
+                                    <h3 className="font-black text-[#0b2d49] text-xl group-hover:text-[#d7a444] transition-colors leading-tight line-clamp-1">{vendor.businessName}</h3>
                                     <p className="text-[10px] font-bold text-[#708aa0] mt-1 uppercase tracking-widest">{vendor.location}</p>
                                 </div>
-                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold shadow-inner shrink-0 ${vendor.logoColor || 'bg-[#0b2d49]/5 text-[#d7a444]'}`}>
+                                <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold shadow-inner shrink-0 bg-[#0b2d49]/5 text-[#d7a444]">
                                     <Building2 size={20} />
                                 </div>
                             </div>
 
                             <p className="text-[#5a5b44] text-xs font-medium mb-6 leading-relaxed line-clamp-2 h-8">
-                                {vendor.description}
+                                {vendor.description || vendor.serviceCategory}
                             </p>
 
                             <div className="mt-auto space-y-4">
                                 <div className="flex items-center justify-between p-4 bg-[#f8fafc] rounded-2xl border border-[#e9eff1]">
                                     <div className="flex items-center gap-2 text-[9px] font-black text-[#0b2d49] uppercase tracking-widest">
                                         <Clock size={14} className="text-[#d7a444]" />
-                                        {vendor.submittedDate}
+                                        {formatDate(vendor.submittedAt)}
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         <div className="w-2 h-2 rounded-full bg-[#10b981]"></div>
-                                        <span className="text-[9px] font-black text-[#708aa0] uppercase tracking-widest">KYC Ready</span>
+                                        <span className="text-[9px] font-black text-[#708aa0] uppercase tracking-widest">Verified</span>
                                     </div>
                                 </div>
 
                                 <button 
-                                    onClick={() => navigate(`/admin/vendors/${vendor.id}`)}
+                                    onClick={() => navigate(`/admin/vendors/${vendor.applicationId}`)}
                                     className="w-full py-4 bg-[#0b2d49] text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-[#d7a444] transition-all shadow-lg shadow-[#0b2d49]/10 active:scale-95 flex items-center justify-center gap-2 group/btn"
                                 >
                                     view Details 
@@ -156,6 +208,7 @@ const AdminVendorVerification = () => {
                     </div>
                 )}
             </div>
+            )}
         </div>
 
         {/* Applications Modal */}
@@ -189,21 +242,21 @@ const AdminVendorVerification = () => {
                     <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar space-y-4">
                         {pendingApplications.map((v) => (
                             <div 
-                                key={v.id}
+                                key={v.applicationId}
                                 className="group flex items-center justify-between p-5 bg-[#f8fafc] hover:bg-white rounded-3xl border border-transparent hover:border-[#e9eff1] transition-all hover:shadow-lg"
                             >
                                 <div className="flex items-center gap-5">
-                                    <div className="w-16 h-16 rounded-2xl overflow-hidden relative shadow-inner">
-                                        <img src={v.image} alt={v.name} className="w-full h-full object-cover" />
+                                    <div className="w-16 h-16 rounded-2xl overflow-hidden relative shadow-inner bg-gradient-to-br from-[#0b2d49] to-[#1a4a6e] flex items-center justify-center">
+                                        <Building2 size={28} className="text-white/40" />
                                         <div className="absolute inset-0 bg-[#0b2d49]/20"></div>
                                     </div>
                                     <div>
-                                        <h4 className="font-black text-[#0b2d49] text-base group-hover:text-[#d7a444] transition-colors">{v.name}</h4>
+                                        <h4 className="font-black text-[#0b2d49] text-base group-hover:text-[#d7a444] transition-colors">{v.businessName}</h4>
                                         <div className="flex items-center gap-3 mt-1">
                                             <span className="text-[9px] font-black text-[#708aa0] uppercase tracking-widest">{v.location}</span>
                                             <div className="w-1 h-1 bg-[#e9eff1] rounded-full"></div>
                                             <span className="text-[9px] font-black text-[#d7a444] uppercase tracking-widest flex items-center gap-1">
-                                                <Clock size={10} /> {v.submittedDate}
+                                                <Clock size={10} /> {formatDate(v.submittedAt)}
                                             </span>
                                         </div>
                                     </div>
@@ -211,7 +264,7 @@ const AdminVendorVerification = () => {
                                 <button 
                                     onClick={() => {
                                         setShowApplicationsModal(false);
-                                        navigate(`/admin/vendors/${v.id}`);
+                                        navigate(`/admin/vendors/${v.applicationId}`);
                                     }}
                                     className="px-6 py-3 bg-[#0b2d49] hover:bg-[#d7a444] text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md active:scale-95 flex items-center gap-2"
                                 >
