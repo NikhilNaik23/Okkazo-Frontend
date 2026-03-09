@@ -56,7 +56,10 @@ const VendorDashboard = () => {
             <div className="grid grid-cols-12 gap-8">
                 {/* Stats Section */}
                 <div className="col-span-12 grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-[#708aa0]/5 hover:shadow-xl hover:shadow-[#0b2d49]/5 transition-all cursor-pointer group">
+                    <div 
+                        onClick={() => navigate("/vendor/dashboard/ledger")}
+                        className="bg-white p-8 rounded-[2rem] shadow-sm border border-[#708aa0]/5 hover:shadow-xl hover:shadow-[#0b2d49]/5 transition-all cursor-pointer group"
+                    >
                         <div className="flex justify-between items-start mb-6">
                             <div className="p-3 bg-[#d7a444]/10 text-[#d7a444] rounded-2xl group-hover:scale-110 transition-transform">
                                 <BsCashStack size={24} />

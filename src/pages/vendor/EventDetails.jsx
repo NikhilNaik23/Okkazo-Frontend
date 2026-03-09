@@ -147,6 +147,7 @@ const EventDetails = () => {
     const tax = subtotal * 0.18;
     const total = subtotal + tax;
 
+
     /* --- NEW CHAT DATA & LOGIC --- */
 
     // Group Chats for Sidebar
@@ -351,6 +352,7 @@ const EventDetails = () => {
                                     : "text-[#708aa0] hover:text-[#0b2d49] hover:bg-white"
                                     }`}
                             >
+
                                 <BsChatDots size={20} />
                                 <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full text-[8px] font-black shadow-lg bg-red-500 text-white">
                                     3
@@ -369,7 +371,6 @@ const EventDetails = () => {
                     </div>
                 </div>
             </div>
-
             <div className="px-10 pt-28">
                 <Outlet context={contextValue} />
             </div>

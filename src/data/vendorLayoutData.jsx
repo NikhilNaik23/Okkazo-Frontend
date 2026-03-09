@@ -4,7 +4,8 @@ import {
   BsBriefcase, 
   BsCalendarCheck, 
   BsChatDots, 
-  BsPersonBadge
+  BsPersonBadge,
+  BsCashStack
 } from "react-icons/bs";
 
 export const vendorSidebarMenus = [
@@ -12,6 +13,7 @@ export const vendorSidebarMenus = [
   { name: "My Services", icon: <BsBriefcase />, path: "/vendor/service-management" },
   { name: "Booked Events", icon: <BsCalendarCheck />, path: "/vendor/booked-events" },
   { name: "Messages", icon: <BsChatDots />, path: "/vendor/messages" },
+  { name: "Ledger", icon: <BsCashStack />, path: "/vendor/dashboard/ledger" },
   { name: "Business Profile", icon: <BsPersonBadge />, path: "/vendor/profile" },
 ];
 

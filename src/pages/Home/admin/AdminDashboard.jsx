@@ -1,4 +1,4 @@
-import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Search, 
   Bell, 
@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 
 const AdminDashboard = () => {
+  const navigate = useNavigate();
   return (
     <div className="flex flex-col h-full bg-[#e9eff1]">
       {/* Dashboard Header */}
@@ -51,6 +52,7 @@ const AdminDashboard = () => {
             value="₹1,28,430"
             trend="+12%"
             trendUp={true}
+            onClick={() => navigate('/admin/ledger')}
           />
           <StatCard 
             icon={<Calendar size={24} className="text-[#0b2d49]" />}
@@ -219,8 +221,11 @@ const AdminDashboard = () => {
 };
 
 // Helper Components
-const StatCard = ({ icon, iconBg, label, value, trend, trendUp, trendColor = "text-[#d7a444] bg-[#f3ddb1]/30" }) => (
-  <div className="bg-white p-6 rounded-2xl shadow-sm border border-[#e9eff1] flex flex-col transition-transform hover:-translate-y-1 hover:shadow-md">
+const StatCard = ({ icon, iconBg, label, value, trend, trendUp, onClick, trendColor = "text-[#d7a444] bg-[#f3ddb1]/30" }) => (
+  <div 
+    onClick={onClick}
+    className={`bg-white p-6 rounded-2xl shadow-sm border border-[#e9eff1] flex flex-col transition-transform hover:-translate-y-1 hover:shadow-md ${onClick ? 'cursor-pointer' : ''}`}
+  >
     <div className="flex justify-between items-start mb-4">
       <div className={`p-3 rounded-xl ${iconBg}`}>
         {icon}
