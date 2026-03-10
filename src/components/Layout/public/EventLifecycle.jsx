@@ -16,10 +16,10 @@ const EventLifecycle = () => {
             icon: <FaCalendarCheck />,
             description: "Streamline your entire planning workflow from venue selection to budgeting.",
             features: [
-                "Venue Sourcing & Selection",
-                "Vendor Management Portal",
+                "Securing Event Details",
+                "Vendor Booking",
                 "Budgeting & Approval Flows",
-                "Seating & Floor Layouts"
+                "Managerial Support"
             ],
             color: "bg-[#09637E]",
             textColor: "text-[#09637E]",
@@ -31,7 +31,7 @@ const EventLifecycle = () => {
             icon: <FaBullhorn />,
             description: "Boost attendance and engagement with powerful marketing tools.",
             features: [
-                "Custom Event Websites",
+                "Promotion on the Website",
                 "Email Marketing Campaigns",
                 "Social Media Integration",
                 "Dynamic Registration Forms"
@@ -47,9 +47,9 @@ const EventLifecycle = () => {
             description: "Ensure a flawless on-site experience for every attendee.",
             features: [
                 "Fast Onsite Check-in",
-                "Badge Printing & Scanning",
-                "Attendees Mobile App",
-                "Live Polls & Q&A"
+                "Dedicated Event Coordinators",
+                "Maintaing Guest Satisfaction",
+                "Overseeing the event Flow"
             ],
             color: "bg-[#7AB2B2]",
             textColor: "text-[#7AB2B2]",
@@ -61,10 +61,10 @@ const EventLifecycle = () => {
             icon: <FaChartLine />,
             description: "Measure success and gather insights for future improvements.",
             features: [
-                "Advanced Analytics Dashboard",
                 "Attendee Feedback Surveys",
-                "ROI Measurement Tools",
-                "Data Export & Integration"
+                "Financial Reporting",
+                "ROI Measurement",
+                "Data Export"
             ],
             color: "bg-[#5D9C9F]",
             textColor: "text-[#5D9C9F]",
