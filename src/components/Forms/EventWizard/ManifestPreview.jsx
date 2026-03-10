@@ -3,18 +3,28 @@ import { motion } from 'framer-motion';
 import { BsCalendar, BsClock, BsGeoAlt, BsArrowRight, BsChevronDown, BsPeople } from 'react-icons/bs';
 
 const ManifestPreview = ({ formData, onBack, onConfirm }) => {
-    const formattedDate = formData.date ? new Date(formData.date).toLocaleDateString('en-US', {
+    const actualDate = formData.listingType === 'Public' ? formData.publicStartTime : formData.date;
+    const formattedDate = actualDate ? new Date(actualDate).toLocaleDateString('en-US', {
         month: '2-digit',
         day: '2-digit',
         year: 'numeric'
     }) : 'MM/DD/YYYY';
 
-    const formattedTime = formData.startTime ? (() => {
-        const [h, m] = formData.startTime.split(':');
-        const hour = parseInt(h) % 12 || 12;
-        const ampm = parseInt(h) >= 12 ? 'PM' : 'AM';
-        return { hour: `${hour}:${m}`, ampm };
-    })() : { hour: '00:00', ampm: '' };
+    const formattedTime = (() => {
+        if (formData.listingType === 'Public' && formData.publicStartTime) {
+            const d = new Date(formData.publicStartTime);
+            let hour = d.getHours() % 12 || 12;
+            let m = d.getMinutes().toString().padStart(2, '0');
+            const ampm = d.getHours() >= 12 ? 'PM' : 'AM';
+            return { hour: `${hour}:${m}`, ampm };
+        } else if (formData.startTime) {
+            const [h, m] = formData.startTime.split(':');
+            const hour = parseInt(h) % 12 || 12;
+            const ampm = parseInt(h) >= 12 ? 'PM' : 'AM';
+            return { hour: `${hour}:${m}`, ampm };
+        }
+        return { hour: '00:00', ampm: '' };
+    })();
 
     return (
         <motion.div
@@ -118,11 +128,15 @@ const ManifestPreview = ({ formData, onBack, onConfirm }) => {
                 </div>
             </div>
 
-            {/* MIDDLE RIGHT - GUEST COUNT */}
+            {/* MIDDLE RIGHT - GUEST COUNT / TYPE */}
             <div className="absolute right-[15%] top-[50%] -translate-y-1/2 flex flex-col items-start">
-                <p className="text-[9px] tracking-[0.4em] font-black text-teal-900/30 uppercase mb-4">Guest Count</p>
+                <p className="text-[9px] tracking-[0.4em] font-black text-teal-900/30 uppercase mb-4">
+                    {formData.listingType === 'Public' ? 'Exposure' : 'Guest Count'}
+                </p>
                 <div className="flex items-center gap-12">
-                    <h3 className="text-4xl font-serif-premium italic text-teal-900">{formData.guests || '0'}</h3>
+                    <h3 className="text-4xl font-serif-premium italic text-teal-900">
+                        {formData.listingType === 'Public' ? 'Public' : (formData.guests || '0')}
+                    </h3>
                     <BsPeople className="text-2xl text-teal-900" />
                 </div>
             </div>
@@ -156,7 +170,9 @@ const ManifestPreview = ({ formData, onBack, onConfirm }) => {
                     onClick={onConfirm}
                     className="flex items-center gap-8 group pointer-events-auto"
                 >
-                    <span className="text-3xl md:text-5xl font-serif-premium italic text-teal-900 group-hover:text-[#09637E] transition-colors whitespace-nowrap">Category Selection</span>
+                    <span className="text-3xl md:text-5xl font-serif-premium italic text-teal-900 group-hover:text-[#09637E] transition-colors whitespace-nowrap">
+                        Category Selection
+                    </span>
                     <div className="w-[72px] h-[72px] rounded-full bg-[#09637E] flex items-center justify-center text-white shadow-2xl group-hover:bg-[#088395] transition-all group-hover:scale-105 active:scale-95">
                         <BsArrowRight size={32} />
                     </div>

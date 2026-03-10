@@ -14,6 +14,8 @@ import ManifestPreview from "../../../components/Forms/EventWizard/ManifestPrevi
 import StepCategorySelection from "../../../components/Forms/EventWizard/StepCategorySelection";
 import StepPayment from "../../../components/Forms/EventWizard/StepPayment";
 import { myOrganizedEvents } from "../../../data/myEventsData";
+import StepTickets from "../../../components/Forms/PromoteEvent/Wizard/StepTickets";
+import StepPromote from "../../../components/Forms/PromoteEvent/Wizard/StepPromote";
 
 const PlanningWizard = () => {
     const [searchParams] = useSearchParams();
@@ -41,11 +43,24 @@ const PlanningWizard = () => {
         services: [], // Start with empty selection
         vendors: {}, // { 'Venue': vendorObj, 'Catering': vendorObj }
         isPaid: false, // Payment status
+        tickets: [{ id: Date.now(), name: "General Admission", price: null, quantity: "" }], // Prepopulate defaut tier
+        totalCapacity: "",
+        ticketType: "paid",
+        promotions: { featured: false, email: false, social: false, insights: false },
     });
 
-    const isImmersiveStep = currentStep === 1 || currentStep === 2 || currentStep === 3;
+    const baseSteps = planningWizardSteps.map((s, idx) => ({ ...s, componentId: ['manifest', 'category', 'payment', 'vendor', 'review', 'confirmation'][idx] }));
+    const steps = formData.listingType === 'Public' ? [
+        { id: 1, componentId: 'manifest', title: "Event Configuration", desc: "Build your event" },
+        { id: 2, componentId: 'category', title: "Category Selection", desc: "Choose service categories" },
+        { id: 3, componentId: 'payment', title: "Payment", desc: "Secure your booking" },
+        { id: 4, componentId: 'vendor', title: "Vendor Selection", desc: "Choose your team" },
+        { id: 5, componentId: 'review', title: "Review & Bill", desc: "Finalize your plan" },
+        { id: 6, componentId: 'confirmation', title: "Confirmation", desc: "All set!" },
+    ] : baseSteps;
 
-    const steps = planningWizardSteps;
+    const currentComponentId = steps[currentStep - 1]?.componentId || 'manifest';
+    const isImmersiveStep = ['manifest', 'category', 'payment'].includes(currentComponentId);
 
     // Ensure active tab is valid
     React.useEffect(() => {
@@ -77,7 +92,11 @@ const PlanningWizard = () => {
                         endTime: "",
                         services: [],
                         vendors: {},
-                        isPaid: false
+                        isPaid: false,
+                        tickets: [{ id: Date.now(), name: "General Admission", price: null, quantity: "" }],
+                        totalCapacity: "",
+                        ticketType: "paid",
+                        promotions: { featured: false, email: false, social: false, insights: false }
                     };
 
                     const mergedData = { ...defaultData, ...data };
@@ -87,15 +106,22 @@ const PlanningWizard = () => {
 
                     setFormData(mergedData);
 
-                    // If it is paid/Immediate Action, go to Vendor Selection (Step 4)
+                    const getStepIndex = (cid) => {
+                        const s = ['manifest', 'category', 'payment', 'vendor', 'review', 'confirmation'];
+                        // Get idx and add 1, if not found (like when changing types dynamically which rarely happens on initial load) default to 1
+                        const idx = s.indexOf(cid);
+                        return idx !== -1 ? idx + 1 : 1;
+                    };
+
+                    // If it is paid/Immediate Action, go to Vendor Selection
                     let targetStep = 1;
 
                     if (mergedData.isPaid) {
-                        targetStep = 4; // Vendor Selection
+                        targetStep = getStepIndex('vendor'); // Vendor Selection
                     } else if (mergedData.services && mergedData.services.length > 0) {
-                        targetStep = 3; // Payment
-                    } else if (mergedData.date && mergedData.location) {
-                        targetStep = 2; // Preview / Service Selection
+                        targetStep = getStepIndex('payment'); // Payment
+                    } else if (mergedData.location && (mergedData.date || mergedData.publicStartTime)) {
+                        targetStep = 2; // Preview / Service Selection or Tickets
                     }
 
                     // Override with URL params if present
@@ -144,11 +170,11 @@ const PlanningWizard = () => {
     }, [searchParams]);
 
     const handleNext = () => {
-        if (currentStep === 1 && !isPreviewMode) {
+        if (currentComponentId === 'manifest' && !isPreviewMode) {
             handleSaveDraft(); // Auto-save on Manifest
             setIsPreviewMode(true);
         } else {
-            if (currentStep === 2) {
+            if (currentComponentId === 'category') {
                 handleSaveDraft(); // Auto-save details & services
             }
             setIsPreviewMode(false);
@@ -296,9 +322,32 @@ const PlanningWizard = () => {
         });
     };
 
-    const isNextDisabled = (currentStep === 2 && formData.services.length === 0) ||
-        (currentStep === 4 && Object.keys(formData.vendors).length < formData.services.length) ||
-        (currentStep === 5 && !isAtBottom);
+    const handleAddTicket = () => {
+        setFormData(prev => ({
+            ...prev,
+            tickets: [...prev.tickets, { id: Date.now(), name: "", price: "", quantity: "" }]
+        }));
+    };
+
+    const handleRemoveTicket = (id) => {
+        setFormData(prev => ({
+            ...prev,
+            tickets: prev.tickets.filter(t => t.id !== id)
+        }));
+    };
+
+    const handleTicketChange = (id, field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            tickets: prev.tickets.map(t =>
+                t.id === id ? { ...t, [field]: value } : t
+            )
+        }));
+    };
+
+    const isNextDisabled = (currentComponentId === 'category' && formData.services.length === 0) ||
+        (currentComponentId === 'vendor' && Object.keys(formData.vendors).length < formData.services.length) ||
+        (currentComponentId === 'review' && !isAtBottom);
 
     if (isPreviewMode) {
         return (
@@ -311,33 +360,38 @@ const PlanningWizard = () => {
     }
 
     return (
-        <div className={`flex flex-col flex-1 font-sans transition-colors duration-700 ${isImmersiveStep ? 'bg-[#eff6f7]' : (currentStep === 3 ? 'bg-white' : 'bg-gray-50')} min-h-screen`}>
-            <main className={`flex-1 w-full mx-auto flex transition-all duration-700 ${isImmersiveStep ? 'max-w-none relative px-6' : ((currentStep >= 3) ? 'max-w-none px-0 pt-0' : 'max-w-7xl px-6 pt-8 gap-8')}`}>
+        <div className={`flex flex-col flex-1 font-sans transition-colors duration-700 ${isImmersiveStep ? 'bg-[#eff6f7]' : (currentComponentId === 'payment' ? 'bg-white' : 'bg-gray-50')} min-h-screen`}>
+            <main className={`flex-1 w-full mx-auto flex flex-col transition-all duration-700 ${isImmersiveStep ? 'max-w-none relative px-6' : ((['payment', 'vendor', 'review', 'promote', 'confirmation'].includes(currentComponentId)) ? 'max-w-none px-0 pt-0' : 'max-w-7xl px-6 pt-8 gap-8')}`}>
 
-                {!isImmersiveStep && currentStep !== 4 && currentStep !== 5 && currentStep !== 6 && <SidebarProgress currentStep={currentStep} steps={steps} />}
+                {!isImmersiveStep && !['vendor', 'review', 'confirmation'].includes(currentComponentId) && <SidebarProgress currentStep={currentStep} steps={steps} />}
 
                 {/* Main Content Area */}
                 <div className="flex-1 relative h-full min-h-0">
-                    {/* Header - Only for non-immersive steps, hide for Step 4 & 5 & 6 */}
-                    {!isImmersiveStep && currentStep !== 4 && currentStep !== 5 && currentStep !== 6 && (
+                    {/* Header - Only for non-immersive steps */}
+                    {!isImmersiveStep && !['vendor', 'review', 'confirmation'].includes(currentComponentId) && (
                         <div className="mb-8 animate-fade-in text-center lg:text-left">
                             <h1 className="text-4xl font-black text-primary tracking-tight mb-2">Manifest Your Event</h1>
                             <p className="text-teal-900/40 font-bold uppercase tracking-widest text-[10px]">Step {currentStep}: {steps[currentStep - 1]?.title || 'Done'}</p>
                         </div>
                     )}
 
-                    <div className={`transition-all duration-700 ${isImmersiveStep || currentStep >= 4 ? 'bg-transparent shadow-none border-none p-0 h-full' : 'bg-white rounded-3xl p-8 shadow-sm border border-gray-100 min-h-150'}`}>
-                        {currentStep === 1 && (
+                    <div className={`transition-all duration-700 ${isImmersiveStep || ['vendor', 'review', 'confirmation'].includes(currentComponentId) ? 'bg-transparent shadow-none border-none p-0 h-full' : 'bg-white rounded-3xl p-8 shadow-sm border border-gray-100 min-h-150'}`}>
+                        {currentComponentId === 'manifest' && (
                             <OrbitalStage
                                 formData={formData}
                                 handleChange={handleChange}
                                 setFormData={setFormData}
                                 minDateString={minDateString}
                                 onSaveDraft={handleSaveDraft}
+                                handleAddTicket={handleAddTicket}
+                                handleRemoveTicket={handleRemoveTicket}
+                                handleTicketChange={handleTicketChange}
                             />
                         )}
 
-                        {currentStep === 2 && (
+
+
+                        {currentComponentId === 'category' && (
                             <StepCategorySelection
                                 selectedServices={formData.services}
                                 onToggleService={handleToggleService}
@@ -345,7 +399,7 @@ const PlanningWizard = () => {
                             />
                         )}
 
-                        {currentStep === 3 && (
+                        {currentComponentId === 'payment' && (
                             <StepPayment
                                 onNext={handleNext}
                                 onBack={handleBack}
@@ -354,7 +408,7 @@ const PlanningWizard = () => {
                             />
                         )}
 
-                        {currentStep === 4 && (
+                        {currentComponentId === 'vendor' && (
                             <StepVendorSelection
                                 formData={formData}
                                 activeServiceTab={activeServiceTab}
@@ -367,26 +421,28 @@ const PlanningWizard = () => {
                             />
                         )}
 
-                        {currentStep === 5 && (
+                        {currentComponentId === 'review' && (
                             <StepReview formData={formData} onRemoveVendor={handleRemoveVendor} />
                         )}
 
-                        {currentStep === 6 && (
+
+
+                        {currentComponentId === 'confirmation' && (
                             <StepConfirmation eventId={formData.id} />
                         )}
                     </div>
 
                     {/* Navigation Actions */}
                     <div className={`flex flex-col gap-4 z-[100] pointer-events-none 
-                        ${isImmersiveStep || currentStep >= 4
-                            ? (currentStep === 1
+                        ${isImmersiveStep || ['vendor', 'review', 'promote', 'confirmation'].includes(currentComponentId)
+                            ? (currentComponentId === 'manifest'
                                 ? 'fixed bottom-[14px] right-10'
                                 : 'fixed bottom-8 left-10 right-10')
                             : 'mt-12 relative'}`}>
 
-                        {currentStep < 6 && currentStep !== 3 && currentStep !== 4 && (
-                            <div className={`flex items-center ${isImmersiveStep ? (currentStep === 1 ? 'justify-end' : 'justify-between') : 'justify-between'}`}>
-                                {(!isImmersiveStep || currentStep === 2) && (
+                        {currentComponentId !== 'confirmation' && currentComponentId !== 'payment' && currentComponentId !== 'vendor' && (
+                            <div className={`flex items-center ${isImmersiveStep ? (currentComponentId === 'manifest' ? 'justify-end' : 'justify-between') : 'justify-between'}`}>
+                                {(!isImmersiveStep || currentComponentId !== 'manifest') && (
                                     <button
                                         onClick={handleBack}
                                         disabled={currentStep === 1}
@@ -406,13 +462,17 @@ const PlanningWizard = () => {
                                         formData.listingType &&
                                         formData.title &&
                                         formData.type &&
-                                        formData.date &&
-                                        formData.date >= minDateString &&
                                         formData.locationValid &&
-                                        formData.startTime &&
-                                        formData.guests &&
-                                        formData.guests > 0
-                                    )) && (currentStep !== 2 || formData.services.length > 0) && (
+                                        (formData.listingType === 'Public' ? (
+                                            formData.publicStartTime && formData.publicEndTime && formData.salesStartTime &&
+                                            formData.banner &&
+                                            formData.totalCapacity > 0 &&
+                                            formData.tickets.reduce((a, t) => a + (parseInt(t.quantity) || 0), 0) === parseInt(formData.totalCapacity)
+                                        ) : (
+                                            formData.date && formData.date >= minDateString && formData.startTime &&
+                                            formData.guests && formData.guests > 0
+                                        ))
+                                    )) && (currentComponentId !== 'category' || formData.services.length > 0) && (
                                             <motion.button
                                                 initial={isImmersiveStep ? { opacity: 0, x: 20 } : false}
                                                 animate={{ opacity: 1, x: 0 }}
@@ -421,7 +481,7 @@ const PlanningWizard = () => {
                                                 disabled={isNextDisabled}
                                                 className={`transition-all active:scale-95 group flex items-center gap-6 pointer-events-auto 
                                                     ${isImmersiveStep
-                                                        ? (currentStep === 1 ? 'pb-12 bg-transparent cursor-pointer' : 'pb-2 bg-transparent cursor-pointer')
+                                                        ? (currentComponentId === 'manifest' ? 'pb-12 bg-transparent cursor-pointer' : 'pb-2 bg-transparent cursor-pointer')
                                                         : `px-8 py-3 text-white font-bold rounded-xl shadow-lg shadow-blue-900/10 
                                                            ${isNextDisabled
                                                             ? 'bg-gray-400 cursor-not-allowed opacity-80'
@@ -429,8 +489,8 @@ const PlanningWizard = () => {
                                             >
                                                 {isImmersiveStep ? (
                                                     <>
-                                                        <span className={`font-serif-premium italic text-teal-900 group-hover:text-teal-700 transition-colors ${currentStep === 1 ? 'text-6xl' : 'text-5xl'}`}>
-                                                            {currentStep === 1 ? 'Manifest' : 'Advance'}
+                                                        <span className={`font-serif-premium italic text-teal-900 group-hover:text-teal-700 transition-colors ${currentComponentId === 'manifest' ? 'text-6xl' : 'text-5xl'}`}>
+                                                            {currentComponentId === 'manifest' ? 'Manifest' : 'Advance'}
                                                         </span>
                                                         <div className="w-16  h-16 rounded-full bg-[#09637E] flex items-center justify-center text-white shadow-xl group-hover:bg-[#088395] transition-all group-hover:translate-x-2">
                                                             <BsArrowRight size={28} />
@@ -438,7 +498,7 @@ const PlanningWizard = () => {
                                                     </>
                                                 ) : (
                                                     <>
-                                                        {currentStep === 5 ? 'Finish' : 'Next Step'} <BsArrowRight />
+                                                        {currentComponentId === 'review' || currentComponentId === 'promote' ? 'Finish' : 'Next Step'} <BsArrowRight />
                                                     </>
                                                 )}
                                             </motion.button>
