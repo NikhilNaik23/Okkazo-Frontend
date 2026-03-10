@@ -2,22 +2,26 @@ import React, { useState } from "react";
 import { 
   ChevronRight, 
   Info, 
-  ShieldCheck, 
-  UserPlus, 
-  Phone, 
-  Mail, 
-  User, 
-  Building2, 
-  Lock, 
-  CheckCircle2,
-  X
+  ShieldCheck
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 
 const AdminManager = () => {
     const navigate = useNavigate();
-    const [status, setStatus] = useState(true);
+
+    const [selectedDepartment, setSelectedDepartment] = useState("");
+    const [selectedRole, setSelectedRole] = useState("");
+
+    const handleDepartmentChange = (e) => {
+        const dept = e.target.value;
+        setSelectedDepartment(dept);
+        if (dept === "Core Operation") {
+            setSelectedRole("Event Coordinator");
+        } else {
+            setSelectedRole("");
+        }
+    };
 
     const handleAddManager = (e) => {
         e.preventDefault();
@@ -34,14 +38,11 @@ const AdminManager = () => {
                     <ChevronRight size={14} />
                     <span className="cursor-pointer hover:text-[#0b2d49]" onClick={() => navigate("/admin/team-access")}>Team Access</span>
                     <ChevronRight size={14} />
-                    <span className="text-[#1a1c1e] font-bold">Add Event Manager</span>
+                    <span className="text-[#1a1c1e] font-bold">Add Manager</span>
                 </div>
 
                 <div>
-                    <h1 className="text-[32px] font-black text-[#1a1c1e] tracking-tight">Add Event Manager</h1>
-                    <p className="text-[#28a785] text-lg font-medium opacity-80 mt-1">
-                        Onboard a new manager to your team and define their access levels.
-                    </p>
+                    <h2 className="text-[32px] font-black text-[#1a1c1e] tracking-tight">Add Manager</h2>
                 </div>
             </div>
 
@@ -75,20 +76,6 @@ const AdminManager = () => {
                                         className="w-full px-4 py-3 bg-[#f8fafc] border border-transparent rounded-xl text-sm focus:bg-white focus:border-[#28a785]/30 focus:ring-4 focus:ring-[#28a785]/5 focus:outline-none transition-all placeholder:text-[#cbd5e1]"
                                     />
                                 </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-[#1a1c1e]">Phone Number</label>
-                                    <div className="flex gap-2">
-                                        <div className="w-16 px-4 py-3 bg-[#f8fafc] border border-transparent rounded-xl text-sm text-[#94a3b8] font-bold flex items-center justify-center">
-                                            +1
-                                        </div>
-                                        <input 
-                                            type="text" 
-                                            placeholder="(555) 000-0000" 
-                                            className="flex-1 px-4 py-3 bg-[#f8fafc] border border-transparent rounded-xl text-sm focus:bg-white focus:border-[#28a785]/30 focus:ring-4 focus:ring-[#28a785]/5 focus:outline-none transition-all placeholder:text-[#cbd5e1]"
-                                        />
-                                    </div>
-                                </div>
                             </div>
 
                             {/* Right Column */}
@@ -96,25 +83,15 @@ const AdminManager = () => {
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold text-[#1a1c1e]">Department</label>
                                     <div className="relative">
-                                        <select className="w-full px-4 py-3 bg-[#f8fafc] border border-transparent rounded-xl text-sm focus:bg-white focus:border-[#28a785]/30 focus:ring-4 focus:ring-[#28a785]/5 focus:outline-none transition-all appearance-none cursor-pointer text-[#1a1c1e] font-medium font-sans">
-                                            <option disabled selected>Select Department / Category</option>
-                                            <optgroup label="Public Events">
-                                                <option>Music Festivals & Concerts</option>
-                                                <option>Tech Conferences & Expos</option>
-                                                <option>Sporting Tournaments</option>
-                                                <option>Community Workshops</option>
-                                            </optgroup>
-                                            <optgroup label="Private Events">
-                                                <option>Premium Weddings</option>
-                                                <option>Corporate Galas</option>
-                                                <option>Birthday & Personal Parties</option>
-                                                <option>Private VIP Dinners</option>
-                                            </optgroup>
-                                            <optgroup label="Core Operations">
-                                                <option>Administrative Operations</option>
-                                                <option>Financial Oversight</option>
-                                                <option>Security & Compliance</option>
-                                            </optgroup>
+                                        <select 
+                                            className="w-full px-4 py-3 bg-[#f8fafc] border border-transparent rounded-xl text-sm focus:bg-white focus:border-[#28a785]/30 focus:ring-4 focus:ring-[#28a785]/5 focus:outline-none transition-all appearance-none cursor-pointer text-[#1a1c1e] font-medium font-sans"
+                                            value={selectedDepartment}
+                                            onChange={handleDepartmentChange}
+                                        >
+                                            <option value="" disabled>Select Department</option>
+                                            <option value="Public Event">Public Event</option>
+                                            <option value="Private Event">Private Event</option>
+                                            <option value="Core Operation">Core Operation</option>
                                         </select>
                                         <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-[#94a3b8] pointer-events-none" />
                                     </div>
@@ -129,28 +106,25 @@ const AdminManager = () => {
                                         </button>
                                     </div>
                                     <div className="relative">
-                                        <select className="w-full px-4 py-3 bg-[#f8fafc] border border-transparent rounded-xl text-sm focus:bg-white focus:border-[#28a785]/30 focus:ring-4 focus:ring-[#28a785]/5 focus:outline-none transition-all appearance-none cursor-pointer text-[#1a1c1e] font-medium">
-                                            <option>Senior Event Manager</option>
-                                            <option>Accountant</option>
-                                            <option>Security Lead</option>
-                                            <option>Junior Manager</option>
+                                        <select 
+                                            className={`w-full px-4 py-3 bg-[#f8fafc] border border-transparent rounded-xl text-sm focus:bg-white focus:border-[#28a785]/30 focus:ring-4 focus:ring-[#28a785]/5 focus:outline-none transition-all appearance-none cursor-pointer text-[#1a1c1e] font-medium ${selectedDepartment === "Core Operation" ? "opacity-60 cursor-not-allowed" : ""}`}
+                                            value={selectedRole}
+                                            onChange={(e) => setSelectedRole(e.target.value)}
+                                            disabled={selectedDepartment === "Core Operation"}
+                                        >
+                                            <option disabled value="">Select Role</option>
+                                            {(selectedDepartment === "Public Event" || selectedDepartment === "Private Event" || !selectedDepartment) && (
+                                                <>
+                                                    <option>Senior Event Manager</option>
+                                                    <option>Junior Manager</option>
+                                                </>
+                                            )}
+                                            {(selectedDepartment === "Core Operation") && (
+                                                <option>Event Coordinator</option>
+                                            )}
                                         </select>
                                         <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-[#94a3b8] pointer-events-none" />
                                     </div>
-                                </div>
-
-                                <div className="p-5 bg-[#ebf7f3]/50 border border-[#ebf7f3] rounded-2xl flex items-center justify-between">
-                                    <div>
-                                        <p className="text-sm font-bold text-[#1a1c1e]">Active Status</p>
-                                        <p className="text-[11px] text-[#28a785] font-medium mt-0.5">Enable immediate login access</p>
-                                    </div>
-                                    <button 
-                                        type="button"
-                                        onClick={() => setStatus(!status)}
-                                        className={`w-12 h-6 rounded-full p-1 transition-colors relative ${status ? 'bg-[#28a785]' : 'bg-[#e2e8f0]'}`}
-                                    >
-                                        <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${status ? 'translate-x-6' : 'translate-x-0'}`}></div>
-                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -186,42 +160,6 @@ const AdminManager = () => {
                             </div>
                         </div>
                     </form>
-                </div>
-
-                {/* Access Tier Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl">
-                    <div className="bg-white p-6 rounded-2xl border border-[#f0f2f5] shadow-sm relative group overflow-hidden">
-                        <div className="flex items-center gap-2 mb-4">
-                            <CheckCircle2 size={16} className="text-[#28a785]" />
-                            <span className="text-[10px] font-black text-[#28a785] uppercase tracking-widest">Access Tier 1</span>
-                        </div>
-                        <h4 className="text-base font-black text-[#1a1c1e] mb-2">Full Management</h4>
-                        <p className="text-xs text-[#94a3b8] leading-relaxed font-medium">
-                            Can manage all event details, vendors, and team assignments.
-                        </p>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-[#f0f2f5] shadow-sm opacity-60">
-                        <div className="flex items-center gap-2 mb-4">
-                            <Lock size={16} className="text-[#cbd5e1]" />
-                            <span className="text-[10px] font-black text-[#cbd5e1] uppercase tracking-widest">Access Tier 2</span>
-                        </div>
-                        <h4 className="text-base font-black text-[#1a1c1e] mb-2">Ops Limited</h4>
-                        <p className="text-xs text-[#94a3b8] leading-relaxed font-medium">
-                            Focus on logistics and schedules only. No financial access.
-                        </p>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-[#f0f2f5] shadow-sm opacity-60">
-                        <div className="flex items-center gap-2 mb-4">
-                            <Lock size={16} className="text-[#cbd5e1]" />
-                            <span className="text-[10px] font-black text-[#cbd5e1] uppercase tracking-widest">Access Tier 3</span>
-                        </div>
-                        <h4 className="text-base font-black text-[#1a1c1e] mb-2">View Only</h4>
-                        <p className="text-xs text-[#94a3b8] leading-relaxed font-medium">
-                            Reporting access for stakeholder review and planning.
-                        </p>
-                    </div>
                 </div>
             </div>
         </div>

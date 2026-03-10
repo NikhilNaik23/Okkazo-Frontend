@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { BsShop } from "react-icons/bs";
+import { ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "react-hot-toast";
 import {
@@ -111,7 +112,14 @@ const Register = () => {
                 className="flex flex-col lg:flex-row h-screen w-full bg-[#EBF4F6] overflow-hidden"
             >
                 {/* Left Side - Form */}
-                <div className="w-full lg:w-1/2 h-full overflow-y-auto bg-[#EBF4F6]">
+                <div className="w-full lg:w-1/2 h-full overflow-y-auto bg-[#EBF4F6] relative">
+                    <button 
+                        onClick={() => navigate("/")}
+                        className="absolute top-8 left-8 p-3 rounded-2xl bg-white border border-gray-100 text-[#09637E] hover:bg-[#09637E] hover:text-white transition-all duration-300 shadow-sm group cursor-pointer z-50"
+                        title="Go to Home"
+                    >
+                        <ArrowLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
+                    </button>
                     <div className="min-h-full flex flex-col items-center justify-center p-8 md:p-12">
                         <div className="max-w-md w-full">
                             {/* Mobile Logo Only */}

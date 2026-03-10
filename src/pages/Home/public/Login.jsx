@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { FcGoogle } from "react-icons/fc";
 import { BsEye, BsEyeSlash } from "react-icons/bs";
+import { ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "react-hot-toast";
 import {
@@ -141,7 +142,14 @@ const Login = () => {
         </div>
 
         {/* Right Side - Form */}
-        <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-[#EBF4F6]">
+        <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-[#EBF4F6] relative">
+          <button 
+            onClick={() => navigate("/")}
+            className="absolute top-8 left-8 p-3 rounded-2xl bg-white border border-gray-100 text-[#09637E] hover:bg-[#09637E] hover:text-white transition-all duration-300 shadow-sm group cursor-pointer"
+            title="Go to Home"
+          >
+            <ArrowLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
+          </button>
           <div className="max-w-md w-full">
             <div className="mb-10 text-center lg:text-left">
               <h2 className="text-4xl font-black text-[#09637E] mb-3 tracking-tight">Welcome Back</h2>
