@@ -27,6 +27,8 @@ const PublicRoute = ({ children, restricted = false }) => {
         // Otherwise redirect based on role
         if (userRole === 'ADMIN') {
             return <Navigate to="/admin" replace />;
+        } else if (userRole === 'MANAGER') {
+            return <Navigate to="/manager/dashboard" replace />;
         } else if (userRole === 'USER') {
             return <Navigate to="/user/dashboard" replace />;
         } else if (userRole === 'VENDOR') {
