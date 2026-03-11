@@ -1,17 +1,43 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   ChevronRight, 
   Info, 
-  ShieldCheck
+  ShieldCheck,
+  Loader2
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
+import { createManager, resetCreateManager } from "../../../store/slices/adminSlice";
 
 const AdminManager = () => {
     const navigate = useNavigate();
+    const dispatch = useDispatch();
+    const { submitting, submitError, createManagerSuccess } = useSelector((state) => state.admin);
 
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
     const [selectedDepartment, setSelectedDepartment] = useState("");
     const [selectedRole, setSelectedRole] = useState("");
+
+    useEffect(() => {
+        return () => {
+            dispatch(resetCreateManager());
+        };
+    }, [dispatch]);
+
+    useEffect(() => {
+        if (createManagerSuccess) {
+            toast.success("Invitation sent to manager successfully!");
+            navigate("/admin/team-access");
+        }
+    }, [createManagerSuccess, navigate]);
+
+    useEffect(() => {
+        if (submitError) {
+            toast.error(submitError);
+        }
+    }, [submitError]);
 
     const handleDepartmentChange = (e) => {
         const dept = e.target.value;
@@ -25,8 +51,16 @@ const AdminManager = () => {
 
     const handleAddManager = (e) => {
         e.preventDefault();
-        toast.success("Invitation sent to manager successfully!");
-        navigate("/admin/team-access");
+        if (!name.trim() || !email.trim() || !selectedDepartment || !selectedRole) {
+            toast.error("Please fill in all fields");
+            return;
+        }
+        dispatch(createManager({
+            name: name.trim(),
+            email: email.trim(),
+            department: selectedDepartment,
+            assignedRole: selectedRole,
+        }));
     };
 
     return (
@@ -63,6 +97,8 @@ const AdminManager = () => {
                                         <input 
                                             type="text" 
                                             placeholder="e.g. Michael Chen" 
+                                            value={name}
+                                            onChange={(e) => setName(e.target.value)}
                                             className="w-full px-4 py-3 bg-[#f8fafc] border border-transparent rounded-xl text-sm focus:bg-white focus:border-[#28a785]/30 focus:ring-4 focus:ring-[#28a785]/5 focus:outline-none transition-all placeholder:text-[#cbd5e1]"
                                         />
                                     </div>
@@ -73,6 +109,8 @@ const AdminManager = () => {
                                     <input 
                                         type="email" 
                                         placeholder="m.chen@okkazo.com" 
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
                                         className="w-full px-4 py-3 bg-[#f8fafc] border border-transparent rounded-xl text-sm focus:bg-white focus:border-[#28a785]/30 focus:ring-4 focus:ring-[#28a785]/5 focus:outline-none transition-all placeholder:text-[#cbd5e1]"
                                     />
                                 </div>
@@ -153,9 +191,11 @@ const AdminManager = () => {
                                 </button>
                                 <button 
                                     type="submit"
-                                    className="px-8 py-3 bg-[#28a785] text-white rounded-xl text-sm font-black shadow-lg shadow-[#28a785]/20 hover:brightness-110 active:scale-95 transition-all"
+                                    disabled={submitting}
+                                    className="px-8 py-3 bg-[#28a785] text-white rounded-xl text-sm font-black shadow-lg shadow-[#28a785]/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
                                 >
-                                    Add Manager
+                                    {submitting && <Loader2 size={16} className="animate-spin" />}
+                                    {submitting ? "Sending..." : "Add Manager"}
                                 </button>
                             </div>
                         </div>

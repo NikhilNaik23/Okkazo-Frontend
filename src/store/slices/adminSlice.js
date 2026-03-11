@@ -2,6 +2,33 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 
 const API_BASE_URL = 'http://localhost:8080';
 
+// Async thunk for creating a manager (Admin only)
+export const createManager = createAsyncThunk(
+    'admin/createManager',
+    async ({ name, email, department, assignedRole }, { rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/admin/managers`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({ name, email, department, assignedRole }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to create manager');
+
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
 // Async thunk for fetching all vendor applications (Admin only)
 export const fetchVendorApplications = createAsyncThunk(
     'admin/fetchVendorApplications',
@@ -217,6 +244,9 @@ const initialState = {
     vendorApplications: [],
     selectedVendorApplication: null,
     vendorApplicationsTotal: 0,
+
+    // Manager creation
+    createManagerSuccess: false,
     
     // Loading states
     loading: false,
@@ -240,6 +270,10 @@ const adminSlice = createSlice({
         clearAdminError: (state) => {
             state.error = null;
             state.detailsError = null;
+        },
+        resetCreateManager: (state) => {
+            state.createManagerSuccess = false;
+            state.submitError = null;
         },
     },
     extraReducers: (builder) => {
@@ -330,9 +364,23 @@ const adminSlice = createSlice({
             .addCase(rejectDocument.rejected, (state, action) => {
                 state.submitting = false;
                 state.submitError = action.payload;
+            })
+            // Create manager
+            .addCase(createManager.pending, (state) => {
+                state.submitting = true;
+                state.submitError = null;
+                state.createManagerSuccess = false;
+            })
+            .addCase(createManager.fulfilled, (state) => {
+                state.submitting = false;
+                state.createManagerSuccess = true;
+            })
+            .addCase(createManager.rejected, (state, action) => {
+                state.submitting = false;
+                state.submitError = action.payload;
             });
     },
 });
 
-export const { clearSelectedVendorApplication, clearAdminError } = adminSlice.actions;
+export const { clearSelectedVendorApplication, clearAdminError, resetCreateManager } = adminSlice.actions;
 export default adminSlice.reducer;
