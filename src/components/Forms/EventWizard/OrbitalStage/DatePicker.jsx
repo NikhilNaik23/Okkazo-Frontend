@@ -85,10 +85,10 @@ const DatePicker = ({
 
     return (
         <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="absolute top-full left-0 mt-4 z-[100] bg-white rounded-[25px] shadow-2xl border border-teal-900/5 p-4 w-[280px]"
+            initial={{ opacity: 0, y: 0, x: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, x: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 0, x: 20, scale: 0.95 }}
+            className="absolute top-1/2 -translate-y-1/2 left-full ml-8 z-[40] bg-white rounded-[25px] shadow-2xl border border-teal-900/5 p-4 w-[280px]"
         >
             <div className="flex justify-between items-center mb-4">
                 <h4 className="text-lg font-serif-premium italic text-teal-900">

@@ -98,7 +98,7 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                 position: 'absolute',
                                 right: 0,
                                 top: '50%',
-                                transformOrigin: '-45vh center',
+                                transformOrigin: 'calc(100% - 58vh) center',
                                 transform: `translateY(-50%) rotate(${idx * 10}deg)`,
                             }}
                             className="flex items-center text-right justify-end whitespace-nowrap pr-8"
@@ -230,7 +230,7 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
 
                             {/* 4. Date */}
                             {currentStep.id === 'date' && (
-                                <div className="relative">
+                                <div className="relative w-max">
                                     <div
                                         className="cursor-pointer group flex items-baseline gap-8"
                                         onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
@@ -336,7 +336,7 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                         </p>
                                     </div>
                                 ) : (
-                                    <div className="relative">
+                                    <div className="relative w-max">
                                         <div
                                             className="cursor-pointer group flex items-baseline gap-8"
                                             onClick={() => setIsTimePickerOpen(!isTimePickerOpen)}
