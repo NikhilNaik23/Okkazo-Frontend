@@ -10,13 +10,13 @@ const TimePicker = ({ formData, handleChange, isOpen, setIsOpen }) => {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            className="absolute top-full left-0 mt-4 z-[100] bg-white rounded-[32px] shadow-2xl border border-teal-900/5 p-5 flex flex-col gap-4"
+            className="absolute top-1/2 -translate-y-1/2 left-full ml-8 z-[40] bg-white rounded-[32px] shadow-2xl border border-teal-900/5 p-5 flex flex-col gap-4"
         >
-            <div className="flex gap-5 items-center">
+            <div className="flex gap-8 items-center">
                 {/* Hours */}
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1.5 w-max">
                     <span className="text-[8px] font-black uppercase text-teal-600/30 text-center">Hour</span>
-                    <div className="grid grid-cols-4 gap-1.5">
+                    <div className="grid grid-cols-3 gap-x-6">
                         {hours.map(h => {
                             const currentH = parseInt(formData.startTime?.split(':')[0] || '12') % 12 || 12;
                             return (
@@ -37,10 +37,10 @@ const TimePicker = ({ formData, handleChange, isOpen, setIsOpen }) => {
                     </div>
                 </div>
 
-                <div className="w-[1px] h-16 bg-teal-900/5" />
+                <div className="w-[1px] h-16 bg-teal-900/5 shrink-0" />
 
                 {/* Minutes */}
-                <div className="flex flex-col gap-1.5">
+                <div className="flex flex-col gap-1.5 w-max">
                     <span className="text-[8px] font-black uppercase text-teal-600/30 text-center">Min</span>
                     <div className="flex flex-col gap-1.5">
                         {minutes.map(m => {
@@ -61,7 +61,7 @@ const TimePicker = ({ formData, handleChange, isOpen, setIsOpen }) => {
                     </div>
                 </div>
 
-                <div className="w-[1px] h-16 bg-teal-900/5" />
+                <div className="w-[1px] h-16 bg-teal-900/5 shrink-0" />
 
                 {/* AM/PM */}
                 <div className="flex flex-col gap-1.5">
