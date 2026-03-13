@@ -7,18 +7,17 @@ import { toast } from "react-hot-toast";
 import EmojiPicker from 'emoji-picker-react';
 import { chatContacts, chatMessages as initialMessages } from '../../../data/chatData';
 
-const ManagerChatPage = () => {
-    // Current logged in user mock
-    const currentUserId = 'manager';
+const AdminChat = () => {
+    // Current logged in admin mock
+    const currentUserId = 'admin1';
 
+    // The active channel defaults to the first contact
     const [activeChannel, setActiveChannel] = useState(chatContacts[0]?.id || null);
     const [chatInput, setChatInput] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [messages, setMessages] = useState(initialMessages);
-    
+        
     // UI states
-    const [isVendorsOpen, setIsVendorsOpen] = useState(true);
-    const [isInternalOpen, setIsInternalOpen] = useState(true);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     
     // Interaction states
@@ -61,16 +60,13 @@ const ManagerChatPage = () => {
         });
     };
 
-    // Filter contacts safely
-    const filteredContacts = chatContacts.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const admins = filteredContacts.filter(c => c.type === 'admin');
-    const clients = filteredContacts.filter(c => c.type === 'client');
-    const team = filteredContacts.filter(c => c.type === 'team');
-    const vendors = filteredContacts.filter(c => c.type === 'vendor');
+    // Filter contacts based on search term
+    const adminContacts = chatContacts.filter(c => 
+        c.id !== currentUserId && c.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     // Get current active chat context
-    const currentContact = chatContacts.find(c => c.id === activeChannel);
+    const currentContact = adminContacts.find(c => c.id === activeChannel);
 
     const handleSend = () => {
         if (!chatInput.trim() || !activeChannel) return;
@@ -176,19 +172,19 @@ const ManagerChatPage = () => {
             <button
                 key={contact.id}
                 onClick={() => setActiveChannel(contact.id)}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${isActive ? 'bg-[#e7f7f5] border-l-4 border-teal-500 shadow-sm' : 'hover:bg-gray-50 border-l-4 border-transparent'}`}
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${isActive ? 'bg-[#0b2d49] text-[#d7a444] shadow-md shadow-[#0b2d49]/10 border-l-4 border-[#d7a444]' : 'hover:bg-gray-50 border-l-4 border-transparent'}`}
             >
-                <div className={`relative w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-white text-teal-600' : 'bg-gray-100 text-gray-500'}`}>
+                <div className={`relative w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-white/10 text-[#d7a444]' : 'bg-gray-100 text-gray-500'}`}>
                     {Icon ? <Icon size={18} /> : <span className="text-xs font-bold">{contact.name.substring(0, 2).toUpperCase()}</span>}
                     <div className={`absolute bottom-0 right-0 w-2.5 h-2.5 border-2 border-white rounded-full ${contact.online ? 'bg-green-500' : 'bg-gray-300'}`} />
                 </div>
 
                 <div className="flex-1 text-left min-w-0">
                     <div className="flex justify-between items-center">
-                        <p className={`text-sm font-bold truncate ${isActive ? 'text-teal-900' : 'text-gray-700'}`}>{contact.name}</p>
-                        {unreadCount > 0 && <div className="w-2 h-2 bg-green-500 rounded-full shrink-0 shadow-sm animate-pulse"></div>}
+                        <p className={`text-sm font-bold truncate ${isActive ? 'text-[#d7a444]' : 'text-gray-700'}`}>{contact.name}</p>
+                        {unreadCount > 0 && <div className="w-2 h-2 bg-[#d7a444] rounded-full shrink-0 shadow-sm animate-pulse"></div>}
                     </div>
-                    <p className={`text-xs truncate ${isActive ? 'text-teal-600 font-medium' : 'text-gray-400'}`}>
+                    <p className={`text-xs truncate ${isActive ? 'text-[#d7a444]/60 font-medium' : 'text-gray-400'}`}>
                         {contact.role || contact.lastSeen}
                     </p>
                 </div>
@@ -212,93 +208,18 @@ const ManagerChatPage = () => {
                         <input
                             type="text"
                             placeholder="Search contacts..."
-                            className="w-full bg-gray-50 border-none rounded-xl py-2.5 pl-10 pr-4 text-sm font-medium focus:ring-2 focus:ring-teal-500/10 text-gray-700 placeholder-gray-400"
+                            className="w-full bg-gray-50 border-none rounded-xl py-2.5 pl-10 pr-4 text-sm font-medium focus:ring-2 focus:ring-[#0b2d49]/10 text-gray-700 placeholder-gray-400"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-scroll p-4 space-y-6 custom-scrollbar">
-
-                    {/* Admin */}
-                    {admins.length > 0 && (
-                        <div>
-                            <div className="flex justify-between items-center px-3 mb-2">
-                                <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Admin</h4>
-                                <Users size={12} className="text-gray-300" />
-                            </div>
-                            <div className="space-y-1">
-                                {admins.map(c => renderSidebarItem(c, null))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Client */}
-                    {clients.length > 0 && (
-                        <div>
-                            <div className="flex justify-between items-center px-3 mb-2">
-                                <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Client</h4>
-                                <Users size={12} className="text-gray-300" />
-                            </div>
-                            <div className="space-y-1">
-                                {clients.map(c => renderSidebarItem(c, null))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Internal Team */}
-                    {team.length > 0 && (
-                        <div>
-                            <button
-                                onClick={() => setIsInternalOpen(!isInternalOpen)}
-                                className="w-full flex justify-between items-center px-3 mb-2 hover:bg-gray-50 rounded-lg py-1 transition-colors group cursor-pointer"
-                            >
-                                <div className="flex items-center gap-2">
-                                    {isInternalOpen ? (
-                                        <ChevronDown size={14} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
-                                    ) : (
-                                        <ChevronRight size={14} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
-                                    )}
-                                    <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider group-hover:text-gray-600 transition-colors">Internal Team</h4>
-                                </div>
-                                <Users size={12} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
-                            </button>
-
-                            {isInternalOpen && (
-                                <div className="space-y-1 animate-in slide-in-from-top-2 fade-in duration-200 origin-top">
-                                    {team.map(c => renderSidebarItem(c, null))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Vendors */}
-                    {vendors.length > 0 && (
-                        <div>
-                            <button
-                                onClick={() => setIsVendorsOpen(!isVendorsOpen)}
-                                className="w-full flex justify-between items-center px-3 mb-2 hover:bg-gray-50 rounded-lg py-1 transition-colors group cursor-pointer"
-                            >
-                                <div className="flex items-center gap-2">
-                                    {isVendorsOpen ? (
-                                        <ChevronDown size={14} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
-                                    ) : (
-                                        <ChevronRight size={14} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
-                                    )}
-                                    <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider group-hover:text-gray-600 transition-colors">Vendors</h4>
-                                </div>
-                                <Briefcase size={12} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
-                            </button>
-
-                            {isVendorsOpen && (
-                                <div className="space-y-1 animate-in slide-in-from-top-2 fade-in duration-200 origin-top">
-                                    {vendors.map(c => renderSidebarItem(c, null))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
+                <div className="flex-1 overflow-y-scroll p-4 space-y-2 custom-scrollbar">
+                    {/* Render exact contacts for Admin */}
+                    <div className="space-y-1">
+                        {adminContacts.map(c => renderSidebarItem(c, null))}
+                    </div>
                 </div>
             </div>
 
@@ -308,7 +229,7 @@ const ManagerChatPage = () => {
                 {/* Header */}
                 <div className="bg-white px-8 py-5 border-b border-gray-100 flex justify-between items-center shadow-sm z-10">
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-teal-50 text-teal-600">
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-blue-50 text-[#0b2d49]">
                             <Users size={24} />
                         </div>
                         <div>
@@ -350,7 +271,7 @@ const ManagerChatPage = () => {
                                             {isMe ? (
                                                 <div className="flex flex-col items-end gap-1.5">
                                                     <div className="flex items-end gap-3 max-w-[75%]">
-                                                        <div className="bg-teal-600 text-white p-5 pr-8 rounded-2xl rounded-tr-sm shadow-sm relative group/bubble">
+                                                        <div className="bg-[#0b2d49] text-white p-5 pr-8 rounded-2xl rounded-tr-sm shadow-sm relative group/bubble">
                                                             {renderMessageActions(msg, true)}
                                                             {editingMessageId === msg.id ? (
                                                                 <div className="flex flex-col gap-3">
@@ -362,7 +283,7 @@ const ManagerChatPage = () => {
                                                                     />
                                                                     <div className="flex justify-end gap-3 text-sm">
                                                                         <button onClick={() => setEditingMessageId(null)} className="font-bold opacity-70 hover:opacity-100 transition-opacity">Cancel</button>
-                                                                        <button onClick={() => submitEdit(msg.id)} className="font-bold hover:text-teal-300 transition-colors">Save</button>
+                                                                        <button onClick={() => submitEdit(msg.id)} className="font-bold text-[#d7a444] hover:text-[#f3c15c] transition-colors">Save</button>
                                                                     </div>
                                                                 </div>
                                                             ) : (
@@ -372,7 +293,7 @@ const ManagerChatPage = () => {
                                                                 </>
                                                             )}
                                                         </div>
-                                                        <div className="w-10 h-10 rounded-full bg-teal-50 text-teal-700 flex items-center justify-center text-xs font-bold shrink-0 border border-teal-100 uppercase shadow-sm">ME</div>
+                                                        <div className="w-10 h-10 rounded-full bg-blue-50 text-[#0b2d49] flex items-center justify-center text-xs font-bold shrink-0 border border-blue-100 uppercase shadow-sm">ME</div>
                                                     </div>
                                                     <div className="flex items-center gap-1.5 mr-14">
                                                         <span className="text-[11px] font-bold text-gray-400">{msg.timestamp}</span>
@@ -413,7 +334,7 @@ const ManagerChatPage = () => {
                 {/* Footer Input */}
                 <div className="p-6 bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.02)] z-10">
                     <div className="max-w-5xl mx-auto">
-                        <div className={`bg-gray-100 rounded-[2rem] px-3 py-2 flex items-center gap-2 border border-transparent transition-all relative shadow-inner ${currentContact ? 'focus-within:border-teal-500/20 focus-within:bg-gray-50 focus-within:shadow-md' : 'opacity-50 pointer-events-none'}`}>
+                        <div className={`bg-gray-100 rounded-[2rem] px-3 py-2 flex items-center gap-2 border border-transparent transition-all relative shadow-inner ${currentContact ? 'focus-within:border-[#0b2d49]/10 focus-within:bg-gray-50 focus-within:shadow-md' : 'opacity-50 pointer-events-none'}`}>
                             <input
                                 type="file"
                                 ref={fileInputRef}
@@ -429,7 +350,7 @@ const ManagerChatPage = () => {
                             <div className="relative" ref={emojiPickerRef}>
                                 <button
                                     onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                                    className={`p-2.5 rounded-full transition-colors ${showEmojiPicker ? 'text-teal-600 bg-gray-200' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200'}`}
+                                    className={`p-2.5 rounded-full transition-colors ${showEmojiPicker ? 'text-[#0b2d49] bg-gray-200' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200'}`}
                                 >
                                     <Smile size={22} />
                                 </button>
@@ -457,7 +378,7 @@ const ManagerChatPage = () => {
                             <button
                                 onClick={handleSend}
                                 disabled={!chatInput.trim()}
-                                className="p-3.5 bg-teal-600 hover:bg-teal-700 text-white rounded-full transition-all disabled:opacity-50 disabled:scale-95 shadow-md flex items-center justify-center shrink-0"
+                                className="p-3.5 bg-[#0b2d49] hover:bg-[#1a3b55] text-white rounded-full transition-all disabled:opacity-50 disabled:scale-95 shadow-md flex items-center justify-center shrink-0"
                             >
                                 <Send size={20} className="ml-0.5" />
                             </button>
@@ -512,4 +433,4 @@ const ManagerChatPage = () => {
     );
 };
 
-export default ManagerChatPage;
+export default AdminChat;

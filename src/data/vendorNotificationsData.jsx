@@ -10,7 +10,7 @@ export const vendorNotificationsData = {
             time: "10 mins ago",
             unread: true,
             icon: <BsCalendarCheck className="text-[#0b2d49]" />,
-            bgColor: "bg-[#d7a444]/20"
+            bgColor: "bg-[#fdf6e7]"
         },
         {
             id: 2,
@@ -19,7 +19,7 @@ export const vendorNotificationsData = {
             time: "2 hours ago",
             unread: true,
             icon: <BsCashCoin className="text-[#d7a444]" />,
-            bgColor: "bg-[#0b2d49]/10"
+            bgColor: "bg-[#e9eff1]"
         }
     ],
     earlier: [

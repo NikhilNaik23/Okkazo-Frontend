@@ -29,16 +29,6 @@ const AdminDashboard = () => {
               className="w-full pl-10 pr-4 py-2.5 bg-[#f8fafc] border border-transparent rounded-xl text-sm focus:bg-white focus:border-[#d7a444] focus:ring-1 focus:ring-[#d7a444] focus:outline-none transition-all placeholder:text-[#708aa0] text-[#0b2d49]"
             />
           </div>
-          
-          <div className="flex items-center gap-2 border-l border-[#e9eff1] pl-4">
-            <button className="p-2 text-[#708aa0] hover:bg-[#f3ddb1]/20 hover:text-[#d7a444] rounded-lg transition-colors relative">
-              <Bell size={20} />
-              <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-            </button>
-            <button className="p-2 text-[#708aa0] hover:bg-[#f3ddb1]/20 hover:text-[#d7a444] rounded-lg transition-colors">
-              <MessageSquare size={20} />
-            </button>
-          </div>
         </div>
       </div>
 

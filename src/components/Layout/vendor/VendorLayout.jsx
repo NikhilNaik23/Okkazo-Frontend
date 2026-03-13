@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { BsBell, BsGear } from "react-icons/bs";
 import { vendorSidebarMenus, vendorLayoutData } from "../../../data/vendorLayoutData.jsx";
+import { chatMessages } from "../../../data/chatData";
+import { vendorNotificationsData } from "../../../data/vendorNotificationsData.jsx";
 import VendorNotificationSidebar from "./VendorNotificationSidebar";
 
 const VendorLayout = () => {
@@ -11,6 +13,10 @@ const VendorLayout = () => {
   const sidebarMenus = vendorSidebarMenus;
   const vendorData = vendorLayoutData;
   const isMessagesPage = location.pathname === '/vendor/messages' || location.pathname.includes('/vendor/event/');
+
+  const currentUserId = 'v1'; // Gourmet Catering
+  const unreadChatCount = chatMessages.filter(m => m.receiverId === currentUserId && m.status !== 'read').length;
+  const unreadNotifications = vendorNotificationsData.new.some(n => n.unread);
 
   return (
     <div className="flex min-h-screen bg-[#e9eff1] font-sans text-[#0b2d49]">
@@ -28,7 +34,7 @@ const VendorLayout = () => {
         <nav className="flex-1 px-4 mt-4">
           <ul className="space-y-1">
             {sidebarMenus.map((menu, idx) => {
-              const isActive = location.pathname === menu.path;
+              const isActive = location.pathname === menu.path || (menu.path === '/vendor/booked-events' && location.pathname.startsWith('/vendor/event/'));
               return (
                 <li key={idx}>
                   <Link
@@ -36,7 +42,12 @@ const VendorLayout = () => {
                     className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold transition-all duration-300 ${isActive ? 'bg-[#d7a444]/10 text-[#d7a444]' : 'text-[#708aa0] hover:bg-[#e9eff1] hover:text-[#0b2d49]'}`}
                   >
                     <span className="text-xl">{menu.icon}</span>
-                    {menu.name}
+                    <span className="flex-1">{menu.name}</span>
+                    {menu.name === "Messages" && unreadChatCount > 0 && (
+                      <span className="bg-[#d7a444] text-[#0b2d49] text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm">
+                        {unreadChatCount}
+                      </span>
+                    )}
                   </Link>
                 </li>
               );
@@ -51,7 +62,9 @@ const VendorLayout = () => {
           >
             <span className="text-xl relative">
               <BsBell />
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#d7a444] rounded-full border-2 border-white"></span>
+              {unreadNotifications && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border-2 border-white"></span>
+              )}
             </span>
             Notifications
           </button>

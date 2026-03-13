@@ -3,7 +3,7 @@ import { useOutletContext } from 'react-router-dom';
 import {
     Search, Volume2, Users, Briefcase, MoreVertical,
     Lock, CheckCheck, Eye, Plus, Paperclip, Send, ShieldCheck,
-    ChevronDown, ChevronRight, Smile, Clock, Check
+    ChevronDown, ChevronRight, Phone, Smile, Clock, Check
 } from 'lucide-react';
 import { toast } from "react-hot-toast";
 import EmojiPicker from 'emoji-picker-react';
@@ -33,6 +33,8 @@ const VendorEventChatTab = () => {
     const [isVendorsOpen, setIsVendorsOpen] = useState(true);
     const [isInternalOpen, setIsInternalOpen] = useState(true);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [isCallModalOpen, setIsCallModalOpen] = useState(false);
+    const [callDuration, setCallDuration] = useState(0);
     const [activeMessageMenu, setActiveMessageMenu] = useState(null);
     const [editingMessageId, setEditingMessageId] = useState(null);
     const [editInput, setEditInput] = useState('');
@@ -82,6 +84,33 @@ const VendorEventChatTab = () => {
         setChatInput(prev => prev + emojiData.emoji);
     };
 
+    useEffect(() => {
+        let interval;
+        if (isCallModalOpen) {
+            interval = setInterval(() => {
+                setCallDuration(prev => prev + 1);
+            }, 1000);
+        } else {
+            setCallDuration(0);
+        }
+        return () => clearInterval(interval);
+    }, [isCallModalOpen]);
+
+    const formatDuration = (seconds) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const handleCallClick = () => {
+        setIsCallModalOpen(true);
+    };
+
+    const endCall = () => {
+        setIsCallModalOpen(false);
+        toast.error("Call ended");
+    };
+
     const handleAttachClick = () => {
         fileInputRef.current?.click();
     };
@@ -90,6 +119,7 @@ const VendorEventChatTab = () => {
         const file = e.target.files[0];
         if (file) {
             toast.info(`Selected file: ${file.name}`);
+            // In a real app, we'd upload here
         }
     };
 
@@ -169,6 +199,8 @@ const VendorEventChatTab = () => {
         </button>
     );
 
+
+
     return (
         <div className="flex h-[calc(100vh-150px)] bg-white rounded-3xl border border-[#708aa0]/10 overflow-hidden shadow-sm">
             {/* --- LEFT SIDEBAR --- */}
@@ -189,7 +221,44 @@ const VendorEventChatTab = () => {
 
                 <div className="flex-1 overflow-y-scroll p-4 space-y-6 custom-scrollbar">
 
+                    {/* Group Chats */}
+                    <div>
+                        <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 px-3">Groups</h4>
+                        <div className="space-y-1">
+                            {filteredGroupChats.map(group => (
+                                <button
+                                    key={group.id}
+                                    onClick={() => setActiveChannel(group.id)}
+                                    className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl transition-all ${activeChannel === group.id ? 'bg-[#e7f7f5] border border-teal-100' : 'hover:bg-gray-50 border border-transparent'}`}
+                                >
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${group.bg} ${group.color}`}>
+                                        <group.icon size={20} />
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="text-sm font-bold text-gray-800">{group.name}</p>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <p className="text-[11px] text-gray-500">Group Chat</p>
+                                        </div>
 
+                                    </div>
+                                </button>
+                            ))}
+                            <button
+                                onClick={() => setActiveChannel('internal')}
+                                className={`w-full flex items-start gap-3 px-3 py-3 rounded-xl transition-all ${activeChannel === 'internal' ? 'bg-[#e7f7f5] border border-teal-100' : 'hover:bg-gray-50 border border-transparent'}`}
+                            >
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-indigo-100 text-indigo-600`}>
+                                    <Users size={20} />
+                                </div>
+                                <div className="text-left">
+                                    <p className="text-sm font-bold text-gray-800">All Internal Team</p>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                        <p className="text-[11px] text-gray-500">Group Chat</p>
+                                    </div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
 
                     {/* Admin */}
                     <div>
@@ -277,7 +346,7 @@ const VendorEventChatTab = () => {
             <div className="flex-1 flex flex-col bg-slate-50 relative">
 
                 {/* Header */}
-                <div className="bg-white px-8 py-5 border-b border-gray-100 flex justify-between items-center shadow-sm z-10">
+                <div className="bg-white px-6 py-4 border-b border-gray-100 flex justify-between items-center shadow-sm z-10">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-blue-50 text-[#0b2d49]">
                             <Users size={24} />
@@ -309,15 +378,24 @@ const VendorEventChatTab = () => {
                             </p>
                         </div>
                     </div>
+
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleCallClick}
+                            className="p-3 text-teal-600 hover:text-white bg-teal-50 hover:bg-teal-500 rounded-xl transition-all shadow-sm group"
+                        >
+                            <Phone size={20} className="group-hover:rotate-12 transition-transform" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
 
 
                     <div className="flex items-center justify-center my-6">
-                        <span className="bg-gray-200/50 text-gray-500 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest">Today</span>
+                        <span className="bg-gray-200/50 text-gray-500 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest">Today</span>
                     </div>
 
                     {/* Broadcast History / Messages */}
@@ -447,12 +525,67 @@ const VendorEventChatTab = () => {
                 </div>
 
             </div>
+            {/* --- VOICE CALL MODAL --- */}
+            {
+                isCallModalOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0b2d49]/40 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="bg-white w-[380px] rounded-[2.5rem] p-8 shadow-2xl border border-white/20 relative overflow-hidden animate-in zoom-in-95 duration-300">
+                            {/* Background Decoration */}
+                            <div className="absolute -top-24 -right-24 w-48 h-48 bg-teal-500/10 rounded-full blur-3xl"></div>
+                            <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl"></div>
 
+                            <div className="relative z-10 flex flex-col items-center">
+                                {/* Animated Pulse Rings */}
+                                <div className="relative mb-8">
+                                    <div className="absolute inset-0 bg-teal-500/20 rounded-full animate-ping"></div>
+                                    <div className="absolute inset-0 bg-teal-500/10 rounded-full animate-pulse delay-75"></div>
+                                    <div className="w-28 h-28 rounded-full bg-gradient-to-br from-teal-500 to-[#0b2d49] p-1 relative z-10 shadow-xl">
+                                        <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
+                                            <div className="text-3xl font-black text-[#0b2d49]">
+                                                {(() => {
+                                                    const name = activeChannel === 'vendors' ? 'All Vendors' :
+                                                        activeChannel === 'general' ? 'All Stakeholders' :
+                                                            activeChannel === 'internal' ? 'Internal Team' : activeChannel;
+                                                    return name.substring(0, 2).toUpperCase();
+                                                })()}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <h3 className="text-2xl font-black text-gray-900 mb-2 mt-2">
+                                    {activeChannel === 'vendors' ? 'All Vendors Group' :
+                                        activeChannel === 'general' ? 'All Stakeholders' :
+                                            activeChannel === 'internal' ? 'Internal Team' : activeChannel}
+                                </h3>
+                                <p className="text-teal-600 font-bold tracking-widest text-xs uppercase mb-8">
+                                    {callDuration > 2 ? formatDuration(callDuration) : 'Calling...'}
+                                </p>
+
+                                <div className="flex gap-6 mt-4">
+                                    <button className="w-14 h-14 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 transition-all shadow-sm">
+                                        <Volume2 size={24} />
+                                    </button>
+                                    <button
+                                        onClick={endCall}
+                                        className="w-16 h-16 rounded-full bg-rose-500 text-white flex items-center justify-center hover:bg-rose-600 hover:scale-110 active:scale-95 transition-all shadow-lg shadow-rose-200"
+                                    >
+                                        <Phone size={28} className="rotate-[135deg]" />
+                                    </button>
+                                    <button className="w-14 h-14 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 transition-all shadow-sm">
+                                        <Users size={24} />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
             {/* --- CONTEXT MENU --- */}
             {
                 contextMenu.show && (
                     <div
-                        ref={contextMenuRef}
+                        ref={contextMenuRef} // Assuming contextMenuRef is defined using useRef
                         className="fixed z-[100] bg-white rounded-2xl shadow-2xl border border-gray-100 min-w-[160px] p-2 animate-in fade-in zoom-in-95 duration-200"
                         style={{ top: contextMenu.y, left: contextMenu.x }}
                         onClick={(e) => e.stopPropagation()}
