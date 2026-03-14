@@ -74,11 +74,17 @@ const ManifestPreview = ({ formData, onBack, onConfirm }) => {
             </div>
 
             {/* LEFT SIDE - EVENT VISION */}
-            <div className="absolute left-[15%] top-[35%] flex flex-col items-start max-w-[250px]">
+            <div className="absolute left-[15%] top-[35%] flex flex-col items-start max-w-[280px]">
                 <p className="text-[9px] tracking-[0.4em] font-black text-teal-900/30 uppercase mb-4">Event Vision</p>
-                <div className="flex items-center gap-4">
-                    <h3 className="text-4xl font-serif-premium italic text-teal-900 leading-tight">{formData.title || formData.type}</h3>
-                    <BsChevronDown className="text-teal-900/20" />
+                <div className="flex flex-col gap-4">
+                    <div className="flex items-center gap-4">
+                        <h3 className="text-4xl font-serif-premium italic text-teal-900 leading-tight">{formData.title || formData.type}</h3>
+                    </div>
+                    {formData.eventDescription && (
+                        <p className="text-[11px] font-bold text-teal-900/50 leading-relaxed line-clamp-3 italic">
+                            "{formData.eventDescription}"
+                        </p>
+                    )}
                 </div>
             </div>
 

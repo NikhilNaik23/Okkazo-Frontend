@@ -1,0 +1,375 @@
+import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+
+const API_BASE_URL = 'http://localhost:8080';
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+const safeJson = async (response) => {
+    try {
+        return await response.json();
+    } catch {
+        return null;
+    }
+};
+
+const normalizeEventType = (listingType, typeValue) => {
+    if (!typeValue) return 'Other';
+    const type = String(typeValue).trim();
+    if (listingType === 'Public') {
+        if (type === 'Expo') return 'Exhibition';
+        if (type === 'Hackathon') return 'Seminar';
+        if (['Concert', 'Festival', 'Exhibition', 'Workshop', 'Seminar', 'Other'].includes(type)) return type;
+        return 'Other';
+    }
+    if (type === 'Reunion' || type === 'Baby Shower') return 'Party';
+    if (['Birthday', 'Wedding', 'Anniversary', 'Party', 'Dinner', 'Other'].includes(type)) return type;
+    return 'Other';
+};
+
+const buildPublicDescription = (formData) => {
+    if (formData.eventDescription && String(formData.eventDescription).trim()) {
+        return String(formData.eventDescription).trim().slice(0, 1000);
+    }
+    const composed = `${formData.title || formData.type || 'Public Event'} at ${formData.location || 'TBA'} on ${formData.publicStartTime || formData.date || 'upcoming date'}.`;
+    return composed.slice(0, 1000);
+};
+
+const mapPromotions = (promotions = {}) => {
+    const mapped = [];
+    if (promotions.featured) mapped.push('featured placement');
+    if (promotions.email) mapped.push('email blast');
+    if (promotions.social) mapped.push('Social Synergy');
+    if (promotions.insights) mapped.push('advance analysis');
+    return mapped;
+};
+
+const toIso = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toISOString();
+};
+
+/**
+ * Build the JSON body for private events (no banner file needed).
+ */
+const buildPrivatePayload = (formData, authState) => {
+    const normalizedType = normalizeEventType(formData.listingType, formData.type);
+    return {
+        authId:
+            authState?.user?.authId ||
+            authState?.user?.id ||
+            authState?.profile?.authId ||
+            localStorage.getItem('authId') ||
+            localStorage.getItem('userId') ||
+            undefined,
+        category: 'private',
+        eventTitle: formData.title,
+        eventType: normalizedType,
+        customEventType: normalizedType === 'Other' ? (formData.customType || formData.type || 'Other') : undefined,
+        location: {
+            name: formData.location,
+            latitude: Number(formData.lat),
+            longitude: Number(formData.lng),
+        },
+        selectedServices: formData.services || [],
+        eventDate: formData.date,
+        eventTime: formData.startTime,
+        guestCount: Number(formData.guests),
+    };
+};
+
+/**
+ * Build a FormData object for public events.
+ * The banner file (formData.bannerFile) is attached as the 'eventBanner' field.
+ * All other JSON fields are serialised and attached as 'data'.
+ * The backend controller reads req.file (multer) + req.body.
+ */
+const buildPublicFormData = (formData, authState) => {
+    const normalizedType = normalizeEventType('Public', formData.type);
+    const scheduleStart = toIso(formData.publicStartTime);
+    const scheduleEnd   = toIso(formData.publicEndTime);
+    const salesStart    = toIso(formData.salesStartTime);
+    const salesEnd      = toIso(formData.salesEndTime) ||
+        (scheduleStart
+            ? new Date(new Date(scheduleStart).getTime() - 60 * 1000).toISOString()
+            : null);
+
+    const tiers = (formData.tickets || [])
+        .filter((t) => t && t.name && Number(t.quantity) > 0)
+        .map((t) => ({
+            tierName:    t.name,
+            ticketPrice: Number(t.price || 0),
+            ticketCount: Number(t.quantity),
+        }));
+
+    const ticketType = (formData.ticketType || 'paid').toLowerCase() === 'free' ? 'free' : 'paid';
+
+    const jsonPayload = {
+        authId:
+            authState?.user?.authId ||
+            authState?.user?.id ||
+            authState?.profile?.authId ||
+            localStorage.getItem('authId') ||
+            localStorage.getItem('userId') ||
+            undefined,
+        category: 'public',
+        eventTitle: formData.title,
+        eventType: normalizedType,
+        customEventType: normalizedType === 'Other' ? (formData.customType || formData.type || 'Other') : undefined,
+        eventDescription: buildPublicDescription(formData),
+        location: {
+            name:      formData.location,
+            latitude:  Number(formData.lat),
+            longitude: Number(formData.lng),
+        },
+        selectedServices: formData.services || [],
+        schedule: {
+            startAt: scheduleStart,
+            endAt:   scheduleEnd,
+        },
+        ticketAvailability: {
+            startAt: salesStart,
+            endAt:   salesEnd,
+        },
+        tickets: {
+            totalTickets: Number(formData.totalCapacity),
+            ticketType,
+            tiers: ticketType === 'paid' ? tiers : [],
+        },
+        promotionType: mapPromotions(formData.promotions),
+    };
+
+    const fd = new FormData();
+
+    // Attach banner file (field name MUST match multer's upload.single('eventBanner'))
+    if (formData.bannerFile instanceof File) {
+        fd.append('eventBanner', formData.bannerFile);
+    }
+
+    // The backend planningValidation.js `parseJsonFields` expects nested objects
+    // to arrive as JSON *strings* so it can JSON.parse them.
+    // Simple scalar fields are appended as plain strings.
+    const JSON_FIELDS = ['location', 'schedule', 'ticketAvailability', 'tickets', 'selectedServices', 'promotionType'];
+
+    for (const [key, value] of Object.entries(jsonPayload)) {
+        if (value === undefined || value === null) continue;
+        if (JSON_FIELDS.includes(key)) {
+            // Send as JSON string — backend will JSON.parse it
+            fd.append(key, JSON.stringify(value));
+        } else {
+            fd.append(key, String(value));
+        }
+    }
+
+    return fd;
+};
+
+// ─── Step 1: Save event in event-service ────────────────────────────────────
+
+export const saveEventPlanning = createAsyncThunk(
+    'planning/saveEventPlanning',
+    async ({ formData }, { rejectWithValue, getState }) => {
+        try {
+            const token = localStorage.getItem('accessToken');
+            if (!token) return rejectWithValue('No access token found. Please login first.');
+
+            const authState = getState().auth;
+            const isPublic  = formData.listingType === 'Public';
+
+            let body;
+            let headers = { Authorization: `Bearer ${token}` };
+
+            if (isPublic) {
+                // multipart/form-data — let the browser set the Content-Type with boundary
+                body = buildPublicFormData(formData, authState);
+                // Do NOT set Content-Type; browser will add multipart boundary automatically
+            } else {
+                body    = JSON.stringify(buildPrivatePayload(formData, authState));
+                headers = { ...headers, 'Content-Type': 'application/json' };
+            }
+
+            const response = await fetch(`${API_BASE_URL}/api/events/planning`, {
+                method: 'POST',
+                headers,
+                body,
+            });
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                const msg = data?.errors?.join(', ') || data?.message || 'Failed to save event';
+                return rejectWithValue(msg);
+            }
+
+            return { eventId: data.data?.eventId };
+        } catch (error) {
+            return rejectWithValue(error.message || 'Failed to save event');
+        }
+    }
+);
+
+// ─── Step 2: Create Razorpay order in order-service ─────────────────────────
+// Backend schema: { eventId, orderType (required), amount?, currency? }
+// Returns: { razorpayOrderId, amount, currency, keyId }
+
+export const createOrder = createAsyncThunk(
+    'planning/createOrder',
+    async ({ eventId }, { rejectWithValue }) => {
+        try {
+            const token = localStorage.getItem('accessToken');
+
+            const response = await fetch(`${API_BASE_URL}/api/orders/create`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization:  `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    eventId,
+                    orderType: 'PLANNING EVENT', // required enum in PaymentOrder model
+                    currency:  'INR',
+                    // amount omitted → backend defaults to DEFAULT_PLATFORM_FEE_INR (₹15,000)
+                }),
+            });
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                const msg = data?.message || 'Failed to create payment order';
+                return rejectWithValue(msg);
+            }
+
+            return {
+                razorpayOrderId: data.data?.razorpayOrderId,
+                amount:          data.data?.amount,          // in paise
+                currency:        data.data?.currency,
+                keyId:           data.data?.keyId,           // backend field name is 'keyId'
+            };
+        } catch (error) {
+            return rejectWithValue(error.message || 'Failed to create order');
+        }
+    }
+);
+
+// ─── Step 3: Verify payment in order-service (triggers Kafka server-side) ───
+// Backend schema: { eventId, razorpay_order_id, razorpay_payment_id, razorpay_signature }
+// All field names are snake_case to match Razorpay's handler response object directly.
+
+export const verifyPayment = createAsyncThunk(
+    'planning/verifyPayment',
+    async ({ razorpayOrderId, razorpayPaymentId, razorpaySignature, eventId }, { rejectWithValue }) => {
+        try {
+            const token = localStorage.getItem('accessToken');
+
+            const response = await fetch(`${API_BASE_URL}/api/orders/verify`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization:  `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    eventId,
+                    // Backend Joi schema uses snake_case (matches Razorpay handler response keys)
+                    razorpay_order_id:   razorpayOrderId,
+                    razorpay_payment_id: razorpayPaymentId,
+                    razorpay_signature:  razorpaySignature,
+                }),
+            });
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                const msg = data?.message || 'Payment verification failed';
+                return rejectWithValue(msg);
+            }
+
+            return {
+                transactionId: data.data?.transactionId || razorpayPaymentId,
+                eventId,
+            };
+        } catch (error) {
+            return rejectWithValue(error.message || 'Payment verification failed');
+        }
+    }
+);
+
+// ─── Slice ───────────────────────────────────────────────────────────────────
+
+const planningSlice = createSlice({
+    name: 'planning',
+    initialState: {
+        saveStatus:   'idle',   // idle | loading | succeeded | failed
+        orderStatus:  'idle',   // idle | loading | succeeded | failed
+        verifyStatus: 'idle',   // idle | loading | succeeded | failed
+
+        eventId:        null,
+        razorpayOrderId: null,
+        razorpayKeyId:  null,
+        transactionId:  null,
+
+        error: null,
+    },
+    reducers: {
+        resetPlanningCheckoutState: (state) => {
+            state.saveStatus   = 'idle';
+            state.orderStatus  = 'idle';
+            state.verifyStatus = 'idle';
+            state.eventId        = null;
+            state.razorpayOrderId = null;
+            state.razorpayKeyId  = null;
+            state.transactionId  = null;
+            state.error          = null;
+        },
+        clearPlanningError: (state) => {
+            state.error = null;
+        },
+    },
+    extraReducers: (builder) => {
+        // Save event
+        builder
+            .addCase(saveEventPlanning.pending, (state) => {
+                state.saveStatus = 'loading';
+                state.error = null;
+            })
+            .addCase(saveEventPlanning.fulfilled, (state, action) => {
+                state.saveStatus = 'succeeded';
+                state.eventId    = action.payload.eventId;
+            })
+            .addCase(saveEventPlanning.rejected, (state, action) => {
+                state.saveStatus = 'failed';
+                state.error      = action.payload || action.error.message;
+            });
+
+        // Create order
+        builder
+            .addCase(createOrder.pending, (state) => {
+                state.orderStatus = 'loading';
+                state.error = null;
+            })
+            .addCase(createOrder.fulfilled, (state, action) => {
+                state.orderStatus    = 'succeeded';
+                state.razorpayOrderId = action.payload.razorpayOrderId;
+                state.razorpayKeyId  = action.payload.keyId;
+            })
+            .addCase(createOrder.rejected, (state, action) => {
+                state.orderStatus = 'failed';
+                state.error       = action.payload || action.error.message;
+            });
+
+        // Verify payment
+        builder
+            .addCase(verifyPayment.pending, (state) => {
+                state.verifyStatus = 'loading';
+                state.error = null;
+            })
+            .addCase(verifyPayment.fulfilled, (state, action) => {
+                state.verifyStatus = 'succeeded';
+                state.transactionId = action.payload.transactionId;
+            })
+            .addCase(verifyPayment.rejected, (state, action) => {
+                state.verifyStatus = 'failed';
+                state.error        = action.payload || action.error.message;
+            });
+    },
+});
+
+export const { resetPlanningCheckoutState, clearPlanningError } = planningSlice.actions;
+export default planningSlice.reducer;

@@ -33,9 +33,10 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
 
     const eventTypes = formData.listingType === 'Public' ? publicTypes : privateTypes;
 
-    const dynamicSteps = formData.listingType === 'Public' ? steps.filter(s => s.id !== 'date').map(s => {
-        if (s.id === 'guests') return { id: 'banner', label: 'Event Banner', hint: 'Upload Banner' };
-        return s;
+    const dynamicSteps = formData.listingType === 'Public' ? steps.filter(s => s.id !== 'date').flatMap(s => {
+        if (s.id === 'title') return [s, { id: 'description', label: 'Description', hint: 'Tell your story' }];
+        if (s.id === 'guests') return [{ id: 'banner', label: 'Event Banner', hint: 'Upload Banner' }];
+        return [s];
     }).concat([
         { id: 'tickets', label: 'Tickets', hint: 'Define value tiers' },
         { id: 'promote', label: 'Promotion', hint: 'Amplify your reach' }
@@ -47,6 +48,7 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
         switch (currentStep.id) {
             case 'listing': return !!formData.listingType;
             case 'title': return !!formData.title;
+            case 'description': return !!formData.eventDescription?.trim();
             case 'type': return !!formData.type && (formData.type !== 'Other' || formData.customType?.trim());
             case 'date': return !!formData.date && formData.date >= minDateString;
             case 'location': return !!formData.locationValid;
@@ -176,6 +178,26 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                         onKeyDown={(e) => e.key === 'Enter' && isStepValid() && handleNext()}
                                     />
                                     <p className="mt-4 text-[10px] font-bold text-teal-600/30 tracking-widest uppercase">Set a unique title for your event manifest.</p>
+                                </div>
+                            )}
+
+                            {/* 2b. Event Description (Public Only) */}
+                            {currentStep.id === 'description' && (
+                                <div className="max-w-md">
+                                    <textarea
+                                        autoFocus
+                                        maxLength={1000}
+                                        className="w-full bg-transparent border-b border-teal-900/10 py-4 text-2xl font-serif-premium text-teal-900 outline-none focus:border-teal-700 transition-all placeholder:opacity-10 resize-none h-32"
+                                        placeholder="Describe the spirit of your event..."
+                                        value={formData.eventDescription || ''}
+                                        onChange={(e) => handleChange('eventDescription', e.target.value)}
+                                    />
+                                    <div className="flex justify-between mt-4">
+                                        <p className="text-[10px] font-bold text-teal-600/30 tracking-widest uppercase">A brief overview for your public audience.</p>
+                                        <p className="text-[10px] font-bold text-teal-600/30 tracking-widest uppercase">
+                                            {formData.eventDescription?.length || 0} / 1000
+                                        </p>
+                                    </div>
                                 </div>
                             )}
 
@@ -411,8 +433,13 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                             onChange={(e) => {
                                                 const file = e.target.files[0];
                                                 if (file) {
+                                                    // Store the raw File for multipart upload + data URL for preview
                                                     const reader = new FileReader();
-                                                    reader.onloadend = () => setFormData(prev => ({ ...prev, banner: reader.result }));
+                                                    reader.onloadend = () => setFormData(prev => ({
+                                                        ...prev,
+                                                        banner: reader.result,   // data URL → preview only
+                                                        bannerFile: file,        // raw File → sent to backend
+                                                    }));
                                                     reader.readAsDataURL(file);
                                                 }
                                             }}

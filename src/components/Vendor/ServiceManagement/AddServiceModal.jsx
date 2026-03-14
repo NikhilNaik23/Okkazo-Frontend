@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { BsX, BsCheckLg, BsChevronDown } from 'react-icons/bs';
+import { BsX, BsCheckLg } from 'react-icons/bs';
 import { SERVICE_CATEGORIES } from './constants';
+import { toast } from 'react-hot-toast';
 
 const AddServiceModal = ({ isOpen, onClose, onSave, allowedCategory, initialData }) => {
     // If allowedCategory is provided, use it. Otherwise default to first available.
@@ -47,18 +48,65 @@ const AddServiceModal = ({ isOpen, onClose, onSave, allowedCategory, initialData
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
 
         const validData = { ...formData };
 
-        // Post-processing: String -> Array for catering items
+        // Post-processing: String -> Array for catering items (kept for local UI)
         if (selectedCategory === 'catering' && typeof validData.items === 'string') {
             validData.items = validData.items.split(',').map(i => i.trim()).filter(i => i);
         }
 
-        onSave({ category: selectedCategory, ...validData });
-        onClose();
+        // ── Build API payload ──────────────────────────────────────────────────
+        // Common fields that live at the top level of VendorService
+        const payload = {
+            categoryId: selectedCategory,
+            name: validData.name,
+            price: validData.price,
+            tier: validData.tier || null,
+            description: validData.description || null,
+            // Everything else (items, capacity, location …) goes into `details`
+            details: {},
+        };
+
+        // Category-specific detail fields
+        if (selectedCategory === 'catering') {
+            payload.details = { items: validData.items };
+        } else if (selectedCategory === 'venues') {
+            payload.details = {
+                capacity: validData.capacity,
+                location: validData.location,
+            };
+        } else {
+            // Generic: pass items / any extra field into details
+            payload.details = {
+                items: validData.items || null,
+            };
+        }
+
+        try {
+            const res = await fetch('/api/vendor/services', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(payload),
+            });
+
+            const json = await res.json();
+
+            if (!res.ok) {
+                toast.error(json?.error?.message || 'Failed to save service');
+                return;
+            }
+
+            // Merge saved doc back so local UI reflects the DB record
+            onSave({ category: selectedCategory, ...validData, _id: json.data?._id });
+            onClose();
+        } catch (err) {
+            console.error(err);
+            toast.error('Network error — could not save service');
+        }
     };
 
     const renderFields = () => {
