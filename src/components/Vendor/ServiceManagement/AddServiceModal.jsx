@@ -1,10 +1,14 @@
 
 import React, { useState } from 'react';
+import { useDispatch } from 'react-redux';
 import { BsX, BsCheckLg } from 'react-icons/bs';
 import { SERVICE_CATEGORIES } from './constants';
 import { toast } from 'react-hot-toast';
+import { addVendorService } from '../../../store/slices/vendorSlice';
 
 const AddServiceModal = ({ isOpen, onClose, onSave, allowedCategory, initialData }) => {
+    const dispatch = useDispatch();
+
     // If allowedCategory is provided, use it. Otherwise default to first available.
     const [selectedCategory, setSelectedCategory] = useState(allowedCategory || SERVICE_CATEGORIES[0].id);
     const [formData, setFormData] = useState({});
@@ -37,12 +41,6 @@ const AddServiceModal = ({ isOpen, onClose, onSave, allowedCategory, initialData
 
     if (!isOpen) return null;
 
-    const handleCategoryChange = (e) => {
-        if (initialData) return; // Lock if editing
-        setSelectedCategory(e.target.value);
-        setFormData({}); // Reset form data on category switch
-    };
-
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
@@ -56,6 +54,26 @@ const AddServiceModal = ({ isOpen, onClose, onSave, allowedCategory, initialData
         // Post-processing: String -> Array for catering items (kept for local UI)
         if (selectedCategory === 'catering' && typeof validData.items === 'string') {
             validData.items = validData.items.split(',').map(i => i.trim()).filter(i => i);
+        }
+
+        // If editing, there is currently no backend update endpoint.
+        // Update locally via the parent handler.
+        if (initialData) {
+            onSave({
+                ...initialData,
+                categoryId: selectedCategory,
+                name: validData.name,
+                price: validData.price,
+                tier: validData.tier || null,
+                description: validData.description || null,
+                details: selectedCategory === 'catering'
+                    ? { items: validData.items }
+                    : selectedCategory === 'venues'
+                        ? { capacity: validData.capacity, location: validData.location }
+                        : { items: validData.items || null },
+            });
+            onClose();
+            return;
         }
 
         // ── Build API payload ──────────────────────────────────────────────────
@@ -86,26 +104,14 @@ const AddServiceModal = ({ isOpen, onClose, onSave, allowedCategory, initialData
         }
 
         try {
-            const res = await fetch('/api/vendor/services', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify(payload),
-            });
+            const savedService = await dispatch(addVendorService({ payload })).unwrap();
 
-            const json = await res.json();
-
-            if (!res.ok) {
-                toast.error(json?.error?.message || 'Failed to save service');
-                return;
-            }
-
-            // Merge saved doc back so local UI reflects the DB record
-            onSave({ category: selectedCategory, ...validData, _id: json.data?._id });
+            // Let the parent refresh UI using the saved backend doc
+            onSave(savedService);
             onClose();
         } catch (err) {
             console.error(err);
-            toast.error('Network error — could not save service');
+            toast.error(err?.message || err || 'Network error — could not save service');
         }
     };
 
