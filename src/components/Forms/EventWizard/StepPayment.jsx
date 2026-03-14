@@ -12,7 +12,6 @@ import {
 import {
     PaymentSummary,
     PaymentSuccess,
-    UPIPlaceholder,
     PaymentMethodSelector,
 } from './Payment';
 
@@ -177,6 +176,17 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                 description: `Planning Fee – ${formData.title || formData.type || 'Event'}`,
                 order_id: rzpOrderId,
                 theme: { color: '#09637E' },
+                ...(paymentMethod === 'upi'
+                    ? {
+                        method: {
+                            upi: true,
+                            card: false,
+                            netbanking: false,
+                            wallet: false,
+                            paylater: false,
+                        },
+                    }
+                    : {}),
                 modal: {
                     ondismiss: () => {
                         setCancelled(true);
@@ -238,7 +248,7 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
             const rzp = new window.Razorpay(options);
             rzp.open();
         });
-    }, [dispatch, formData, handleChange]);
+    }, [dispatch, formData, handleChange, paymentMethod]);
 
     // ── Derive a friendly "isProcessing" flag ────────────────────────────────
     const isProcessing = flowActive && !flowError;
@@ -346,7 +356,44 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                                         </button>
                                     </motion.div>
                                 ) : (
-                                    <UPIPlaceholder />
+                                    /* ── UPI payment CTA (uses Razorpay UPI) ─────────────────── */
+                                    <motion.div
+                                        key="upi"
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -10 }}
+                                        transition={{ duration: 0.2 }}
+                                        className="mt-8"
+                                    >
+                                        {/* Summary card */}
+                                        <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 mb-8">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Planning Fee</span>
+                                                <span className="text-2xl font-serif-premium italic font-bold text-[#09637E]">₹15,000</span>
+                                            </div>
+                                            <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
+                                                Pay securely via UPI. You can use Google Pay, PhonePe, Paytm, or any UPI app.
+                                            </p>
+                                            <div className="mt-4 pt-4 border-t border-gray-100">
+                                                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                                                    Event: <span className="text-[#09637E]">{formData.title || formData.type}</span>
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Razorpay branding note */}
+                                        <p className="text-[10px] text-gray-400 font-medium mb-6 text-center">
+                                            You'll be redirected to a secure Razorpay payment window.
+                                        </p>
+
+                                        <button
+                                            onClick={handlePayment}
+                                            disabled={isProcessing}
+                                            className="w-full bg-[#09637E] text-white rounded-xl py-5 font-black tracking-[0.2em] text-[10px] uppercase transition-all shadow-xl shadow-[#09637E]/10 hover:bg-[#088395] hover:shadow-2xl hover:shadow-[#09637E]/20 hover:-translate-y-1 disabled:opacity-70 disabled:cursor-wait flex items-center justify-center gap-3"
+                                        >
+                                            Continue to UPI <BsArrowRight />
+                                        </button>
+                                    </motion.div>
                                 )}
                             </AnimatePresence>
                         </div>
