@@ -35,7 +35,7 @@ const PromoteEvent = () => {
                 formData.tickets.reduce((sum, t) => sum + (parseInt(t.quantity) || 0), 0) === parseInt(formData.totalCapacity) &&
                 formData.tickets.every(t => !!t.name && (formData.ticketType === 'free' || (t.price !== "" && t.price > 0)))
             ) ||
-            (step.id === 4 && !!formData.startDate && !!formData.endDate) ||
+            (step.id === 4 && !!formData.startDate && !!formData.endDate && !!formData.ticketReleaseDate && !!formData.ticketSalesEndDate) ||
             (step.id === 5) || // Promote is optional
             (step.id === 6 && formData.authDocuments?.length > 0) || // Verify: at least 1 doc
             (step.id === 7) // Review

@@ -467,6 +467,9 @@ const PlanningWizard = () => {
                                         formData.locationValid &&
                                         (formData.listingType === 'Public' ? (
                                             formData.publicStartTime && formData.publicEndTime && formData.salesStartTime &&
+                                            (new Date(formData.publicEndTime) > new Date(formData.publicStartTime)) &&
+                                            (new Date(formData.salesStartTime) < new Date(formData.publicStartTime)) &&
+                                            (!formData.salesEndTime || (new Date(formData.salesEndTime) > new Date(formData.salesStartTime) && new Date(formData.salesEndTime) < new Date(formData.publicStartTime))) &&
                                             formData.banner && formData.eventDescription &&
                                             formData.totalCapacity > 0 &&
                                             formData.tickets.reduce((a, t) => a + (parseInt(t.quantity) || 0), 0) === parseInt(formData.totalCapacity)

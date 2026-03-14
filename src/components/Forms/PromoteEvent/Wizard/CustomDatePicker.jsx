@@ -16,13 +16,17 @@ const CustomInput = forwardRef(({ value, onClick, placeholder, className }, ref)
     </div>
 ));
 
-const CustomDatePicker = ({ selected, onChange, minDate, placeholderText, className }) => {
+const CustomDatePicker = ({ selected, onChange, minDate, maxDate, minTime, maxTime, placeholderText, className, dayClassName, placement = "auto" }) => {
     return (
         <div className="w-full relative okkazo-datepicker">
             <DatePicker
                 selected={selected}
                 onChange={onChange}
                 minDate={minDate}
+                maxDate={maxDate}
+                minTime={minTime}
+                maxTime={maxTime}
+                dayClassName={dayClassName}
                 showTimeSelect
                 timeFormat="HH:mm"
                 timeIntervals={15}
@@ -30,13 +34,14 @@ const CustomDatePicker = ({ selected, onChange, minDate, placeholderText, classN
                 placeholderText={placeholderText}
                 customInput={<CustomInput className={className} />}
                 calendarClassName="shadow-xl border-none font-sans"
-                popperClassName="z-50"
+                popperClassName="okkazo-datepicker-popper"
+                popperPlacement={placement}
                 showPopperArrow={false}
                 popperModifiers={[
                     {
                         name: "offset",
                         options: {
-                            offset: [0, 10],
+                            offset: [0, 4],
                         },
                     },
                 ]}

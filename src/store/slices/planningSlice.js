@@ -1,4 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { fetchWithAuth } from '../../utils/apiHandler';
+import { refreshAccessToken } from './authSlice';
 
 const API_BASE_URL = 'http://localhost:8080';
 
@@ -45,9 +47,14 @@ const mapPromotions = (promotions = {}) => {
 
 const toIso = (value) => {
     if (!value) return null;
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return null;
-    return date.toISOString();
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    
+    // To prevent the "shifting day" issue when converting to UTC (GMT) for payload,
+    // we format the ISO string using local time components. This ensures that 
+    // March 25 00:00 IST stays "2026-03-25" in the payload string without -1 day shift.
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.000Z`;
 };
 
 /**
@@ -87,12 +94,14 @@ const buildPrivatePayload = (formData, authState) => {
  */
 const buildPublicFormData = (formData, authState) => {
     const normalizedType = normalizeEventType('Public', formData.type);
-    const scheduleStart = toIso(formData.publicStartTime);
-    const scheduleEnd   = toIso(formData.publicEndTime);
-    const salesStart    = toIso(formData.salesStartTime);
-    const salesEnd      = toIso(formData.salesEndTime) ||
+    // Wizard flow uses: publicStartTime, publicEndTime, salesStartTime, salesEndTime
+    // Promote flow uses: startDate, endDate, ticketReleaseDate, ticketSalesEndDate
+    const scheduleStart = toIso(formData.publicStartTime || formData.startDate);
+    const scheduleEnd   = toIso(formData.publicEndTime || formData.endDate);
+    const salesStart    = toIso(formData.salesStartTime || formData.ticketReleaseDate);
+    const salesEnd      = toIso(formData.salesEndTime || formData.ticketSalesEndDate) ||
         (scheduleStart
-            ? new Date(new Date(scheduleStart).getTime() - 60 * 1000).toISOString()
+            ? toIso(new Date(new Date(scheduleStart).getTime() - 60 * 1000))
             : null);
 
     const tiers = (formData.tickets || [])
@@ -119,7 +128,7 @@ const buildPublicFormData = (formData, authState) => {
         customEventType: normalizedType === 'Other' ? (formData.customType || formData.type || 'Other') : undefined,
         eventDescription: buildPublicDescription(formData),
         location: {
-            name:      formData.location,
+            name:      formData.location || formData.address,
             latitude:  Number(formData.lat),
             longitude: Number(formData.lng),
         },
@@ -169,7 +178,7 @@ const buildPublicFormData = (formData, authState) => {
 
 export const saveEventPlanning = createAsyncThunk(
     'planning/saveEventPlanning',
-    async ({ formData }, { rejectWithValue, getState }) => {
+    async ({ formData }, { dispatch, rejectWithValue, getState }) => {
         try {
             const token = localStorage.getItem('accessToken');
             if (!token) return rejectWithValue('No access token found. Please login first.');
@@ -189,11 +198,11 @@ export const saveEventPlanning = createAsyncThunk(
                 headers = { ...headers, 'Content-Type': 'application/json' };
             }
 
-            const response = await fetch(`${API_BASE_URL}/api/events/planning`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/events/planning`, {
                 method: 'POST',
                 headers,
                 body,
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await safeJson(response);
             if (!response.ok || !data?.success) {
@@ -214,23 +223,19 @@ export const saveEventPlanning = createAsyncThunk(
 
 export const createOrder = createAsyncThunk(
     'planning/createOrder',
-    async ({ eventId }, { rejectWithValue }) => {
+    async ({ eventId }, { dispatch, rejectWithValue }) => {
         try {
             const token = localStorage.getItem('accessToken');
 
-            const response = await fetch(`${API_BASE_URL}/api/orders/create`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/create`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization:  `Bearer ${token}`,
-                },
                 body: JSON.stringify({
                     eventId,
                     orderType: 'PLANNING EVENT', // required enum in PaymentOrder model
                     currency:  'INR',
                     // amount omitted → backend defaults to DEFAULT_PLATFORM_FEE_INR (₹15,000)
                 }),
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await safeJson(response);
             if (!response.ok || !data?.success) {
@@ -256,16 +261,12 @@ export const createOrder = createAsyncThunk(
 
 export const verifyPayment = createAsyncThunk(
     'planning/verifyPayment',
-    async ({ razorpayOrderId, razorpayPaymentId, razorpaySignature, eventId }, { rejectWithValue }) => {
+    async ({ razorpayOrderId, razorpayPaymentId, razorpaySignature, eventId }, { dispatch, rejectWithValue }) => {
         try {
             const token = localStorage.getItem('accessToken');
 
-            const response = await fetch(`${API_BASE_URL}/api/orders/verify`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/verify`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization:  `Bearer ${token}`,
-                },
                 body: JSON.stringify({
                     eventId,
                     // Backend Joi schema uses snake_case (matches Razorpay handler response keys)
@@ -273,7 +274,7 @@ export const verifyPayment = createAsyncThunk(
                     razorpay_payment_id: razorpayPaymentId,
                     razorpay_signature:  razorpaySignature,
                 }),
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await safeJson(response);
             if (!response.ok || !data?.success) {

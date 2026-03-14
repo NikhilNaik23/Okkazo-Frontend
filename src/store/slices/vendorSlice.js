@@ -1,4 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
+import { fetchWithAuth } from '../../utils/apiHandler';
+import { refreshAccessToken } from './authSlice';
 
 const API_BASE_URL = 'http://localhost:8080';
 
@@ -12,23 +14,12 @@ const safeJson = async (response) => {
 
 export const addVendorService = createAsyncThunk(
     'vendor/addVendorService',
-    async ({ payload }, { getState, rejectWithValue }) => {
+    async ({ payload }, { dispatch, rejectWithValue }) => {
         try {
-            const stateToken = getState()?.auth?.accessToken;
-            const token = stateToken || localStorage.getItem('accessToken');
-
-            if (!token) {
-                return rejectWithValue('No access token found. Please login first.');
-            }
-
-            const response = await fetch(`${API_BASE_URL}/api/vendor/services`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/services`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
                 body: JSON.stringify(payload),
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await safeJson(response);
 
@@ -49,22 +40,11 @@ export const addVendorService = createAsyncThunk(
 
 export const fetchMyVendorServices = createAsyncThunk(
     'vendor/fetchMyVendorServices',
-    async (_, { getState, rejectWithValue }) => {
+    async (_, { dispatch, rejectWithValue }) => {
         try {
-            const stateToken = getState()?.auth?.accessToken;
-            const token = stateToken || localStorage.getItem('accessToken');
-
-            if (!token) {
-                return rejectWithValue('No access token found. Please login first.');
-            }
-
-            const response = await fetch(`${API_BASE_URL}/api/vendor/services/me`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/services/me`, {
                 method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await safeJson(response);
 
