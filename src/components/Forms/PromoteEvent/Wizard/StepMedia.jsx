@@ -7,13 +7,17 @@ const StepMedia = ({ formData, setFormData }) => {
     const handleFileChange = (e) => {
         const file = e.target.files[0];
         if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                alert("File size exceeds 5MB limit");
+            if (file.size > 50 * 1024 * 1024) {
+                alert("File size exceeds 50MB limit");
                 return;
             }
             const reader = new FileReader();
             reader.onloadend = () => {
-                setFormData({ ...formData, banner: reader.result });
+                setFormData({
+                    ...formData,
+                    banner: reader.result, // data URL — preview only
+                    bannerFile: file,      // raw File — sent to backend
+                });
             };
             reader.readAsDataURL(file);
         }
@@ -22,7 +26,7 @@ const StepMedia = ({ formData, setFormData }) => {
     const triggerUpload = () => fileInputRef.current.click();
     const handleRemoveBanner = (e) => {
         e.stopPropagation();
-        setFormData({ ...formData, banner: null });
+        setFormData({ ...formData, banner: null, bannerFile: null });
         if (fileInputRef.current) fileInputRef.current.value = "";
     };
 

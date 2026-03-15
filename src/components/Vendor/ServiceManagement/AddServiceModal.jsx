@@ -4,7 +4,7 @@ import { useDispatch } from 'react-redux';
 import { BsX, BsCheckLg } from 'react-icons/bs';
 import { SERVICE_CATEGORIES } from './constants';
 import { toast } from 'react-hot-toast';
-import { addVendorService } from '../../../store/slices/vendorSlice';
+import { addVendorService, updateVendorService } from '../../../store/slices/vendorSlice';
 
 const AddServiceModal = ({ isOpen, onClose, onSave, allowedCategory, initialData }) => {
     const dispatch = useDispatch();
@@ -18,15 +18,28 @@ const AddServiceModal = ({ isOpen, onClose, onSave, allowedCategory, initialData
         if (isOpen) {
             if (initialData) {
                 // Determine category from initialData if not strictly enforced, though allowedCategory usually takes precedence
-                const category = initialData.category || allowedCategory || SERVICE_CATEGORIES[0].id;
+                const category = initialData.categoryId || initialData.category || allowedCategory || SERVICE_CATEGORIES[0].id;
                 setSelectedCategory(category);
 
-                // Prepare form data
-                const processedData = { ...initialData };
+                // Prepare form data (normalize backend shape -> form fields)
+                const processedData = {
+                    name: initialData?.name || '',
+                    price: initialData?.price ?? '',
+                    tier: initialData?.tier || '',
+                    description: initialData?.description || '',
+                };
 
-                // Special handling for array -> string conversions for catering items
-                if (category === 'catering' && Array.isArray(processedData.items)) {
-                    processedData.items = processedData.items.join(', ');
+                if (category === 'catering') {
+                    const srcItems = initialData?.details?.items ?? initialData?.items;
+                    const itemsList = Array.isArray(srcItems)
+                        ? srcItems
+                        : (typeof srcItems === 'string' ? srcItems.split(',').map(i => i.trim()).filter(Boolean) : []);
+                    processedData.items = itemsList.join(', ');
+                }
+
+                if (category === 'venues') {
+                    processedData.capacity = initialData?.details?.capacity ?? initialData?.capacity ?? '';
+                    processedData.location = initialData?.details?.location ?? initialData?.location ?? '';
                 }
 
                 setFormData(processedData);
@@ -56,26 +69,6 @@ const AddServiceModal = ({ isOpen, onClose, onSave, allowedCategory, initialData
             validData.items = validData.items.split(',').map(i => i.trim()).filter(i => i);
         }
 
-        // If editing, there is currently no backend update endpoint.
-        // Update locally via the parent handler.
-        if (initialData) {
-            onSave({
-                ...initialData,
-                categoryId: selectedCategory,
-                name: validData.name,
-                price: validData.price,
-                tier: validData.tier || null,
-                description: validData.description || null,
-                details: selectedCategory === 'catering'
-                    ? { items: validData.items }
-                    : selectedCategory === 'venues'
-                        ? { capacity: validData.capacity, location: validData.location }
-                        : { items: validData.items || null },
-            });
-            onClose();
-            return;
-        }
-
         // ── Build API payload ──────────────────────────────────────────────────
         // Common fields that live at the top level of VendorService
         const payload = {
@@ -101,6 +94,25 @@ const AddServiceModal = ({ isOpen, onClose, onSave, allowedCategory, initialData
             payload.details = {
                 items: validData.items || null,
             };
+        }
+
+        // If editing, update via backend
+        if (initialData) {
+            const id = initialData?._id || initialData?.id;
+            if (!id) {
+                toast.error('Missing service id — could not update');
+                return;
+            }
+
+            try {
+                const updatedService = await dispatch(updateVendorService({ id, payload })).unwrap();
+                onSave(updatedService);
+                onClose();
+            } catch (err) {
+                console.error(err);
+                toast.error(err?.message || err || 'Network error — could not update service');
+            }
+            return;
         }
 
         try {

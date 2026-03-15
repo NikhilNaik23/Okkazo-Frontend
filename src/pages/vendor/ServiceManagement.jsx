@@ -26,12 +26,11 @@ import AddServiceModal from "../../components/Vendor/ServiceManagement/AddServic
 import { SERVICE_CATEGORIES } from "../../components/Vendor/ServiceManagement/constants";
 import { selectVendorApplication } from '../../store/slices/authSlice';
 import {
-    deleteServiceLocally,
+    deleteVendorService,
     fetchMyVendorServices,
     selectMyServices,
     selectMyServicesError,
     selectMyServicesStatus,
-    updateServiceLocally,
 } from '../../store/slices/vendorSlice';
 
 const iconMap = {
@@ -101,16 +100,10 @@ const ServiceManagement = () => {
         return () => window.removeEventListener('click', handleClickOutside);
     }, []);
 
-    const handleAddService = (serviceData) => {
-        // When creating: thunk already inserted into myServices.
-        // When editing: update locally (no backend update endpoint yet).
-        if (editingService) {
-            const id = editingService?._id || editingService?.id;
-            dispatch(updateServiceLocally({ id, changes: serviceData }));
-            toast.success('Service updated successfully!');
-        } else {
-            toast.success('New service added successfully!');
-        }
+    const handleAddService = () => {
+        // Creating + editing are both handled via thunks in the modal.
+        if (editingService) toast.success('Service updated successfully!');
+        else toast.success('New service added successfully!');
         setEditingService(null);
     };
 
@@ -121,11 +114,16 @@ const ServiceManagement = () => {
         setActiveMenuId(null);
     };
 
-    const handleDeleteService = (itemId, e) => {
+    const handleDeleteService = async (itemId, e) => {
         e.stopPropagation();
         if (window.confirm("Are you sure you want to delete this service?")) {
-            dispatch(deleteServiceLocally({ id: itemId }));
-            toast.success("Service deleted.");
+            try {
+                await dispatch(deleteVendorService({ id: itemId })).unwrap();
+                toast.success("Service deleted.");
+            } catch (err) {
+                console.error(err);
+                toast.error(err?.message || err || 'Network error — could not delete service');
+            }
         }
         setActiveMenuId(null);
     };
