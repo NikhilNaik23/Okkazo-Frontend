@@ -1,4 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { fetchWithAuth } from '../../utils/apiHandler';
 
 const API_BASE_URL = 'http://localhost:8080';
 
@@ -183,21 +184,15 @@ export const uploadVendorDocument = createAsyncThunk(
     'auth/uploadVendorDocument',
     async ({ applicationId, documentType, file, description }, { dispatch, rejectWithValue }) => {
         try {
-            const token = localStorage.getItem('accessToken');
-            if (!token) return rejectWithValue('No access token found');
-
             const formData = new FormData();
             formData.append('file', file);
             formData.append('documentType', documentType);
             if (description) formData.append('description', description);
 
-            const response = await fetch(`${API_BASE_URL}/api/vendor/registration/${applicationId}/documents`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/registration/${applicationId}/documents`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
                 body: formData,
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await response.json();
             if (!response.ok) return rejectWithValue(data.message || 'Failed to upload document');
@@ -214,21 +209,11 @@ export const uploadVendorDocument = createAsyncThunk(
 // Async thunk for fetching vendor application
 export const fetchVendorApplication = createAsyncThunk(
     'auth/fetchVendorApplication',
-    async (_, { rejectWithValue }) => {
+    async (_, { dispatch, rejectWithValue }) => {
         try {
-            const token = localStorage.getItem('accessToken');
-            
-            if (!token) {
-                return rejectWithValue('No access token found');
-            }
-
-            const response = await fetch(`${API_BASE_URL}/api/vendor/me/application`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/me/application`, {
                 method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await response.json();
 
@@ -246,21 +231,11 @@ export const fetchVendorApplication = createAsyncThunk(
 // Async thunk for fetching current user profile
 export const fetchCurrentUser = createAsyncThunk(
     'auth/fetchCurrentUser',
-    async (_, { rejectWithValue }) => {
+    async (_, { dispatch, rejectWithValue }) => {
         try {
-            const token = localStorage.getItem('accessToken');
-            
-            if (!token) {
-                return rejectWithValue('No access token found');
-            }
-
-            const response = await fetch(`${API_BASE_URL}/api/users/me`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/users/me`, {
                 method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await response.json();
 
@@ -278,30 +253,16 @@ export const fetchCurrentUser = createAsyncThunk(
 // Async thunk for updating user profile
 export const updateProfile = createAsyncThunk(
     'auth/updateProfile',
-    async (profileData, { rejectWithValue }) => {
+    async (profileData, { dispatch, rejectWithValue }) => {
         try {
-            const token = localStorage.getItem('accessToken');
-            
-            if (!token) {
-                return rejectWithValue('No access token found. Please login.');
-            }
-
-            const response = await fetch(`${API_BASE_URL}/api/users/me`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/users/me`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                },
                 body: JSON.stringify(profileData),
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await response.json();
 
             if (!response.ok) {
-                if (response.status === 401) {
-                    localStorage.removeItem('accessToken');
-                    localStorage.removeItem('refreshToken');
-                }
                 return rejectWithValue(data.message || 'Failed to update profile');
             }
 

@@ -123,7 +123,7 @@ const OrbitalTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) =>
                                                     <span className="text-[#088395] font-serif-premium italic text-xl">₹</span>
                                                     <input
                                                         type="number"
-                                                        value={ticket.price}
+                                                        value={ticket.price ?? ""}
                                                         onChange={(e) => onChange(ticket.id, 'price', e.target.value === "" ? "" : parseFloat(e.target.value))}
                                                         className="w-full bg-transparent text-xl font-serif-premium italic text-[#09637E] outline-none border-b border-[#09637E]/10 pb-1 focus:border-[#088395] placeholder-[#09637E]/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                         placeholder="Price"
@@ -133,7 +133,7 @@ const OrbitalTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) =>
                                             <div className="col-span-3">
                                                 <input
                                                     type="number"
-                                                    value={ticket.quantity}
+                                                    value={ticket.quantity ?? ""}
                                                     onChange={(e) => onChange(ticket.id, 'quantity', e.target.value === "" ? "" : parseInt(e.target.value))}
                                                     className="w-full bg-transparent text-xl font-serif-premium italic text-[#09637E] outline-none border-b border-[#09637E]/10 pb-1 focus:border-[#088395] placeholder-[#09637E]/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                     placeholder="Qty"

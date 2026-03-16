@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useDispatch, useSelector } from 'react-redux';
 import {
     BsShop,
     BsGeoAlt,
@@ -22,7 +23,15 @@ import {
 import { MdOutlineRestaurantMenu, MdCake } from "react-icons/md";
 import { toast } from "react-hot-toast";
 import AddServiceModal from "../../components/Vendor/ServiceManagement/AddServiceModal";
-import { SERVICE_CATEGORIES, INITIAL_PACKAGES, INITIAL_VENUES } from "../../components/Vendor/ServiceManagement/constants";
+import { SERVICE_CATEGORIES } from "../../components/Vendor/ServiceManagement/constants";
+import { selectVendorApplication } from '../../store/slices/authSlice';
+import {
+    deleteVendorService,
+    fetchMyVendorServices,
+    selectMyServices,
+    selectMyServicesError,
+    selectMyServicesStatus,
+} from '../../store/slices/vendorSlice';
 
 const iconMap = {
     BsShop,
@@ -41,14 +50,20 @@ const iconMap = {
     MdCake
 };
 
-import { vendorProfileData } from "../../data/vendorProfileData.jsx";
-
 const ServiceManagement = () => {
+    const dispatch = useDispatch();
+    const vendorApplication = useSelector(selectVendorApplication);
+    const myServices = useSelector(selectMyServices);
+    const myServicesStatus = useSelector(selectMyServicesStatus);
+    const myServicesError = useSelector(selectMyServicesError);
+
     // Determine allowed category from profile
-    const profileServiceType = vendorProfileData.businessDetails.serviceCategory;
+    const profileServiceType = vendorApplication?.serviceCategory;
     const allowedCategoryObj = SERVICE_CATEGORIES.find(cat =>
-        cat.label.toLowerCase().includes(profileServiceType.toLowerCase()) ||
-        cat.id === profileServiceType.toLowerCase()
+        (profileServiceType
+            ? (cat.label.toLowerCase().includes(String(profileServiceType).toLowerCase()) ||
+                cat.id === String(profileServiceType).toLowerCase())
+            : false)
     );
     const allowedCategoryId = allowedCategoryObj ? allowedCategoryObj.id : SERVICE_CATEGORIES[0].id;
 
@@ -58,26 +73,25 @@ const ServiceManagement = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [expandedServices, setExpandedServices] = useState({});
 
-    // Initialize state with data for venues and catering, others empty
-    const [services, setServices] = useState({
-        venues: INITIAL_VENUES,
-        catering: INITIAL_PACKAGES,
-        photography: [],
-        videography: [],
-        decor: [],
-        entertainment: [],
-        makeup: [],
-        invitations: [],
-        sound: [],
-        rental: [],
-        security: [],
-        transport: [],
-        media: [],
-        cakes: []
-    });
-
     // Only show the category allowed by the profile
     const visibleCategories = [allowedCategoryObj || SERVICE_CATEGORIES[0]];
+
+    // Fetch vendor services from backend
+    useEffect(() => {
+        dispatch(fetchMyVendorServices());
+    }, [dispatch]);
+
+    // If vendor application loads later, keep tab aligned
+    useEffect(() => {
+        setActiveCategory(allowedCategoryId);
+    }, [allowedCategoryId]);
+
+    // Show fetch error once
+    useEffect(() => {
+        if (myServicesStatus === 'failed' && myServicesError) {
+            toast.error(myServicesError);
+        }
+    }, [myServicesStatus, myServicesError]);
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -86,31 +100,11 @@ const ServiceManagement = () => {
         return () => window.removeEventListener('click', handleClickOutside);
     }, []);
 
-    const handleAddService = (serviceData) => {
-        const categoryId = allowedCategoryId;
-
-        setServices(prev => {
-            const categoryItems = prev[categoryId] || [];
-
-            if (editingService) {
-                // Update existing
-                const updatedItems = categoryItems.map(item =>
-                    item.id === editingService.id ? { ...item, ...serviceData } : item
-                );
-                return { ...prev, [categoryId]: updatedItems };
-            } else {
-                // Add new
-                const serviceToAdd = {
-                    id: Date.now(),
-                    ...serviceData,
-                    status: "Active"
-                };
-                return { ...prev, [categoryId]: [...categoryItems, serviceToAdd] };
-            }
-        });
-
-        toast.success(editingService ? "Service updated successfully!" : "New service added successfully!");
-        setEditingService(null); // Reset editing state
+    const handleAddService = () => {
+        // Creating + editing are both handled via thunks in the modal.
+        if (editingService) toast.success('Service updated successfully!');
+        else toast.success('New service added successfully!');
+        setEditingService(null);
     };
 
     const handleEditService = (item, e) => {
@@ -120,14 +114,16 @@ const ServiceManagement = () => {
         setActiveMenuId(null);
     };
 
-    const handleDeleteService = (itemId, e) => {
+    const handleDeleteService = async (itemId, e) => {
         e.stopPropagation();
         if (window.confirm("Are you sure you want to delete this service?")) {
-            setServices(prev => ({
-                ...prev,
-                [allowedCategoryId]: prev[allowedCategoryId].filter(item => item.id !== itemId)
-            }));
-            toast.success("Service deleted.");
+            try {
+                await dispatch(deleteVendorService({ id: itemId })).unwrap();
+                toast.success("Service deleted.");
+            } catch (err) {
+                console.error(err);
+                toast.error(err?.message || err || 'Network error — could not delete service');
+            }
         }
         setActiveMenuId(null);
     };
@@ -137,20 +133,39 @@ const ServiceManagement = () => {
         setActiveMenuId(activeMenuId === itemId ? null : itemId);
     };
 
-    const currentServices = services[activeCategory] || [];
+    const resolveCategoryId = (service) => {
+        const categoryId = service?.categoryId;
+        if (categoryId) return String(categoryId);
+
+        const serviceCategoryLabel = service?.serviceCategory;
+        if (!serviceCategoryLabel) return null;
+
+        const needle = String(serviceCategoryLabel).toLowerCase();
+        const match = SERVICE_CATEGORIES.find((c) => String(c.label).toLowerCase() === needle)
+            || SERVICE_CATEGORIES.find((c) => needle.includes(String(c.label).toLowerCase()));
+        return match?.id || null;
+    };
+
+    const currentServices = (myServices || []).filter((s) => {
+        const byCategoryId = String(s?.categoryId || '') === String(activeCategory);
+        const byServiceCategory = resolveCategoryId(s) === String(activeCategory);
+        return byCategoryId || byServiceCategory;
+    });
 
     const renderServiceCard = (item) => {
+        const itemId = item?._id || item?.id;
+
         // Common Menu Component
         const Menu = () => (
             <div className="absolute top-4 right-4 z-10">
                 <button
-                    onClick={(e) => toggleMenu(item.id, e)}
+                    onClick={(e) => toggleMenu(itemId, e)}
                     className="w-8 h-8 flex items-center justify-center bg-white/90 backdrop-blur-sm rounded-full shadow-sm text-[#0b2d49] hover:bg-[#0b2d49] hover:text-white transition-all"
                 >
                     <BsThreeDotsVertical size={16} />
                 </button>
 
-                {activeMenuId === item.id && (
+                {activeMenuId === itemId && (
                     <div className="absolute right-0 top-full mt-2 w-32 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden py-1 z-20 animate-in fade-in zoom-in-95 duration-200">
                         <button
                             onClick={(e) => handleEditService(item, e)}
@@ -159,7 +174,7 @@ const ServiceManagement = () => {
                             <BsPencilSquare size={12} /> Edit
                         </button>
                         <button
-                            onClick={(e) => handleDeleteService(item.id, e)}
+                            onClick={(e) => handleDeleteService(itemId, e)}
                             className="w-full text-left px-4 py-2 text-sm font-bold text-red-500 hover:bg-red-50 flex items-center gap-2"
                         >
                             <BsTrash size={12} /> Delete
@@ -171,7 +186,7 @@ const ServiceManagement = () => {
 
         if (activeCategory === 'catering') {
             return (
-                <div key={item.id} className="relative bg-white rounded-[2rem] border-2 border-[#e9eff1] overflow-hidden group hover:border-[#d7a444] transition-all duration-300 hover:shadow-xl flex flex-col h-full">
+                <div key={itemId} className="relative bg-white rounded-[2rem] border-2 border-[#e9eff1] overflow-hidden group hover:border-[#d7a444] transition-all duration-300 hover:shadow-xl flex flex-col h-full">
                     <Menu />
                     <div className="p-8 flex flex-col h-full">
                         <div className="mb-6 mr-8">
@@ -182,19 +197,20 @@ const ServiceManagement = () => {
                         </div>
 
                         <div className="mb-6 pb-6 border-b border-dashed border-gray-200">
-                            <span className="text-3xl font-black text-[#0b2d49]">{item.price}</span>
+                            <span className="text-3xl font-black text-[#0b2d49]">₹{item.price}</span>
                             <span className="text-sm text-[#708aa0] font-medium ml-1">/ plate approx.</span>
                         </div>
 
                         <div className="space-y-3 mb-8 flex-grow">
                             {(() => {
-                                const itemsList = typeof item.items === 'string'
-                                    ? item.items.split(',').map(i => i.trim()).filter(Boolean)
-                                    : (Array.isArray(item.items) ? item.items : []);
+                                const srcItems = item?.details?.items ?? item?.items;
+                                const itemsList = typeof srcItems === 'string'
+                                    ? srcItems.split(',').map(i => i.trim()).filter(Boolean)
+                                    : (Array.isArray(srcItems) ? srcItems : []);
 
                                 return (
                                     <>
-                                        {(expandedServices[item.id] ? itemsList : itemsList.slice(0, 5)).map((inc, i) => (
+                                        {(expandedServices[itemId] ? itemsList : itemsList.slice(0, 5)).map((inc, i) => (
                                             <div key={i} className="flex items-start gap-3">
                                                 <div className="mt-1 min-w-[16px] flex items-center justify-center text-[#d7a444]">
                                                     <svg stroke="currentColor" fill="currentColor" strokeWidth="0" viewBox="0 0 16 16" height="14" width="14" xmlns="http://www.w3.org/2000/svg"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"></path></svg>
@@ -206,11 +222,11 @@ const ServiceManagement = () => {
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    setExpandedServices(prev => ({ ...prev, [item.id]: !prev[item.id] }));
+                                                    setExpandedServices(prev => ({ ...prev, [itemId]: !prev[itemId] }));
                                                 }}
                                                 className="text-xs font-bold text-[#708aa0] pl-7 hover:text-[#0b2d49] transition-colors focus:outline-none"
                                             >
-                                                {expandedServices[item.id] ? "Show Less" : `+ ${itemsList.length - 5} more items`}
+                                                {expandedServices[itemId] ? "Show Less" : `+ ${itemsList.length - 5} more items`}
                                             </button>
                                         )}
                                     </>
@@ -224,7 +240,7 @@ const ServiceManagement = () => {
             );
         } else if (activeCategory === 'venues') {
             return (
-                <div key={item.id} className="relative bg-white rounded-[2rem] border-2 border-[#e9eff1] overflow-hidden group hover:border-[#d7a444] transition-all duration-300 hover:shadow-xl flex flex-col">
+                <div key={itemId} className="relative bg-white rounded-[2rem] border-2 border-[#e9eff1] overflow-hidden group hover:border-[#d7a444] transition-all duration-300 hover:shadow-xl flex flex-col">
                     <Menu />
                     <div className="p-8 flex flex-col h-full bg-white">
                         {/* Top Section */}
@@ -243,11 +259,11 @@ const ServiceManagement = () => {
                                     </span>
                                     <span className="flex items-center gap-2">
                                         <BsGeoAlt size={16} />
-                                        {item.location}
+                                        {item?.details?.location || item.location}
                                     </span>
                                     <span className="flex items-center gap-2">
                                         <BsBriefcase size={16} />
-                                        {item.capacity} Guests
+                                        {item?.details?.capacity || item.capacity} Guests
                                     </span>
                                 </div>
                             </div>
@@ -267,11 +283,11 @@ const ServiceManagement = () => {
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between p-5 bg-[#f8f9fa] rounded-2xl group-hover:bg-[#f0f4f8] transition-colors">
                                         <span className="text-[#708aa0] font-bold text-sm">Seating Capacity</span>
-                                        <span className="text-[#0b2d49] font-black">{item.capacity} Guests</span>
+                                        <span className="text-[#0b2d49] font-black">{item?.details?.capacity || item.capacity} Guests</span>
                                     </div>
                                     <div className="flex items-center justify-between p-5 bg-[#f8f9fa] rounded-2xl group-hover:bg-[#f0f4f8] transition-colors">
                                         <span className="text-[#708aa0] font-bold text-sm">Location</span>
-                                        <span className="text-[#0b2d49] font-black">{item.location}</span>
+                                        <span className="text-[#0b2d49] font-black">{item?.details?.location || item.location}</span>
                                     </div>
                                     <div className="flex items-center justify-between p-5 bg-[#f8f9fa] rounded-2xl group-hover:bg-[#f0f4f8] transition-colors">
                                         <span className="text-[#708aa0] font-bold text-sm">Daily Rate</span>
@@ -294,7 +310,7 @@ const ServiceManagement = () => {
         } else {
             // Generic Card for other services
             return (
-                <div key={item.id} className="relative bg-white rounded-[2rem] border-2 border-[#e9eff1] overflow-hidden group hover:border-[#d7a444] transition-all duration-300 hover:shadow-xl p-8 flex flex-col">
+                <div key={itemId} className="relative bg-white rounded-[2rem] border-2 border-[#e9eff1] overflow-hidden group hover:border-[#d7a444] transition-all duration-300 hover:shadow-xl p-8 flex flex-col">
                     <Menu />
                     <div className="flex justify-between items-start mb-4 pr-8">
                         <div className="flex flex-col">
@@ -316,16 +332,22 @@ const ServiceManagement = () => {
                     </div>
                     <div className="flex-grow mb-6">
                         <p className="text-[#708aa0] font-medium text-sm line-clamp-3 mb-4">{item.description || "No description provided."}</p>
-                        {item.items && (
+                        {(item?.details?.items || item.items) && (
                             <div className="flex flex-wrap gap-2">
-                                {typeof item.items === 'string'
-                                    ? item.items.split(',').slice(0, 3).map((tag, i) => (
+                                {(() => {
+                                    const srcItems = item?.details?.items ?? item.items;
+                                    if (typeof srcItems === 'string') {
+                                        return srcItems.split(',').slice(0, 3).map((tag, i) => (
                                         <span key={i} className="px-2 py-1 bg-gray-50 border border-gray-100 rounded text-[10px] font-bold text-[#5a5b44] uppercase tracking-wide">{tag.trim()}</span>
-                                    ))
-                                    : Array.isArray(item.items) && item.items.slice(0, 3).map((tag, i) => (
+                                        ));
+                                    }
+                                    if (Array.isArray(srcItems)) {
+                                        return srcItems.slice(0, 3).map((tag, i) => (
                                         <span key={i} className="px-2 py-1 bg-gray-50 border border-gray-100 rounded text-[10px] font-bold text-[#5a5b44] uppercase tracking-wide">{tag}</span>
-                                    ))
-                                }
+                                        ));
+                                    }
+                                    return null;
+                                })()}
                             </div>
                         )}
                     </div>
