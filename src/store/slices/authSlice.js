@@ -206,6 +206,46 @@ export const uploadVendorDocument = createAsyncThunk(
     }
 );
 
+// Async thunk for uploading vendor application images (profile/banner)
+export const uploadVendorApplicationImage = createAsyncThunk(
+    'auth/uploadVendorApplicationImage',
+    async ({ imageType, file }, { dispatch, rejectWithValue }) => {
+        try {
+            if (!imageType || !['profile', 'banner'].includes(imageType)) {
+                return rejectWithValue('Invalid image type');
+            }
+
+            if (!file) {
+                return rejectWithValue('File is required');
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/vendor/me/application/images/${imageType}`,
+                {
+                    method: 'POST',
+                    body: formData,
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await response.json();
+            if (!response.ok) {
+                return rejectWithValue(data.message || 'Failed to upload image');
+            }
+
+            // Refresh application data
+            dispatch(fetchVendorApplication());
+
+            return data.data || data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
 // Async thunk for fetching vendor application
 export const fetchVendorApplication = createAsyncThunk(
     'auth/fetchVendorApplication',
