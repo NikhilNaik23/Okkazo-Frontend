@@ -1,71 +1,93 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { 
   Users, 
   Shield, 
-  Plus, 
   Search, 
   MoreHorizontal, 
   UserPlus, 
   ShieldCheck, 
   Mail, 
-  Lock,
-  ChevronDown
+    Lock,
+    LockOpen,
+    Filter,
+    MessageSquare
 } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import toast from "react-hot-toast";
+import { blockTeamMember, fetchTeamAccess, unblockTeamMember } from "../../../store/slices/adminSlice";
 
 const AdminTeamAccess = () => {
     const navigate = useNavigate();
+    const dispatch = useDispatch();
     const [searchTerm, setSearchTerm] = useState("");
+    const [openActionMenuAuthId, setOpenActionMenuAuthId] = useState(null);
+    const [filterRole, setFilterRole] = useState("ALL");
+    const { teamMembers, teamStats, teamPagination, teamLoading, teamError, submitting } = useSelector((state) => state.admin);
 
-    const teamMembers = [
-        {
-            id: "#T-1001",
-            name: "Alexander Pierce",
-            role: "Super Admin",
-            email: "alexander@okkazo.com",
-            status: "ACTIVE",
-            access: "Full Access",
-            avatar: "AP",
-            lastActive: "2 mins ago"
-        },
-        {
-            id: "#T-1002",
-            name: "Sarah Jenkins",
-            role: "Financial Manager",
-            email: "sarah.j@okkazo.com",
-            status: "ACTIVE",
-            access: "Billing & Reports",
-            avatar: "SJ",
-            lastActive: "1 hour ago"
-        },
-        {
-            id: "#T-1003",
-            name: "Michael Chen",
-            role: "Event Coordinator",
-            email: "m.chen@okkazo.com",
-            status: "INACTIVE",
-            access: "Event Management",
-            avatar: "MC",
-            lastActive: "3 days ago"
-        },
-        {
-            id: "#T-1004",
-            name: "Elena Rodriguez",
-            role: "Security Lead",
-            email: "elena.r@okkazo.com",
-            status: "ACTIVE",
-            access: "User Verification",
-            avatar: "ER",
-            lastActive: "Just now"
-        }
-    ];
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            dispatch(fetchTeamAccess({ search: searchTerm.trim(), page: 1, limit: 50 }));
+        }, 300);
+
+        return () => clearTimeout(timeoutId);
+    }, [dispatch, searchTerm]);
+
+    const formatLastActive = (lastActive) => {
+        if (!lastActive) return "Never";
+        const date = new Date(lastActive);
+        if (Number.isNaN(date.getTime())) return "Unknown";
+        return date.toLocaleString();
+    };
 
     const stats = [
-        { label: "Total Members", value: "12", icon: <Users size={18} />, color: "text-blue-600", bg: "bg-blue-50" },
-        { label: "Admins", value: "4", icon: <Shield size={18} />, color: "text-purple-600", bg: "bg-purple-50" },
-        { label: "Pending Invites", value: "2", icon: <Mail size={18} />, color: "text-[#d7a444]", bg: "bg-amber-50" }
+        { label: "Total Members", value: String(teamStats.totalMembers || 0), icon: <Users size={18} />, color: "text-blue-600", bg: "bg-blue-50" },
+        { label: "Admins", value: String(teamStats.admins || 0), icon: <Shield size={18} />, color: "text-purple-600", bg: "bg-purple-50" },
+        { label: "Pending Invites", value: String(teamStats.pendingInvites || 0), icon: <Mail size={18} />, color: "text-[#d7a444]", bg: "bg-amber-50" }
     ];
+
+    const handleToggleBlock = async (member) => {
+        try {
+            if (member.isActive) {
+                await dispatch(blockTeamMember(member.authId)).unwrap();
+                toast.success("Team member blocked");
+            } else {
+                await dispatch(unblockTeamMember(member.authId)).unwrap();
+                toast.success("Team member unblocked");
+            }
+            setOpenActionMenuAuthId(null);
+        } catch (error) {
+            toast.error(error || "Failed to update member status");
+        }
+    };
+
+    const getStatusStyles = (status) => {
+        if (status === "ACTIVE") {
+            return {
+                dot: "bg-[#28a785] animate-pulse",
+                text: "text-[#28a785]",
+            };
+        }
+
+        if (status === "UNVERIFIED") {
+            return {
+                dot: "bg-[#d7a444]",
+                text: "text-[#d7a444]",
+            };
+        }
+
+        return {
+            dot: "bg-[#94a3b8]",
+            text: "text-[#94a3b8]",
+        };
+    };
+
+    const uniqueRoles = ["ALL", ...new Set(teamMembers.map(m => m.assignedRole || m.role).filter(Boolean))];
+    
+    const filteredMembers = filterRole === "ALL" 
+        ? teamMembers 
+        : teamMembers.filter(m => (m.assignedRole || m.role) === filterRole);
 
     return (
         <div className="flex flex-col h-full bg-[#fcfdfe] overflow-hidden">
@@ -114,20 +136,28 @@ const AdminTeamAccess = () => {
                 </div>
 
                 {/* Table Section */}
-                <div className="bg-white rounded-2xl border border-[#f0f2f5] shadow-sm overflow-hidden auto-rows-min">
-                    <div className="p-4 border-b border-[#f0f2f5] flex items-center justify-between bg-white sticky top-0 z-10">
+                <div className="bg-white rounded-2xl border border-[#f0f2f5] shadow-sm auto-rows-min">
+                    <div className="p-4 border-b border-[#f0f2f5] flex items-center justify-between bg-white sticky top-0 z-10 rounded-t-2xl">
                         <div className="flex items-center gap-4">
                             <h3 className="text-sm font-bold text-[#1a1c1e]">Team Roster</h3>
-                            <span className="px-2 py-0.5 bg-[#f1f5f9] text-[#94a3b8] text-[10px] font-bold rounded-full">4 total</span>
+                            <span className="px-2 py-0.5 bg-[#f1f5f9] text-[#94a3b8] text-[10px] font-bold rounded-full">{teamPagination.total || 0} total</span>
                         </div>
-                        <button className="text-xs font-bold text-[#0b2d49] hover:underline flex items-center gap-1 group">
-                            Role Settings
-                            <ChevronDown size={14} className="group-hover:translate-y-0.5 transition-transform" />
-                        </button>
+                        <div className="flex items-center gap-2 bg-[#f1f5f9] px-3 py-1.5 rounded-lg border border-[#e2e8f0]">
+                            <Filter size={14} className="text-[#64748b]" />
+                            <select
+                                value={filterRole}
+                                onChange={(e) => setFilterRole(e.target.value)}
+                                className="text-xs font-bold text-[#0b2d49] bg-transparent border-none focus:ring-0 cursor-pointer outline-none w-32 truncate"
+                            >
+                                {uniqueRoles.map(role => (
+                                    <option key={role} value={role}>{role === "ALL" ? "All Roles" : role}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
+                    <div className="overflow-visible">
+                        <table className="w-full text-left rounded-b-2xl">
                             <thead>
                                 <tr className="bg-[#fcfdfe] text-[10px] font-bold text-[#cbd5e1] uppercase tracking-[0.15em] border-b border-[#f0f2f5]">
                                     <th className="px-6 py-4">Identity</th>
@@ -139,7 +169,28 @@ const AdminTeamAccess = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-[#f0f2f5]">
-                                {teamMembers.map((member, idx) => (
+                                {teamLoading && (
+                                    <tr>
+                                        <td colSpan={6} className="px-6 py-10 text-center text-sm font-medium text-[#94a3b8]">Loading team members...</td>
+                                    </tr>
+                                )}
+
+                                {!teamLoading && teamError && (
+                                    <tr>
+                                        <td colSpan={6} className="px-6 py-10 text-center text-sm font-medium text-red-500">{teamError}</td>
+                                    </tr>
+                                )}
+
+                                {!teamLoading && !teamError && filteredMembers.length === 0 && (
+                                    <tr>
+                                        <td colSpan={6} className="px-6 py-10 text-center text-sm font-medium text-[#94a3b8]">No team members found matching the filter.</td>
+                                    </tr>
+                                )}
+
+                                {!teamLoading && !teamError && filteredMembers.map((member, idx) => {
+                                    const statusStyles = getStatusStyles(member.status);
+
+                                    return (
                                     <tr key={idx} className="hover:bg-[#f8fafc] transition-colors group">
                                         <td className="px-6 py-5">
                                             <div className="flex items-center gap-3">
@@ -155,7 +206,7 @@ const AdminTeamAccess = () => {
                                         <td className="px-6 py-5">
                                             <div className="flex items-center gap-2">
                                                 <ShieldCheck size={14} className="text-[#28a785]" />
-                                                <span className="text-xs font-bold text-[#1a1c1e]">{member.role}</span>
+                                                <span className="text-xs font-bold text-[#1a1c1e]">{member.assignedRole || member.role}</span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-5">
@@ -165,25 +216,56 @@ const AdminTeamAccess = () => {
                                         </td>
                                         <td className="px-6 py-5">
                                             <div className="flex items-center gap-1.5 font-bold text-[10px]">
-                                                <div className={`w-1.5 h-1.5 rounded-full ${member.status === 'ACTIVE' ? 'bg-[#28a785] animate-pulse' : 'bg-[#94a3b8]'}`}></div>
-                                                <span className={member.status === 'ACTIVE' ? 'text-[#28a785]' : 'text-[#94a3b8]'}>{member.status}</span>
+                                                <div className={`w-1.5 h-1.5 rounded-full ${statusStyles.dot}`}></div>
+                                                <span className={statusStyles.text}>{member.status}</span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-5">
-                                            <span className="text-[11px] font-medium text-[#94a3b8] italic">{member.lastActive}</span>
+                                            <span className="text-[11px] font-medium text-[#94a3b8] italic">{formatLastActive(member.lastActive)}</span>
                                         </td>
                                         <td className="px-6 py-5 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button className="p-2 text-[#94a3b8] hover:text-[#0b2d49] hover:bg-white rounded-lg transition-all">
-                                                    <Lock size={16} />
-                                                </button>
-                                                <button className="p-2 text-[#94a3b8] hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
+                                            <div className="relative flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => setOpenActionMenuAuthId(openActionMenuAuthId === member.authId ? null : member.authId)}
+                                                    className="p-2 text-[#94a3b8] hover:text-[#0b2d49] hover:bg-[#f1f5f9] rounded-lg transition-all"
+                                                    title="More actions"
+                                                >
                                                     <MoreHorizontal size={16} />
                                                 </button>
+
+                                                {openActionMenuAuthId === member.authId && (
+                                                    <div className="absolute right-0 top-10 z-20 min-w-44 rounded-xl border border-[#f0f2f5] bg-white shadow-xl py-1 transform origin-top-right transition-all animate-in fade-in zoom-in-95 duration-200">
+                                                        <button 
+                                                            onClick={() => {
+                                                                setOpenActionMenuAuthId(null);
+                                                                navigate(`/admin/chat`, { state: { selectedUser: member } });
+                                                            }}
+                                                            className="w-full px-4 py-2.5 text-left text-[13px] font-semibold text-[#1a1c1e] hover:bg-[#f8fafc] flex items-center gap-3 transition-colors border-b border-[#f0f2f5]"
+                                                        >
+                                                            <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
+                                                                <MessageSquare size={14} />
+                                                            </div>
+                                                            <span>Send Message</span>
+                                                        </button>
+                                                        
+                                                        <button
+                                                            onClick={() => handleToggleBlock(member)}
+                                                            disabled={submitting}
+                                                            className="w-full px-4 py-2.5 text-left text-[13px] font-semibold text-[#1a1c1e] hover:bg-[#f8fafc] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 transition-colors"
+                                                        >
+                                                            <div className={`p-1.5 rounded-lg ${member.isActive ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-[#28a785]'}`}>
+                                                                {member.isActive ? <Lock size={14} /> : <LockOpen size={14} />}
+                                                            </div>
+                                                            <span>
+                                                                {member.isActive ? "Block Account" : "Unblock Account"}
+                                                            </span>
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
-                                ))}
+                                )})}
                             </tbody>
                         </table>
                     </div>

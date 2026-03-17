@@ -1,18 +1,106 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { fetchWithAuth } from '../../utils/apiHandler';
-import { refreshAccessToken } from './authSlice';
 
 const API_BASE_URL = 'http://localhost:8080';
+
+// Async thunk for fetching Team Access data (Admin only)
+export const fetchTeamAccess = createAsyncThunk(
+    'admin/fetchTeamAccess',
+    async ({ search = '', page = 1, limit = 10 } = {}, { rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const params = new URLSearchParams();
+            if (search) params.append('search', search);
+            params.append('page', page);
+            params.append('limit', limit);
+
+            const response = await fetch(`${API_BASE_URL}/api/users/team-access?${params.toString()}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+
+            const data = await response.json();
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to fetch team access data');
+
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const blockTeamMember = createAsyncThunk(
+    'admin/blockTeamMember',
+    async (authId, { dispatch, rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/users/team-access/${authId}/block`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+
+            const data = await response.json();
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to block team member');
+
+            dispatch(fetchTeamAccess({ page: 1, limit: 50 }));
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const unblockTeamMember = createAsyncThunk(
+    'admin/unblockTeamMember',
+    async (authId, { dispatch, rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/users/team-access/${authId}/unblock`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+
+            const data = await response.json();
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to unblock team member');
+
+            dispatch(fetchTeamAccess({ page: 1, limit: 50 }));
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
 
 // Async thunk for creating a manager (Admin only)
 export const createManager = createAsyncThunk(
     'admin/createManager',
-    async ({ name, email, department, assignedRole }, { dispatch, rejectWithValue }) => {
+    async ({ name, email, department, assignedRole }, { rejectWithValue }) => {
         try {
-            const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/managers`, {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/admin/managers`, {
                 method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
                 body: JSON.stringify({ name, email, department, assignedRole }),
-            }, { dispatch, refreshAction: refreshAccessToken });
+            });
 
             const data = await response.json();
             if (!response.ok) return rejectWithValue(data.message || 'Failed to create manager');
@@ -27,8 +115,14 @@ export const createManager = createAsyncThunk(
 // Async thunk for fetching all vendor applications (Admin only)
 export const fetchVendorApplications = createAsyncThunk(
     'admin/fetchVendorApplications',
-    async ({ status, limit = 50, skip = 0 } = {}, { dispatch, rejectWithValue }) => {
+    async ({ status, limit = 50, skip = 0 } = {}, { rejectWithValue }) => {
         try {
+            const accessToken = localStorage.getItem('accessToken');
+            
+            if (!accessToken) {
+                return rejectWithValue('No access token found');
+            }
+
             const params = new URLSearchParams();
             if (status) params.append('status', status);
             if (limit) params.append('limit', limit);
@@ -36,9 +130,13 @@ export const fetchVendorApplications = createAsyncThunk(
 
             const url = `${API_BASE_URL}/api/vendor/applications${params.toString() ? `?${params.toString()}` : ''}`;
 
-            const response = await fetchWithAuth(url, {
+            const response = await fetch(url, {
                 method: 'GET',
-            }, { dispatch, refreshAction: refreshAccessToken });
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
 
             const data = await response.json();
 
@@ -56,11 +154,21 @@ export const fetchVendorApplications = createAsyncThunk(
 // Async thunk for fetching a single vendor application by ID
 export const fetchVendorApplicationById = createAsyncThunk(
     'admin/fetchVendorApplicationById',
-    async (applicationId, { dispatch, rejectWithValue }) => {
+    async (applicationId, { rejectWithValue }) => {
         try {
-            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/registration/status/${applicationId}`, {
+            const accessToken = localStorage.getItem('accessToken');
+            
+            if (!accessToken) {
+                return rejectWithValue('No access token found');
+            }
+
+            const response = await fetch(`${API_BASE_URL}/api/vendor/registration/status/${applicationId}`, {
                 method: 'GET',
-            }, { dispatch, refreshAction: refreshAccessToken });
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
 
             const data = await response.json();
 
@@ -80,9 +188,16 @@ export const approveVendorApplication = createAsyncThunk(
     'admin/approveVendorApplication',
     async (applicationId, { dispatch, rejectWithValue }) => {
         try {
-            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/applications/${applicationId}/approve`, {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/approve`, {
                 method: 'PATCH',
-            }, { dispatch, refreshAction: refreshAccessToken });
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
 
             const data = await response.json();
             if (!response.ok) return rejectWithValue(data.message || 'Failed to approve vendor');
@@ -100,10 +215,17 @@ export const rejectVendorApplication = createAsyncThunk(
     'admin/rejectVendorApplication',
     async ({ applicationId, rejectionReason }, { dispatch, rejectWithValue }) => {
         try {
-            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/applications/${applicationId}/reject`, {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/reject`, {
                 method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
                 body: JSON.stringify({ rejectionReason }),
-            }, { dispatch, refreshAction: refreshAccessToken });
+            });
 
             const data = await response.json();
             if (!response.ok) return rejectWithValue(data.message || 'Failed to reject application');
@@ -121,10 +243,17 @@ export const requestVendorDocuments = createAsyncThunk(
     'admin/requestVendorDocuments',
     async ({ applicationId, requestedDocuments }, { dispatch, rejectWithValue }) => {
         try {
-            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/applications/${applicationId}/request-documents`, {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/request-documents`, {
                 method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
                 body: JSON.stringify({ requestedDocuments }),
-            }, { dispatch, refreshAction: refreshAccessToken });
+            });
 
             const data = await response.json();
             if (!response.ok) return rejectWithValue(data.message || 'Failed to request documents');
@@ -142,10 +271,17 @@ export const verifyDocument = createAsyncThunk(
     'admin/verifyDocument',
     async ({ applicationId, documentType, documentId }, { dispatch, rejectWithValue }) => {
         try {
-            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/applications/${applicationId}/documents/verify`, {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/documents/verify`, {
                 method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
                 body: JSON.stringify({ documentType, documentId }),
-            }, { dispatch, refreshAction: refreshAccessToken });
+            });
 
             const data = await response.json();
             if (!response.ok) return rejectWithValue(data.message || 'Failed to verify document');
@@ -163,10 +299,17 @@ export const rejectDocument = createAsyncThunk(
     'admin/rejectDocument',
     async ({ applicationId, documentType, documentId, rejectionReason }, { dispatch, rejectWithValue }) => {
         try {
-            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/applications/${applicationId}/documents/reject`, {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/documents/reject`, {
                 method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
                 body: JSON.stringify({ documentType, documentId, rejectionReason }),
-            }, { dispatch, refreshAction: refreshAccessToken });
+            });
 
             const data = await response.json();
             if (!response.ok) return rejectWithValue(data.message || 'Failed to reject document');
@@ -180,6 +323,22 @@ export const rejectDocument = createAsyncThunk(
 );
 
 const initialState = {
+    // Team access
+    teamMembers: [],
+    teamStats: {
+        totalMembers: 0,
+        admins: 0,
+        managers: 0,
+        activeMembers: 0,
+        pendingInvites: 0,
+    },
+    teamPagination: {
+        page: 1,
+        limit: 10,
+        total: 0,
+        totalPages: 0,
+    },
+
     // Vendor applications
     vendorApplications: [],
     selectedVendorApplication: null,
@@ -189,11 +348,13 @@ const initialState = {
     createManagerSuccess: false,
     
     // Loading states
+    teamLoading: false,
     loading: false,
     loadingDetails: false,
     submitting: false,
     
     // Error states
+    teamError: null,
     error: null,
     detailsError: null,
     submitError: null,
@@ -208,6 +369,7 @@ const adminSlice = createSlice({
             state.detailsError = null;
         },
         clearAdminError: (state) => {
+            state.teamError = null;
             state.error = null;
             state.detailsError = null;
         },
@@ -218,6 +380,43 @@ const adminSlice = createSlice({
     },
     extraReducers: (builder) => {
         builder
+            // Fetch team access
+            .addCase(fetchTeamAccess.pending, (state) => {
+                state.teamLoading = true;
+                state.teamError = null;
+            })
+            .addCase(fetchTeamAccess.fulfilled, (state, action) => {
+                state.teamLoading = false;
+                state.teamMembers = action.payload.members || [];
+                state.teamStats = action.payload.stats || state.teamStats;
+                state.teamPagination = action.payload.pagination || state.teamPagination;
+            })
+            .addCase(fetchTeamAccess.rejected, (state, action) => {
+                state.teamLoading = false;
+                state.teamError = action.payload;
+            })
+            .addCase(blockTeamMember.pending, (state) => {
+                state.submitting = true;
+                state.submitError = null;
+            })
+            .addCase(blockTeamMember.fulfilled, (state) => {
+                state.submitting = false;
+            })
+            .addCase(blockTeamMember.rejected, (state, action) => {
+                state.submitting = false;
+                state.submitError = action.payload;
+            })
+            .addCase(unblockTeamMember.pending, (state) => {
+                state.submitting = true;
+                state.submitError = null;
+            })
+            .addCase(unblockTeamMember.fulfilled, (state) => {
+                state.submitting = false;
+            })
+            .addCase(unblockTeamMember.rejected, (state, action) => {
+                state.submitting = false;
+                state.submitError = action.payload;
+            })
             // Fetch all vendor applications
             .addCase(fetchVendorApplications.pending, (state) => {
                 state.loading = true;
