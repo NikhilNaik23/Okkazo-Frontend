@@ -58,6 +58,6 @@ export const privacyPolicy = {
 
 export const fileUploadConfig = {
   maxFileSize: 5 * 1024 * 1024, // 5MB in bytes
-  allowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
+  allowedTypes: ['image/jpeg', 'image/png', 'image/jpg'],
   maxOtherProofs: 3
 };

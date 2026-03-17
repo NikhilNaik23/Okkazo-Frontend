@@ -11,6 +11,9 @@ import OrbitalTickets from './OrbitalTickets';
 import OrbitalPromote from './OrbitalPromote';
 import CustomDatePicker from '../PromoteEvent/Wizard/CustomDatePicker';
 
+const MAX_BANNER_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+const MAX_BANNER_FILE_SIZE_LABEL = '50MB';
+
 const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSaveDraft, handleAddTicket, handleRemoveTicket, handleTicketChange }) => {
     const [activeIndex, setActiveIndex] = useState(0);
     const [isMapOpen, setIsMapOpen] = useState(false);
@@ -495,6 +498,12 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                             onChange={(e) => {
                                                 const file = e.target.files[0];
                                                 if (file) {
+                                                    if (file.size > MAX_BANNER_FILE_SIZE_BYTES) {
+                                                        window.alert(`File size exceeds the ${MAX_BANNER_FILE_SIZE_LABEL} limit.`);
+                                                        e.target.value = '';
+                                                        return;
+                                                    }
+
                                                     // Store the raw File for multipart upload + data URL for preview
                                                     const reader = new FileReader();
                                                     reader.onloadend = () => setFormData(prev => ({
@@ -527,7 +536,7 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                             )}
                                         </div>
                                     </div>
-                                    <p className="mt-4 text-[10px] font-bold text-teal-600/30 tracking-widest uppercase text-center">Required for public listings.</p>
+                                    <p className="mt-4 text-[10px] font-bold text-teal-600/30 tracking-widest uppercase text-center">Required for public listings. Max file size: {MAX_BANNER_FILE_SIZE_LABEL}.</p>
                                 </div>
                             )}
 
