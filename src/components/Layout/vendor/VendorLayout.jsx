@@ -1,19 +1,58 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { BsBell, BsGear } from "react-icons/bs";
+import { useDispatch, useSelector } from "react-redux";
 import { vendorSidebarMenus, vendorLayoutData } from "../../../data/vendorLayoutData.jsx";
 import VendorNotificationSidebar from "./VendorNotificationSidebar";
+import VendorImagesOnboardingModal from "../../Vendor/Profile/VendorImagesOnboardingModal";
+import {
+  fetchVendorApplication,
+  selectUserRole,
+  selectVendorApplication,
+  selectVendorApplicationLoading,
+} from "../../../store/slices/authSlice";
 
 const VendorLayout = () => {
+  const dispatch = useDispatch();
   const location = useLocation();
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [isImagesModalOpen, setIsImagesModalOpen] = useState(false);
+
+  const userRole = useSelector(selectUserRole);
+  const vendorApplication = useSelector(selectVendorApplication);
+  const vendorApplicationLoading = useSelector(selectVendorApplicationLoading);
 
   const sidebarMenus = vendorSidebarMenus;
   const vendorData = vendorLayoutData;
   const isMessagesPage = location.pathname === '/vendor/messages' || location.pathname.includes('/vendor/event/');
 
+  const needsImages = useMemo(() => {
+    if (userRole !== 'VENDOR') return false;
+    if (!vendorApplication) return false;
+    if (vendorApplication.status !== 'APPROVED') return false;
+
+    const images = vendorApplication.images;
+    return (images?.profile == null) || (images?.banner == null);
+  }, [userRole, vendorApplication]);
+
+  useEffect(() => {
+    if (userRole === 'VENDOR' && !vendorApplication && !vendorApplicationLoading) {
+      dispatch(fetchVendorApplication());
+    }
+  }, [dispatch, userRole, vendorApplication, vendorApplicationLoading]);
+
+  useEffect(() => {
+    if (needsImages) {
+      setIsImagesModalOpen(true);
+      return;
+    }
+
+    setIsImagesModalOpen(false);
+  }, [needsImages]);
+
   return (
     <div className="flex min-h-screen bg-[#e9eff1] font-sans text-[#0b2d49]">
+      <VendorImagesOnboardingModal isOpen={isImagesModalOpen} />
       {/* Sidebar */}
       <aside className="w-72 bg-white border-r border-[#708aa0]/10 flex flex-col sticky top-0 h-screen z-20">
         <div className="p-8">
@@ -62,7 +101,7 @@ const VendorLayout = () => {
             <span className="text-xl"><BsGear /></span>
             Settings
           </Link>
-          <div className="p-2 bg-[#f3ddb1]/30 rounded-[2rem] flex items-center gap-4 border border-[#f3ddb1]/50 shadow-sm group hover:border-[#d7a444]/50 transition-all cursor-pointer">
+          <div className="p-2 bg-[#f3ddb1]/30 rounded-4xl flex items-center gap-4 border border-[#f3ddb1]/50 shadow-sm group hover:border-[#d7a444]/50 transition-all cursor-pointer">
             <div className="w-12 h-12 rounded-full bg-linear-to-br from-[#d7a444] to-[#d0a862] shadow-inner border-2 border-white group-hover:scale-105 transition-transform"></div>
             <div className="flex-1 min-w-0">
               <p className="font-black text-sm truncate">{vendorData.name}</p>
