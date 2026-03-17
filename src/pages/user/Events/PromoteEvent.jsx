@@ -27,15 +27,15 @@ const PromoteEvent = () => {
     const steps = promoteEventSteps.map(step => ({
         ...step,
         completed: (
-            (step.id === 1 && !!formData.eventName && !!formData.category && formData.category !== 'Other') ||
-            (step.id === 2 && !!formData.banner) ||
+            (step.id === 1 && !!formData.eventName && !!formData.category && (formData.category !== 'Other' || !!formData.customCategory?.trim()) && (formData.eventDescription?.trim().length || 0) >= 10) ||
+            (step.id === 2 && !!formData.banner && !!formData.bannerFile) ||
             (step.id === 3 &&
                 formData.totalCapacity > 0 &&
                 formData.tickets.length > 0 &&
                 formData.tickets.reduce((sum, t) => sum + (parseInt(t.quantity) || 0), 0) === parseInt(formData.totalCapacity) &&
                 formData.tickets.every(t => !!t.name && (formData.ticketType === 'free' || (t.price !== "" && t.price > 0)))
             ) ||
-            (step.id === 4 && !!formData.startDate && !!formData.endDate) ||
+            (step.id === 4 && !!formData.startDate && !!formData.endDate && !!formData.ticketReleaseDate && !!formData.ticketSalesEndDate && !!formData.address && !!formData.lat && !!formData.lng) ||
             (step.id === 5) || // Promote is optional
             (step.id === 6 && formData.authDocuments?.length > 0) || // Verify: at least 1 doc
             (step.id === 7) // Review
@@ -114,13 +114,12 @@ const PromoteEvent = () => {
         }
     };
 
-    const handlePaymentSuccess = () => {
-        // Create new campaign object
-        // Create new campaign object
+    const handlePaymentSuccess = (eventId, transactionId) => {
+        // Build campaign object with real eventId from backend
         const isFree = formData.tickets.every(t => !t.price || parseFloat(t.price) === 0);
 
         const newCampaign = {
-            id: `new_${Date.now()}`,
+            id: eventId || `new_${Date.now()}`,
             title: formData.eventName || "Untitled Event",
             subtitle: (formData.category || "Uncategorized").toUpperCase(),
             status: "Pending Review",
@@ -130,6 +129,7 @@ const PromoteEvent = () => {
             centerText: "In Review",
             gradient: "bg-gradient-to-b from-[#EBF4F6]/80 via-[#7AB2B2]/20 to-white/90",
             buttonText: "View Submission",
+            transactionId: transactionId || null,
             createdAt: new Date().toISOString()
         };
 

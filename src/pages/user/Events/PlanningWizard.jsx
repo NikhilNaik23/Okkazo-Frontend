@@ -46,6 +46,7 @@ const PlanningWizard = () => {
         tickets: [{ id: Date.now(), name: "General Admission", price: null, quantity: "" }], // Prepopulate defaut tier
         totalCapacity: "",
         ticketType: "paid",
+        eventDescription: "",
         promotions: { featured: false, email: false, social: false, insights: false },
     });
 
@@ -96,6 +97,7 @@ const PlanningWizard = () => {
                         tickets: [{ id: Date.now(), name: "General Admission", price: null, quantity: "" }],
                         totalCapacity: "",
                         ticketType: "paid",
+                        eventDescription: "",
                         promotions: { featured: false, email: false, social: false, insights: false }
                     };
 
@@ -465,7 +467,10 @@ const PlanningWizard = () => {
                                         formData.locationValid &&
                                         (formData.listingType === 'Public' ? (
                                             formData.publicStartTime && formData.publicEndTime && formData.salesStartTime &&
-                                            formData.banner &&
+                                            (new Date(formData.publicEndTime) > new Date(formData.publicStartTime)) &&
+                                            (new Date(formData.salesStartTime) < new Date(formData.publicStartTime)) &&
+                                            (!formData.salesEndTime || (new Date(formData.salesEndTime) > new Date(formData.salesStartTime) && new Date(formData.salesEndTime) < new Date(formData.publicStartTime))) &&
+                                            formData.banner && formData.eventDescription &&
                                             formData.totalCapacity > 0 &&
                                             formData.tickets.reduce((a, t) => a + (parseInt(t.quantity) || 0), 0) === parseInt(formData.totalCapacity)
                                         ) : (

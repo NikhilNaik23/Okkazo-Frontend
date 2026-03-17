@@ -1,23 +1,18 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { fetchWithAuth } from '../../utils/apiHandler';
+import { refreshAccessToken } from './authSlice';
 
 const API_BASE_URL = 'http://localhost:8080';
 
 // Async thunk for creating a manager (Admin only)
 export const createManager = createAsyncThunk(
     'admin/createManager',
-    async ({ name, email, department, assignedRole }, { rejectWithValue }) => {
+    async ({ name, email, department, assignedRole }, { dispatch, rejectWithValue }) => {
         try {
-            const accessToken = localStorage.getItem('accessToken');
-            if (!accessToken) return rejectWithValue('No access token found');
-
-            const response = await fetch(`${API_BASE_URL}/api/admin/managers`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/managers`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
                 body: JSON.stringify({ name, email, department, assignedRole }),
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await response.json();
             if (!response.ok) return rejectWithValue(data.message || 'Failed to create manager');
@@ -32,14 +27,8 @@ export const createManager = createAsyncThunk(
 // Async thunk for fetching all vendor applications (Admin only)
 export const fetchVendorApplications = createAsyncThunk(
     'admin/fetchVendorApplications',
-    async ({ status, limit = 50, skip = 0 } = {}, { rejectWithValue }) => {
+    async ({ status, limit = 50, skip = 0 } = {}, { dispatch, rejectWithValue }) => {
         try {
-            const accessToken = localStorage.getItem('accessToken');
-            
-            if (!accessToken) {
-                return rejectWithValue('No access token found');
-            }
-
             const params = new URLSearchParams();
             if (status) params.append('status', status);
             if (limit) params.append('limit', limit);
@@ -47,13 +36,9 @@ export const fetchVendorApplications = createAsyncThunk(
 
             const url = `${API_BASE_URL}/api/vendor/applications${params.toString() ? `?${params.toString()}` : ''}`;
 
-            const response = await fetch(url, {
+            const response = await fetchWithAuth(url, {
                 method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await response.json();
 
@@ -71,21 +56,11 @@ export const fetchVendorApplications = createAsyncThunk(
 // Async thunk for fetching a single vendor application by ID
 export const fetchVendorApplicationById = createAsyncThunk(
     'admin/fetchVendorApplicationById',
-    async (applicationId, { rejectWithValue }) => {
+    async (applicationId, { dispatch, rejectWithValue }) => {
         try {
-            const accessToken = localStorage.getItem('accessToken');
-            
-            if (!accessToken) {
-                return rejectWithValue('No access token found');
-            }
-
-            const response = await fetch(`${API_BASE_URL}/api/vendor/registration/status/${applicationId}`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/registration/status/${applicationId}`, {
                 method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await response.json();
 
@@ -105,16 +80,9 @@ export const approveVendorApplication = createAsyncThunk(
     'admin/approveVendorApplication',
     async (applicationId, { dispatch, rejectWithValue }) => {
         try {
-            const accessToken = localStorage.getItem('accessToken');
-            if (!accessToken) return rejectWithValue('No access token found');
-
-            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/approve`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/applications/${applicationId}/approve`, {
                 method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await response.json();
             if (!response.ok) return rejectWithValue(data.message || 'Failed to approve vendor');
@@ -132,17 +100,10 @@ export const rejectVendorApplication = createAsyncThunk(
     'admin/rejectVendorApplication',
     async ({ applicationId, rejectionReason }, { dispatch, rejectWithValue }) => {
         try {
-            const accessToken = localStorage.getItem('accessToken');
-            if (!accessToken) return rejectWithValue('No access token found');
-
-            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/reject`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/applications/${applicationId}/reject`, {
                 method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
                 body: JSON.stringify({ rejectionReason }),
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await response.json();
             if (!response.ok) return rejectWithValue(data.message || 'Failed to reject application');
@@ -160,17 +121,10 @@ export const requestVendorDocuments = createAsyncThunk(
     'admin/requestVendorDocuments',
     async ({ applicationId, requestedDocuments }, { dispatch, rejectWithValue }) => {
         try {
-            const accessToken = localStorage.getItem('accessToken');
-            if (!accessToken) return rejectWithValue('No access token found');
-
-            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/request-documents`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/applications/${applicationId}/request-documents`, {
                 method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
                 body: JSON.stringify({ requestedDocuments }),
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await response.json();
             if (!response.ok) return rejectWithValue(data.message || 'Failed to request documents');
@@ -188,17 +142,10 @@ export const verifyDocument = createAsyncThunk(
     'admin/verifyDocument',
     async ({ applicationId, documentType, documentId }, { dispatch, rejectWithValue }) => {
         try {
-            const accessToken = localStorage.getItem('accessToken');
-            if (!accessToken) return rejectWithValue('No access token found');
-
-            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/documents/verify`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/applications/${applicationId}/documents/verify`, {
                 method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
                 body: JSON.stringify({ documentType, documentId }),
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await response.json();
             if (!response.ok) return rejectWithValue(data.message || 'Failed to verify document');
@@ -216,17 +163,10 @@ export const rejectDocument = createAsyncThunk(
     'admin/rejectDocument',
     async ({ applicationId, documentType, documentId, rejectionReason }, { dispatch, rejectWithValue }) => {
         try {
-            const accessToken = localStorage.getItem('accessToken');
-            if (!accessToken) return rejectWithValue('No access token found');
-
-            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/documents/reject`, {
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/vendor/applications/${applicationId}/documents/reject`, {
                 method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
                 body: JSON.stringify({ documentType, documentId, rejectionReason }),
-            });
+            }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await response.json();
             if (!response.ok) return rejectWithValue(data.message || 'Failed to reject document');

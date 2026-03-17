@@ -10,10 +10,14 @@ export const promoteEventSteps = [
 
 export const initialPromoteEventState = {
     eventName: "",
-    category: "Music",
+    eventDescription: "",
+    category: "Concert",
+    customCategory: "",
     privacy: "public",
     startDate: "",
     endDate: "",
+    ticketReleaseDate: "",
+    ticketSalesEndDate: "",
     address: "",
     lat: null,
     lng: null,
@@ -21,7 +25,8 @@ export const initialPromoteEventState = {
     ticketType: "paid", // "paid" or "free"
     tickets: [],
     banner: null,
-    authDocuments: [], // Array of files { name, size, type, preview }
+    bannerFile: null,   // raw File object for upload
+    authDocuments: [],  // Array of { name, size, type, file, preview }
     promotions: {
         featured: false,
         email: false,
@@ -32,14 +37,7 @@ export const initialPromoteEventState = {
 };
 
 export const eventCategories = [
-    'Music', 
-    'Art & Culture', 
-    'Food & Drink', 
-    'Nightlife', 
-    'Wellness',
-    'Technology',
-    'Conferences',
-    'Sports'
+    "Concert", "Festival", "Exhibition", "Workshop", "Seminar", "Other"
 ];
 export const promotePrices = {
     featured: 500,

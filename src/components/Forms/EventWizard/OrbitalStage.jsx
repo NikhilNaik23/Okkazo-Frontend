@@ -9,6 +9,7 @@ import { steps, publicTypes, privateTypes } from '../../../data/orbitalStageData
 import { DatePicker, TimePicker, ProgressIndicator, MapModal } from './OrbitalStage/index';
 import OrbitalTickets from './OrbitalTickets';
 import OrbitalPromote from './OrbitalPromote';
+import CustomDatePicker from '../PromoteEvent/Wizard/CustomDatePicker';
 
 const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSaveDraft, handleAddTicket, handleRemoveTicket, handleTicketChange }) => {
     const [activeIndex, setActiveIndex] = useState(0);
@@ -33,9 +34,10 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
 
     const eventTypes = formData.listingType === 'Public' ? publicTypes : privateTypes;
 
-    const dynamicSteps = formData.listingType === 'Public' ? steps.filter(s => s.id !== 'date').map(s => {
-        if (s.id === 'guests') return { id: 'banner', label: 'Event Banner', hint: 'Upload Banner' };
-        return s;
+    const dynamicSteps = formData.listingType === 'Public' ? steps.filter(s => s.id !== 'date').flatMap(s => {
+        if (s.id === 'title') return [s, { id: 'description', label: 'Description', hint: 'Tell your story' }];
+        if (s.id === 'guests') return [{ id: 'banner', label: 'Event Banner', hint: 'Upload Banner' }];
+        return [s];
     }).concat([
         { id: 'tickets', label: 'Tickets', hint: 'Define value tiers' },
         { id: 'promote', label: 'Promotion', hint: 'Amplify your reach' }
@@ -47,12 +49,20 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
         switch (currentStep.id) {
             case 'listing': return !!formData.listingType;
             case 'title': return !!formData.title;
+            case 'description': return !!formData.eventDescription?.trim();
             case 'type': return !!formData.type && (formData.type !== 'Other' || formData.customType?.trim());
             case 'date': return !!formData.date && formData.date >= minDateString;
             case 'location': return !!formData.locationValid;
             case 'time':
                 if (formData.listingType === 'Public') {
-                    return !!formData.publicStartTime && !!formData.publicEndTime && !!formData.salesStartTime;
+                    const hasTimes = !!formData.publicStartTime && !!formData.publicEndTime && !!formData.salesStartTime;
+                    if (!hasTimes) return false;
+                    const start = new Date(formData.publicStartTime);
+                    const end = new Date(formData.publicEndTime);
+                    const salesStart = new Date(formData.salesStartTime);
+                    const salesEnd = !!formData.salesEndTime ? new Date(formData.salesEndTime) : null;
+
+                    return end > start && (salesEnd && salesEnd > salesStart && salesEnd < start) && salesStart < start;
                 }
                 return !!formData.startTime;
             case 'guests': return !!formData.guests && formData.guests > 0;
@@ -179,6 +189,26 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                 </div>
                             )}
 
+                            {/* 2b. Event Description (Public Only) */}
+                            {currentStep.id === 'description' && (
+                                <div className="max-w-md">
+                                    <textarea
+                                        autoFocus
+                                        maxLength={1000}
+                                        className="w-full bg-transparent border-b border-teal-900/10 py-4 text-2xl font-serif-premium text-teal-900 outline-none focus:border-teal-700 transition-all placeholder:opacity-10 resize-none h-32"
+                                        placeholder="Describe the spirit of your event..."
+                                        value={formData.eventDescription || ''}
+                                        onChange={(e) => handleChange('eventDescription', e.target.value)}
+                                    />
+                                    <div className="flex justify-between mt-4">
+                                        <p className="text-[10px] font-bold text-teal-600/30 tracking-widest uppercase">A brief overview for your public audience.</p>
+                                        <p className="text-[10px] font-bold text-teal-600/30 tracking-widest uppercase">
+                                            {formData.eventDescription?.length || 0} / 1000
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* 3. Event Type */}
                             {currentStep.id === 'type' && (
                                 <div className="max-w-md">
@@ -297,43 +327,97 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                             {/* 6. Time */}
                             {currentStep.id === 'time' && (
                                 formData.listingType === 'Public' ? (
-                                    <div className="w-full text-left space-y-4 animate-in fade-in overflow-visible">
-                                        <div className="bg-white/80 backdrop-blur-md rounded-2xl p-4 border border-teal-900/10 shadow-sm">
-                                            <div className="flex items-center gap-2 mb-4 text-teal-700">
-                                                <BsClock size={16} />
-                                                <h3 className="font-serif-premium italic text-xl">Event Schedule</h3>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <p className="text-[9px] font-black uppercase text-teal-700 tracking-widest mb-1">Starts</p>
-                                                    <input type="datetime-local" min={minDateString + "T00:00"} className="w-full bg-white border border-teal-900/10 p-2 rounded-xl text-teal-900 outline-none focus:border-teal-700 text-xs" value={formData.publicStartTime || ''} onChange={e => handleChange('publicStartTime', e.target.value)} />
+                                    <div className="w-full text-left space-y-6 animate-in fade-in overflow-visible pt-4 pb-20 relative z-0">
+                                        <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-teal-900/10 shadow-lg relative z-10 focus-within:z-40 transition-all">
+                                            <div className="flex items-center gap-3 mb-6 text-teal-700">
+                                                <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center">
+                                                    <BsClock size={20} />
                                                 </div>
-                                                <div>
-                                                    <p className="text-[9px] font-black uppercase text-teal-700 tracking-widest mb-1">Ends</p>
-                                                    <input type="datetime-local" min={formData.publicStartTime || minDateString + "T00:00"} className="w-full bg-white border border-teal-900/10 p-2 rounded-xl text-teal-900 outline-none focus:border-teal-700 text-xs" value={formData.publicEndTime || ''} onChange={e => handleChange('publicEndTime', e.target.value)} />
+                                                <h3 className="font-serif-premium italic text-2xl">Event Schedule</h3>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-6">
+                                                <div className="space-y-2">
+                                                    <p className="text-[10px] font-black uppercase text-teal-700/60 tracking-[0.2em] ml-1">Starts</p>
+                                                    <CustomDatePicker
+                                                        selected={formData.publicStartTime ? new Date(formData.publicStartTime) : null}
+                                                        onChange={(date) => handleChange('publicStartTime', date)}
+                                                        minDate={(() => {
+                                                            const d = new Date();
+                                                            d.setDate(d.getDate() + 6);
+                                                            return d;
+                                                        })()}
+                                                        dayClassName={(date) => {
+                                                            const today = new Date();
+                                                            today.setHours(0, 0, 0, 0);
+                                                            const highDemandStart = new Date(today);
+                                                            highDemandStart.setDate(today.getDate() + 6);
+                                                            const highDemandEnd = new Date(highDemandStart);
+                                                            highDemandEnd.setDate(highDemandStart.getDate() + 15);
+                                                            return (date >= highDemandStart && date <= highDemandEnd) ? "react-datepicker__day--high-demand" : undefined;
+                                                        }}
+                                                        placeholderText="Event Start..."
+                                                        className="!p-4 !rounded-xl text-xs"
+                                                        placement="bottom-start"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <p className="text-[10px] font-black uppercase text-teal-700/60 tracking-[0.2em] ml-1">Ends</p>
+                                                    <CustomDatePicker
+                                                        selected={formData.publicEndTime ? new Date(formData.publicEndTime) : null}
+                                                        onChange={(date) => handleChange('publicEndTime', date)}
+                                                        minDate={formData.publicStartTime ? new Date(formData.publicStartTime) : new Date()}
+                                                        placeholderText="Event End..."
+                                                        className="!p-4 !rounded-xl text-xs"
+                                                        placement="bottom-start"
+                                                    />
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="bg-white/80 backdrop-blur-md rounded-2xl p-4 border border-teal-900/10 shadow-sm">
-                                            <div className="flex items-center gap-2 mb-4 text-teal-700">
-                                                <BsClock size={16} />
-                                                <h3 className="font-serif-premium italic text-xl">Ticket Availability</h3>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <p className="text-[9px] font-black uppercase text-teal-700 tracking-widest mb-1">Sales Start</p>
-                                                    <input type="datetime-local" className="w-full bg-white border border-teal-900/10 p-2 rounded-xl text-teal-900 outline-none focus:border-teal-700 text-xs" value={formData.salesStartTime || ''} onChange={e => handleChange('salesStartTime', e.target.value)} />
+                                        <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-teal-900/10 shadow-lg relative transition-all focus-within:z-50 focus-within:ring-2 focus-within:ring-teal-500/20 mb-12">
+                                            <div className="flex items-center gap-3 mb-6 text-teal-700">
+                                                <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center">
+                                                    <BsClock size={20} />
                                                 </div>
-                                                <div>
-                                                    <p className="text-[9px] font-black uppercase text-teal-700 tracking-widest mb-1">Sales End (Optional)</p>
-                                                    <input type="datetime-local" min={formData.salesStartTime || ""} className="w-full bg-white border border-teal-900/10 p-2 rounded-xl text-teal-900 outline-none focus:border-teal-700 text-xs" value={formData.salesEndTime || ''} onChange={e => handleChange('salesEndTime', e.target.value)} />
+                                                <h3 className="font-serif-premium italic text-2xl">Ticket Availability</h3>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-6">
+                                                <div className="space-y-2">
+                                                    <p className="text-[10px] font-black uppercase text-teal-700/60 tracking-[0.2em] ml-1">Sales Start</p>
+                                                    <CustomDatePicker
+                                                        selected={formData.salesStartTime ? new Date(formData.salesStartTime) : null}
+                                                        onChange={(date) => handleChange('salesStartTime', date)}
+                                                        minDate={(() => {
+                                                            const d = new Date();
+                                                            d.setDate(d.getDate() + 1);
+                                                            d.setHours(0, 0, 0, 0);
+                                                            return d;
+                                                        })()}
+                                                        placeholderText="Sales Start..."
+                                                        className="!p-4 !rounded-xl text-xs"
+                                                        placement="top-start"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <p className="text-[10px] font-black uppercase text-teal-700/60 tracking-[0.2em] ml-1">Sales End</p>
+                                                    <CustomDatePicker
+                                                        selected={formData.salesEndTime ? new Date(formData.salesEndTime) : null}
+                                                        onChange={(date) => handleChange('salesEndTime', date)}
+                                                        minDate={formData.salesStartTime ? new Date(formData.salesStartTime) : new Date()}
+                                                        maxDate={formData.publicStartTime ? new Date(formData.publicStartTime) : undefined}
+                                                        placeholderText="Sales End..."
+                                                        className="!p-4 !rounded-xl text-xs"
+                                                        placement="top-start"
+                                                    />
                                                 </div>
                                             </div>
                                         </div>
-                                        <p className="text-[9px] mt-2 font-bold text-teal-600/50 tracking-widest uppercase flex items-center gap-2">
-                                            <BsClock size={12} /> Scheduled in local timezone
-                                        </p>
+                                        <div className="bg-[#088395]/5 p-4 rounded-2xl flex gap-3 items-start border border-[#088395]/10 relative z-0 max-w-md">
+                                            <BsClock className="text-[#088395] mt-0.5 shrink-0" size={14} />
+                                            <p className="text-[#09637E]/70 text-[9px] font-bold uppercase tracking-wider leading-relaxed">
+                                                Scheduled in your local timezone. Attendees will see the time converted to their local time automatically.
+                                            </p>
+                                        </div>
                                     </div>
                                 ) : (
                                     <div className="relative w-max">
@@ -411,8 +495,13 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                             onChange={(e) => {
                                                 const file = e.target.files[0];
                                                 if (file) {
+                                                    // Store the raw File for multipart upload + data URL for preview
                                                     const reader = new FileReader();
-                                                    reader.onloadend = () => setFormData(prev => ({ ...prev, banner: reader.result }));
+                                                    reader.onloadend = () => setFormData(prev => ({
+                                                        ...prev,
+                                                        banner: reader.result,   // data URL → preview only
+                                                        bannerFile: file,        // raw File → sent to backend
+                                                    }));
                                                     reader.readAsDataURL(file);
                                                 }
                                             }}

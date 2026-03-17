@@ -68,7 +68,20 @@ const StepSchedule = ({ formData, setFormData }) => {
                             <CustomDatePicker
                                 selected={formData.startDate ? new Date(formData.startDate) : null}
                                 onChange={(date) => setFormData({ ...formData, startDate: date })}
-                                minDate={minDate}
+                                minDate={(() => {
+                                    const d = new Date();
+                                    d.setDate(d.getDate() + 11);
+                                    return d;
+                                })()}
+                                dayClassName={(date) => {
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0);
+                                    const highDemandStart = new Date(today);
+                                    highDemandStart.setDate(today.getDate() + 6);
+                                    const highDemandEnd = new Date(highDemandStart);
+                                    highDemandEnd.setDate(highDemandStart.getDate() + 15);
+                                    return (date >= highDemandStart && date <= highDemandEnd) ? "react-datepicker__day--high-demand" : undefined;
+                                }}
                                 placeholderText="Select Event Start..."
                                 className="w-full"
                             />
@@ -104,17 +117,23 @@ const StepSchedule = ({ formData, setFormData }) => {
                             <CustomDatePicker
                                 selected={formData.ticketReleaseDate ? new Date(formData.ticketReleaseDate) : null}
                                 onChange={(date) => setFormData({ ...formData, ticketReleaseDate: date })}
-                                minDate={minDate}
+                                minDate={(() => {
+                                    const d = new Date();
+                                    d.setDate(d.getDate() + 1);
+                                    d.setHours(0, 0, 0, 0);
+                                    return d;
+                                })()}
                                 placeholderText="When to publish tickets..."
                                 className="w-full"
                             />
                         </div>
                         <div className="space-y-3">
-                            <p className="text-[#088395] font-black uppercase tracking-[0.2em] text-[10px] ml-1">Sales End (Optional)</p>
+                            <p className="text-[#088395] font-black uppercase tracking-[0.2em] text-[10px] ml-1">Sales End</p>
                             <CustomDatePicker
                                 selected={formData.ticketSalesEndDate ? new Date(formData.ticketSalesEndDate) : null}
                                 onChange={(date) => setFormData({ ...formData, ticketSalesEndDate: date })}
                                 minDate={formData.ticketReleaseDate ? new Date(formData.ticketReleaseDate) : minDate}
+                                maxDate={formData.startDate ? new Date(formData.startDate) : undefined}
                                 placeholderText="When to close sales..."
                                 className="w-full"
                             />
@@ -122,7 +141,7 @@ const StepSchedule = ({ formData, setFormData }) => {
                     </div>
                 </div>
 
-                <div className="bg-[#088395]/5 p-6 rounded-2xl flex gap-4 items-start border border-[#088395]/10 relative z-10">
+                <div className="bg-[#088395]/5 p-6 rounded-2xl flex gap-4 items-start border border-[#088395]/10 relative z-0">
                     <BsInfoCircle className="text-[#088395] mt-1 shrink-0" size={18} />
                     <p className="text-[#09637E]/70 text-[11px] font-bold uppercase tracking-wider leading-relaxed">
                         Scheduled in your local timezone. Attendees will see the time converted to their local time automatically.
