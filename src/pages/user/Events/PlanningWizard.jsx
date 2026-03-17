@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { BsArrowRight } from "react-icons/bs";
+import { useDispatch } from "react-redux";
 import SidebarProgress from "../../../components/Forms/EventWizard/SidebarProgress";
 import SidebarOverview from "../../../components/Forms/EventWizard/SidebarOverview";
 import OrbitalStage from "../../../components/Forms/EventWizard/OrbitalStage";
@@ -16,10 +17,15 @@ import StepPayment from "../../../components/Forms/EventWizard/StepPayment";
 import { myOrganizedEvents } from "../../../data/myEventsData";
 import StepTickets from "../../../components/Forms/PromoteEvent/Wizard/StepTickets";
 import StepPromote from "../../../components/Forms/PromoteEvent/Wizard/StepPromote";
+import { confirmPlanning, fetchPlanningByEventId } from "../../../store/slices/planningSlice";
+
+const _motion = motion;
+const DEFAULT_TICKET_TIER_ID = 'default-tier';
 
 const PlanningWizard = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
+    const dispatch = useDispatch();
     const [currentStep, setCurrentStep] = useState(1);
     const [isPreviewMode, setIsPreviewMode] = useState(false);
     const [activeServiceTab, setActiveServiceTab] = useState(0); // Index of active service tab
@@ -40,10 +46,11 @@ const PlanningWizard = () => {
         date: "",
         startTime: "",
         endTime: "",
+        guests: "",
         services: [], // Start with empty selection
         vendors: {}, // { 'Venue': vendorObj, 'Catering': vendorObj }
         isPaid: false, // Payment status
-        tickets: [{ id: Date.now(), name: "General Admission", price: null, quantity: "" }], // Prepopulate defaut tier
+        tickets: [{ id: DEFAULT_TICKET_TIER_ID, name: "General Admission", price: null, quantity: "" }], // Prepopulate defaut tier
         totalCapacity: "",
         ticketType: "paid",
         eventDescription: "",
@@ -63,6 +70,33 @@ const PlanningWizard = () => {
     const currentComponentId = steps[currentStep - 1]?.componentId || 'manifest';
     const isImmersiveStep = ['manifest', 'category', 'payment'].includes(currentComponentId);
 
+    const MAX_PRICE_MULTIPLIER = 1.25;
+    const computeTotals = React.useMemo(() => {
+        const listingType = String(formData?.listingType || 'Private');
+        const attendeeCountRaw = listingType === 'Public'
+            ? parseInt(formData?.totalCapacity, 10)
+            : parseInt(formData?.guests, 10);
+
+        const attendeeCount = Number.isFinite(attendeeCountRaw) ? attendeeCountRaw : 0;
+        const attendeeCountForPricing = Math.max(1, attendeeCount || 0);
+
+        const vendors = formData?.vendors && typeof formData.vendors === 'object' ? Object.values(formData.vendors) : [];
+        const getVendorLineMin = (v) => {
+            const unitPrice = Number(v?.unitPrice ?? v?.priceMin ?? 0);
+            if (!Number.isFinite(unitPrice) || unitPrice <= 0) return 0;
+
+            const pricingUnit = v?.pricingUnit
+                || (String(v?.category || '').toLowerCase().includes('catering') ? 'PER_PLATE' : 'EVENT');
+
+            const multiplier = pricingUnit === 'PER_PLATE' ? attendeeCountForPricing : 1;
+            return Math.round(unitPrice * multiplier);
+        };
+
+        const totalMin = vendors.reduce((acc, v) => acc + getVendorLineMin(v), 0);
+        const totalMax = vendors.reduce((acc, v) => acc + Math.round(getVendorLineMin(v) * MAX_PRICE_MULTIPLIER), 0);
+        return { totalMin, totalMax };
+    }, [formData?.guests, formData?.listingType, formData?.totalCapacity, formData?.vendors]);
+
     // Ensure active tab is valid
     React.useEffect(() => {
         if (formData.services.length > 0 && activeServiceTab >= formData.services.length) {
@@ -74,12 +108,10 @@ const PlanningWizard = () => {
     useEffect(() => {
         const eventId = searchParams.get('eventId');
         if (eventId) {
-            try {
-                // Check 'my_organized_events' where we save new paid events
-                const myEvents = JSON.parse(localStorage.getItem('my_organized_events') || '[]');
-                const foundEvent = myEvents.find(e => e.id === eventId || e.id === Number(eventId));
+            const urlStep = searchParams.get('step');
+            const urlTab = searchParams.get('activeServiceTab');
 
-                const handleStepLogic = (data) => {
+            const handleStepLogic = (data) => {
                     const defaultData = {
                         title: "",
                         type: "Birthday",
@@ -91,10 +123,11 @@ const PlanningWizard = () => {
                         date: "",
                         startTime: "",
                         endTime: "",
+                        guests: "",
                         services: [],
                         vendors: {},
                         isPaid: false,
-                        tickets: [{ id: Date.now(), name: "General Admission", price: null, quantity: "" }],
+                        tickets: [{ id: DEFAULT_TICKET_TIER_ID, name: "General Admission", price: null, quantity: "" }],
                         totalCapacity: "",
                         ticketType: "paid",
                         eventDescription: "",
@@ -127,55 +160,168 @@ const PlanningWizard = () => {
                     }
 
                     // Override with URL params if present
-                    const urlStep = searchParams.get('step');
                     if (urlStep) {
-                        targetStep = parseInt(urlStep);
+                        const parsed = parseInt(urlStep, 10);
+                        if (!Number.isNaN(parsed)) targetStep = parsed;
                     }
 
-                    const urlTab = searchParams.get('activeServiceTab');
                     if (urlTab) {
-                        setActiveServiceTab(parseInt(urlTab));
+                        const parsedTab = parseInt(urlTab, 10);
+                        if (!Number.isNaN(parsedTab)) setActiveServiceTab(parsedTab);
                     }
 
                     setCurrentStep(targetStep);
                     setIsPreviewMode(false);
                 };
 
-                if (foundEvent && foundEvent.formData) {
-                    handleStepLogic(foundEvent.formData);
-                } else {
-                    // Fallback to checking drafts
-                    const drafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
-                    const foundDraft = drafts.find(d => d.id === eventId || d.id === Number(eventId));
+            const toDateInput = (value) => {
+                if (!value) return '';
+                const d = new Date(value);
+                if (Number.isNaN(d.getTime())) return '';
+                return d.toISOString().split('T')[0];
+            };
 
-                    if (foundDraft && foundDraft.formData) {
-                        // Ensure ID is persisted in state
-                        const draftData = { ...foundDraft.formData, id: foundDraft.id };
-                        handleStepLogic(draftData);
-                    } else {
-                        // Fallback to Dummy Data (for Immediate Action mocks)
-                        const foundDummy = myOrganizedEvents.find(e => e.id === Number(eventId) || e.id === eventId);
-                        if (foundDummy && foundDummy.formData) {
-                            const dummyData = { ...foundDummy.formData, id: foundDummy.id };
-                            // Ensure isPaid matches status
-                            if (foundDummy.status === 'Immediate Action') {
-                                dummyData.isPaid = true;
-                            }
-                            handleStepLogic(dummyData);
+            const toPromotionFlags = (arr) => {
+                const values = Array.isArray(arr) ? arr.map((v) => String(v).toLowerCase()) : [];
+                return {
+                    featured: values.includes('featured'),
+                    email: values.includes('email'),
+                    social: values.includes('social'),
+                    insights: values.includes('insights'),
+                };
+            };
+
+            const load = async () => {
+                try {
+                    // If URL explicitly asks for a step/tab, apply immediately (even if data isn't found)
+                    if (urlStep) {
+                        const parsed = parseInt(urlStep, 10);
+                        if (!Number.isNaN(parsed)) {
+                            setCurrentStep(parsed);
+                            setIsPreviewMode(false);
                         }
                     }
-                }
-            } catch (e) {
-                console.error("Failed to load event data", e);
-            }
-        }
-    }, [searchParams]);
 
-    const handleNext = () => {
+                    if (urlTab) {
+                        const parsedTab = parseInt(urlTab, 10);
+                        if (!Number.isNaN(parsedTab)) setActiveServiceTab(parsedTab);
+                    }
+
+                    // 1) Check localStorage (legacy)
+                    const myEvents = JSON.parse(localStorage.getItem('my_organized_events') || '[]');
+                    const foundEvent = myEvents.find(e => e.id === eventId || e.id === Number(eventId));
+                    if (foundEvent && foundEvent.formData) {
+                        handleStepLogic(foundEvent.formData);
+                        return;
+                    }
+
+                    // 2) Check drafts
+                    const drafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
+                    const foundDraft = drafts.find(d => d.id === eventId || d.id === Number(eventId));
+                    if (foundDraft && foundDraft.formData) {
+                        const draftData = { ...foundDraft.formData, id: foundDraft.id };
+                        handleStepLogic(draftData);
+                        return;
+                    }
+
+                    // 3) Fallback to old mock data
+                    const foundDummy = myOrganizedEvents.find(e => e.id === Number(eventId) || e.id === eventId);
+                    if (foundDummy && foundDummy.formData) {
+                        const dummyData = { ...foundDummy.formData, id: foundDummy.id };
+                        if (foundDummy.status === 'Immediate Action') dummyData.isPaid = true;
+                        handleStepLogic(dummyData);
+                        return;
+                    }
+
+                    // 4) Fetch from backend (new)
+                    const result = await dispatch(fetchPlanningByEventId(eventId));
+                    if (result.meta?.requestStatus === 'fulfilled') {
+                        const p = result.payload;
+                        const isPublic = String(p?.category || '').toLowerCase() === 'public';
+
+                        const mappedTiers = Array.isArray(p?.tickets?.tiers)
+                            ? p.tickets.tiers.map((t, idx) => ({
+                                id: `${String(t?.tierName || 'tier')}-${idx}`,
+                                name: t?.tierName || `Tier ${idx + 1}`,
+                                price: t?.ticketPrice ?? 0,
+                                quantity: t?.ticketCount ?? 0,
+                            }))
+                            : [];
+
+                        const mapped = {
+                            id: p?.eventId || eventId,
+                            title: p?.eventTitle || '',
+                            type: p?.eventType || 'Birthday',
+                            listingType: isPublic ? 'Public' : 'Private',
+                            location: p?.location?.name || '',
+                            lat: p?.location?.latitude ?? null,
+                            lng: p?.location?.longitude ?? null,
+                            locationValid: Boolean(p?.location?.latitude && p?.location?.longitude),
+
+                            date: isPublic ? '' : toDateInput(p?.eventDate),
+                            startTime: isPublic ? '' : (p?.eventTime || ''),
+                            endTime: '',
+
+                            guests: isPublic ? '' : (p?.guestCount ?? ''),
+
+                            totalCapacity: isPublic ? (p?.tickets?.totalTickets ?? '') : '',
+                            ticketType: isPublic ? (p?.tickets?.ticketType || 'paid') : 'paid',
+                            tickets: isPublic
+                                ? (mappedTiers.length > 0
+                                    ? mappedTiers
+                                    : [{ id: DEFAULT_TICKET_TIER_ID, name: 'General Admission', price: 0, quantity: p?.tickets?.totalTickets ?? '' }])
+                                : [{ id: DEFAULT_TICKET_TIER_ID, name: 'General Admission', price: null, quantity: '' }],
+
+                            publicStartTime: isPublic ? (p?.schedule?.startAt || '') : '',
+                            publicEndTime: isPublic ? (p?.schedule?.endAt || '') : '',
+                            salesStartTime: isPublic ? (p?.ticketAvailability?.startAt || '') : '',
+                            salesEndTime: isPublic ? (p?.ticketAvailability?.endAt || '') : '',
+
+                            services: Array.isArray(p?.selectedServices) ? p.selectedServices : [],
+                            isPaid: Boolean(p?.isPaid),
+                            eventDescription: p?.eventDescription || '',
+                            promotions: toPromotionFlags(p?.promotionType),
+                        };
+
+                        handleStepLogic(mapped);
+                    }
+                } catch (e) {
+                    console.error('Failed to load event data', e);
+                }
+            };
+
+            load();
+        }
+    }, [searchParams, dispatch]);
+
+    const handleNext = async () => {
         if (currentComponentId === 'manifest' && !isPreviewMode) {
             handleSaveDraft(); // Auto-save on Manifest
             setIsPreviewMode(true);
         } else {
+            if (currentComponentId === 'review') {
+                try {
+                    const eventId = formData?.id;
+                    if (!eventId) throw new Error('Missing event id');
+
+                    const result = await dispatch(confirmPlanning({ eventId }));
+                    if (result.meta?.requestStatus !== 'fulfilled') {
+                        throw new Error(result.payload || result.error?.message || 'Failed to confirm planning');
+                    }
+
+                    const confirmed = result.payload;
+                    if (confirmed?.status) setFormData((prev) => ({ ...prev, status: confirmed.status }));
+
+                    setIsPreviewMode(false);
+                    setCurrentStep(prev => prev + 1);
+                    return;
+                } catch (e) {
+                    console.error('Failed to confirm planning:', e);
+                    window.alert(e?.message || 'Failed to confirm');
+                    return;
+                }
+            }
+
             if (currentComponentId === 'category') {
                 handleSaveDraft(); // Auto-save details & services
             }
@@ -247,31 +393,7 @@ const PlanningWizard = () => {
                 setFormData(prev => ({ ...prev, id: draftId }));
             }
 
-            // 2. Check 'my_organized_events' (Immediate Action / Paid events)
-            const myEvents = JSON.parse(localStorage.getItem('my_organized_events') || '[]');
-            const existingEventIndex = myEvents.findIndex(e => e.id === draftId || e.id === Number(draftId));
-
-            if (existingEventIndex !== -1) {
-                // Update existing event in 'my_organized_events'
-                const updatedEvent = {
-                    ...myEvents[existingEventIndex],
-                    title: formData.title || myEvents[existingEventIndex].title,
-                    date: formData.date || myEvents[existingEventIndex].date,
-                    location: formData.location || myEvents[existingEventIndex].location,
-                    // valid to update other fields?
-                    formData: { ...formData, id: draftId },
-                    timestamp: Date.now()
-                };
-
-                myEvents[existingEventIndex] = updatedEvent;
-                localStorage.setItem('my_organized_events', JSON.stringify(myEvents));
-
-                // Dispatch update
-                window.dispatchEvent(new Event('savedUpdated'));
-                return true;
-            }
-
-            // 3. Fallback to 'planningWizardDrafts' (Drafts)
+            // 2. Save to 'planningWizardDrafts' (Drafts)
             const existingDrafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
 
             const newDraft = {
@@ -430,15 +552,15 @@ const PlanningWizard = () => {
 
 
                         {currentComponentId === 'confirmation' && (
-                            <StepConfirmation eventId={formData.id} />
+                            <StepConfirmation eventId={formData.id} totalMin={computeTotals.totalMin} totalMax={computeTotals.totalMax} />
                         )}
                     </div>
 
                     {/* Navigation Actions */}
-                    <div className={`flex flex-col gap-4 z-[100] pointer-events-none 
+                    <div className={`flex flex-col gap-4 z-50 pointer-events-none 
                         ${isImmersiveStep || ['vendor', 'review', 'promote', 'confirmation'].includes(currentComponentId)
                             ? (currentComponentId === 'manifest'
-                                ? 'fixed bottom-[14px] right-10'
+                                ? 'fixed bottom-3.5 right-10'
                                 : 'fixed bottom-8 left-10 right-10')
                             : 'mt-12 relative'}`}>
 
@@ -497,7 +619,7 @@ const PlanningWizard = () => {
                                                         <span className={`font-serif-premium italic text-teal-900 group-hover:text-teal-700 transition-colors ${currentComponentId === 'manifest' ? 'text-6xl' : 'text-5xl'}`}>
                                                             {currentComponentId === 'manifest' ? 'Manifest' : 'Advance'}
                                                         </span>
-                                                        <div className="w-16  h-16 rounded-full bg-[#09637E] flex items-center justify-center text-white shadow-xl group-hover:bg-[#088395] transition-all group-hover:translate-x-2">
+                                                        <div className="w-16  h-16 rounded-full bg-primary flex items-center justify-center text-white shadow-xl group-hover:bg-secondary transition-all group-hover:translate-x-2">
                                                             <BsArrowRight size={28} />
                                                         </div>
                                                     </>

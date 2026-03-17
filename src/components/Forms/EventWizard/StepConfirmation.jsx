@@ -3,8 +3,9 @@ import { motion } from 'framer-motion';
 import { BsCheck, BsArrowRight } from "react-icons/bs";
 import { Link, useNavigate } from 'react-router-dom';
 
-const StepConfirmation = ({ eventId }) => {
+const StepConfirmation = ({ eventId, totalMin, totalMax }) => {
     const navigate = useNavigate();
+    const hasTotals = Number.isFinite(Number(totalMin)) && Number.isFinite(Number(totalMax)) && (Number(totalMin) > 0 || Number(totalMax) > 0);
     return (
         <div className="w-full h-screen bg-surface relative flex flex-col overflow-hidden">
             {/* Ambient Background */}
@@ -44,6 +45,20 @@ const StepConfirmation = ({ eventId }) => {
                 >
                     Your event has been mapped into existence. A dedicated concierge will reach out to orchestrate the final details for your celebration within 24 hours.
                 </motion.p>
+
+                {hasTotals && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.35 }}
+                        className="mb-12 bg-white/60 backdrop-blur-sm border border-primary/10 rounded-3xl px-10 py-6 text-center"
+                    >
+                        <p className="text-[10px] font-black tracking-[0.3em] text-primary/50 uppercase mb-3">Estimated Total Investment</p>
+                        <div className="text-3xl md:text-4xl font-black text-primary font-serif-premium">
+                            ₹{Number(totalMin).toLocaleString()} – ₹{Number(totalMax).toLocaleString()}
+                        </div>
+                    </motion.div>
+                )}
 
                 <motion.div
                     initial={{ opacity: 0, y: 20 }}

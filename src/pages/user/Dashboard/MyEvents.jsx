@@ -4,8 +4,10 @@ import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { toast, Toaster } from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
+import { useDispatch } from "react-redux";
 import { myOrganizedEvents, myTickets as myTicketsData } from "../../../data/myEventsData";
-import { promotedCampaigns, getCardGradient } from "../../../data/myEventsDashboardData";
+import { promotedCampaigns } from "../../../data/myEventsDashboardData";
+import { fetchMyPlannings, fetchPlanningByEventId } from "../../../store/slices/planningSlice";
 import {
     OrganizedEventCard,
     CampaignCard,
@@ -15,11 +17,78 @@ import {
     TabButton
 } from "../../../components/User/Dashboard";
 
+const MotionDiv = motion.div;
+
+const formatPlanningDate = (planning) => {
+    const dateValue = planning?.category === 'public' ? planning?.schedule?.startAt : planning?.eventDate;
+    if (!dateValue) return 'TBD • TBD';
+
+    const d = new Date(dateValue);
+    if (Number.isNaN(d.getTime())) return 'TBD • TBD';
+
+    const month = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+    const day = String(d.getDate()).padStart(2, '0');
+
+    let timeStr = 'TBD';
+    if (planning?.category !== 'public' && planning?.eventTime) {
+        const match = String(planning.eventTime).trim().match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+        if (match) {
+            const hh = Number(match[1]);
+            const mm = match[2];
+            const ampm = hh >= 12 ? 'PM' : 'AM';
+            const hour12 = ((hh + 11) % 12) + 1;
+            timeStr = `${hour12}:${mm} ${ampm}`;
+        }
+    } else {
+        const t = d.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        timeStr = t.toUpperCase();
+    }
+
+    return `${month} ${day} • ${timeStr}`;
+};
+
+const mapPlanningToCardEvent = (planning, idx) => {
+    const isPublic = planning?.category === 'public';
+    const rawStatus = String(planning?.status || '').trim().toUpperCase();
+
+    const status = (() => {
+        if (rawStatus === 'IMMEDIATE ACTION') return 'Immediate Action';
+        if (rawStatus === 'PENDING APPROVAL') return 'Pending Approval';
+        if (rawStatus === 'REJECTED') return 'Rejected';
+        if (rawStatus === 'COMPLETED') return 'Live';
+        if (rawStatus === 'APPROVED') return isPublic ? 'Live' : 'Approved';
+        return rawStatus ? rawStatus[0] + rawStatus.slice(1).toLowerCase() : 'Pending Approval';
+    })();
+
+    const fallbackImage = myOrganizedEvents?.[idx % (myOrganizedEvents?.length || 1)]?.image;
+    const image = planning?.eventBanner?.url || fallbackImage;
+
+    const sold = (() => {
+        if (!isPublic) return '';
+        if (status === 'Live') return 'Live now';
+        if (status === 'Pending Approval') return 'In review';
+        if (status === 'Immediate Action') return 'Action required';
+        if (status === 'Rejected') return 'Needs changes';
+        return 'In progress';
+    })();
+
+    return {
+        id: planning?.eventId,
+        title: planning?.eventTitle || 'Untitled Event',
+        date: formatPlanningDate(planning),
+        location: planning?.location?.name || 'TBA',
+        image,
+        status,
+        sold,
+        formData: { listingType: isPublic ? 'Public' : 'Private' }
+    };
+};
+
 const MyEvents = () => {
+    const dispatch = useDispatch();
     const [activeTab, setActiveTab] = useState("organized");
     const [isLoading, setIsLoading] = useState(true);
     const [organizedEvents, setOrganizedEvents] = useState([]);
-    const [createdEvents, setCreatedEvents] = useState([]);
     const [draftEvents, setDraftEvents] = useState([]);
     const [myTickets, setMyTickets] = useState([]);
     const [savedEvents, setSavedEvents] = useState([]);
@@ -27,6 +96,41 @@ const MyEvents = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const searchQuery = searchParams.get("search")?.toLowerCase() || "";
+
+    const handleManageClick = async (eventId, fallbackStatus) => {
+        try {
+            const result = await dispatch(fetchPlanningByEventId(eventId));
+
+            if (result.meta?.requestStatus === 'fulfilled') {
+                const raw = String(result.payload?.status || '').trim().toUpperCase();
+
+                if (raw === 'IMMEDIATE ACTION') {
+                    navigate(`/user/planning-wizard?eventId=${eventId}&step=4&returnTo=my-events`);
+                    return;
+                }
+
+                if (raw === 'PENDING APPROVAL') {
+                    navigate(`/user/event-management/${eventId}`);
+                    return;
+                }
+
+                // Default: view/manage page (avoids reopening wizard for non-editable states)
+                navigate(`/user/event-management/${eventId}`);
+                return;
+            }
+        } catch {
+            // fall back below
+        }
+
+        // Fallback to existing behavior if fetch fails
+        if (fallbackStatus === 'Immediate Action') {
+            navigate(`/user/planning-wizard?eventId=${eventId}&step=4&returnTo=my-events`);
+        } else if (fallbackStatus === 'Draft') {
+            navigate(`/user/planning-wizard?eventId=${eventId}`);
+        } else {
+            navigate(`/user/event-management/${eventId}`);
+        }
+    };
 
     // Filter States
     const [showFilters, setShowFilters] = useState(false);
@@ -44,15 +148,22 @@ const MyEvents = () => {
                 const items = JSON.parse(localStorage.getItem('saved') || '[]');
                 setSavedEvents(Array.isArray(items) ? items : []);
 
-                const created = JSON.parse(localStorage.getItem('my_organized_events') || '[]');
-                setCreatedEvents(Array.isArray(created) ? created : []);
+                // Legacy key used by older payment flow; keep storage clean and avoid duplicate cards.
+                try {
+                    const created = JSON.parse(localStorage.getItem('my_organized_events') || '[]');
+                    if (Array.isArray(created) && created.length > 0) {
+                        const filtered = created.filter((e) => String(e?.status || '').toLowerCase() !== 'immediate action');
+                        if (filtered.length !== created.length) {
+                            localStorage.setItem('my_organized_events', JSON.stringify(filtered));
+                        }
+                    }
+                } catch { /* ignore */ }
 
                 const drafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
                 setDraftEvents(Array.isArray(drafts) ? drafts : []);
             } catch (e) {
                 console.error("Failed to parse local storage items", e);
                 setSavedEvents([]);
-                setCreatedEvents([]);
                 setDraftEvents([]);
             }
         };
@@ -60,8 +171,17 @@ const MyEvents = () => {
         const fetchData = async () => {
             setIsLoading(true);
             try {
-                await new Promise(resolve => setTimeout(resolve, 800));
-                setOrganizedEvents(myOrganizedEvents);
+                const result = await dispatch(fetchMyPlannings({ page: 1, limit: 50 }));
+                if (result.meta?.requestStatus === 'fulfilled') {
+                    const plannings = result.payload?.plannings || [];
+                    const mapped = plannings
+                        .filter((p) => p && p.eventId)
+                        .map((p, idx) => mapPlanningToCardEvent(p, idx));
+                    setOrganizedEvents(mapped);
+                } else {
+                    setOrganizedEvents(myOrganizedEvents);
+                }
+
                 const enhancedTickets = myTicketsData.map((t, i) => ({
                     ...t,
                     statusTag: i === 0 ? "Confirmed Guest" : i === 1 ? "Premium Access" : "VIP Access",
@@ -79,6 +199,7 @@ const MyEvents = () => {
             } catch (error) {
                 console.error("Fetch Data Error:", error);
                 toast.error("Failed to load your events");
+                setOrganizedEvents(myOrganizedEvents);
             } finally {
                 setIsLoading(false);
             }
@@ -91,7 +212,7 @@ const MyEvents = () => {
             window.removeEventListener('storage', fetchSaved);
             window.removeEventListener('savedUpdated', fetchSaved);
         };
-    }, []);
+    }, [dispatch]);
 
     const [showCampaignFilters, setShowCampaignFilters] = useState(false);
     const [campaignFilterStatus, setCampaignFilterStatus] = useState("All");
@@ -99,7 +220,7 @@ const MyEvents = () => {
     const CAMPAIGNS_PER_PAGE = 12;
 
     // Filter Logic
-    const allOrganized = [...draftEvents, ...createdEvents, ...organizedEvents];
+    const allOrganized = [...draftEvents, ...organizedEvents];
     const filteredOrganized = allOrganized.filter(e => {
         const matchesSearch = e.title.toLowerCase().includes(searchQuery) || e.location.toLowerCase().includes(searchQuery);
 
@@ -170,7 +291,7 @@ const MyEvents = () => {
             className={`relative px-8 py-2 rounded-full text-[10px] font-black tracking-widest uppercase transition-colors z-10 ${activeTab === id ? "text-white" : "text-[#7AB2B2] hover:text-[#09637E]"}`}
         >
             {activeTab === id && (
-                <motion.div
+                <MotionDiv
                     layoutId="activeTab"
                     className="absolute inset-0 bg-[#09637E] rounded-full shadow-lg -z-10"
                     transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
@@ -224,7 +345,7 @@ const MyEvents = () => {
                 </button>
                 {isOpen && createPortal(
                     <AnimatePresence>
-                        <motion.div
+                        <MotionDiv
                             initial={{ opacity: 0, y: -10 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -10 }}
@@ -250,7 +371,7 @@ const MyEvents = () => {
                                     {opt}
                                 </button>
                             ))}
-                        </motion.div>
+                        </MotionDiv>
                     </AnimatePresence>,
                     document.body
                 )}
@@ -283,7 +404,7 @@ const MyEvents = () => {
                     <AnimatePresence mode="wait">
                         {/* Organized Events Tab */}
                         {activeTab === "organized" && (
-                            <motion.div
+                            <MotionDiv
                                 key="organized"
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
@@ -315,7 +436,7 @@ const MyEvents = () => {
                                 {/* Filter Panel */}
                                 <AnimatePresence>
                                     {showFilters && (
-                                        <motion.div
+                                        <MotionDiv
                                             initial={{ height: 0, opacity: 0 }}
                                             animate={{ height: "auto", opacity: 1 }}
                                             exit={{ height: 0, opacity: 0 }}
@@ -368,7 +489,7 @@ const MyEvents = () => {
                                                     </div>
                                                 </div>
                                             </div>
-                                        </motion.div>
+                                        </MotionDiv>
                                     )}
                                 </AnimatePresence>
 
@@ -420,7 +541,7 @@ const MyEvents = () => {
                                                                 {/* Popup Menu */}
                                                                 <AnimatePresence>
                                                                     {activeMenuId === event.id && (
-                                                                        <motion.div
+                                                                        <MotionDiv
                                                                             initial={{ opacity: 0, scale: 0.9, y: 10 }}
                                                                             animate={{ opacity: 1, scale: 1, y: 0 }}
                                                                             exit={{ opacity: 0, scale: 0.9, y: 10 }}
@@ -436,7 +557,7 @@ const MyEvents = () => {
                                                                             >
                                                                                 Delete Draft
                                                                             </button>
-                                                                        </motion.div>
+                                                                        </MotionDiv>
                                                                     )}
                                                                 </AnimatePresence>
                                                             </div>
@@ -458,15 +579,7 @@ const MyEvents = () => {
                                                             {/* Tickets Sold Removed */}
                                                         </div>
                                                         <button
-                                                            onClick={() => {
-                                                                if (event.status === 'Immediate Action') {
-                                                                    navigate(`/user/planning-wizard?eventId=${event.id}&step=4&returnTo=my-events`);
-                                                                } else if (event.status === 'Draft') {
-                                                                    navigate(`/user/planning-wizard?eventId=${event.id}`);
-                                                                } else {
-                                                                    navigate(`/user/event-management/${event.id}`);
-                                                                }
-                                                            }}
+                                                            onClick={() => handleManageClick(event.id, event.status)}
                                                             className="px-6 py-2.5 bg-[#EBF4F6] text-[#09637E] rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-[#7AB2B2] hover:text-white transition-colors shadow-lg"
                                                         >
                                                             Manage
@@ -531,12 +644,12 @@ const MyEvents = () => {
                                         </div>
                                     </div>
                                 )}
-                            </motion.div>
+                            </MotionDiv>
                         )}
 
                         {/* Campaigns Tab */}
                         {activeTab === "campaigns" && (
-                            <motion.div
+                            <MotionDiv
                                 key="campaigns"
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
@@ -571,7 +684,7 @@ const MyEvents = () => {
                                 {/* Campaign Filter Panel */}
                                 <AnimatePresence>
                                     {showCampaignFilters && (
-                                        <motion.div
+                                        <MotionDiv
                                             initial={{ height: 0, opacity: 0 }}
                                             animate={{ height: "auto", opacity: 1 }}
                                             exit={{ height: 0, opacity: 0 }}
@@ -588,7 +701,7 @@ const MyEvents = () => {
                                                     }}
                                                 />
                                             </div>
-                                        </motion.div>
+                                        </MotionDiv>
                                     )}
                                 </AnimatePresence>
 
@@ -636,12 +749,12 @@ const MyEvents = () => {
                                         </button>
                                     </div>
                                 )}
-                            </motion.div>
+                            </MotionDiv>
                         )}
 
                         {/* Tickets Tab */}
                         {activeTab === "tickets" && (
-                            <motion.div
+                            <MotionDiv
                                 key="tickets"
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
@@ -689,7 +802,7 @@ const MyEvents = () => {
                                         </div>
                                     )}
                                 </div>
-                            </motion.div>
+                            </MotionDiv>
                         )}
                     </AnimatePresence>
                 )}

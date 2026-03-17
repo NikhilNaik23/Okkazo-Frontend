@@ -7,7 +7,6 @@ import {
   MdDescription,
   MdPerson,
   MdLogout,
-  MdNotifications,
 } from "react-icons/md";
 
 export const managerNavItems = [
@@ -20,7 +19,6 @@ export const managerNavItems = [
 ];
 
 export const managerFooterItems = [
-  { key: "notifications", label: "Notifications", icon: MdNotifications, action: "toggleNotifications" },
   { key: "profile", label: "Profile", icon: MdPerson },
   { key: "logout", label: "Logout", icon: MdLogout },
 ];

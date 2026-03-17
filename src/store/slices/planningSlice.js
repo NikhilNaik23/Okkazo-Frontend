@@ -225,8 +225,6 @@ export const createOrder = createAsyncThunk(
     'planning/createOrder',
     async ({ eventId }, { dispatch, rejectWithValue }) => {
         try {
-            const token = localStorage.getItem('accessToken');
-
             const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/create`, {
                 method: 'POST',
                 body: JSON.stringify({
@@ -263,8 +261,6 @@ export const verifyPayment = createAsyncThunk(
     'planning/verifyPayment',
     async ({ razorpayOrderId, razorpayPaymentId, razorpaySignature, eventId }, { dispatch, rejectWithValue }) => {
         try {
-            const token = localStorage.getItem('accessToken');
-
             const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/verify`, {
                 method: 'POST',
                 body: JSON.stringify({
@@ -292,6 +288,87 @@ export const verifyPayment = createAsyncThunk(
     }
 );
 
+// ─── My Events: fetch plannings for current user ───────────────────────────
+
+export const fetchMyPlannings = createAsyncThunk(
+    'planning/fetchMyPlannings',
+    async ({ page = 1, limit = 50 } = {}, { dispatch, rejectWithValue }) => {
+        try {
+            const qs = new URLSearchParams({ page: String(page), limit: String(limit) }).toString();
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/events/planning/me?${qs}`, {
+                method: 'GET',
+            }, { dispatch, refreshAction: refreshAccessToken });
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                const msg = data?.message || 'Failed to load your events';
+                return rejectWithValue(msg);
+            }
+
+            return {
+                plannings: Array.isArray(data.data) ? data.data : [],
+                pagination: data.pagination || null,
+            };
+        } catch (error) {
+            return rejectWithValue(error.message || 'Failed to load your events');
+        }
+    }
+);
+
+// ─── Planning: fetch a single planning by eventId ──────────────────────────
+
+export const fetchPlanningByEventId = createAsyncThunk(
+    'planning/fetchPlanningByEventId',
+    async (eventId, { dispatch, rejectWithValue }) => {
+        try {
+            if (!eventId) return rejectWithValue('Event ID is required');
+
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(eventId))}`,
+                { method: 'GET' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                const msg = data?.message || 'Failed to load event';
+                return rejectWithValue(msg);
+            }
+
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Failed to load event');
+        }
+    }
+);
+
+// ─── Planning: confirm (Finalized Selection → Finish) ─────────────────────
+
+export const confirmPlanning = createAsyncThunk(
+    'planning/confirmPlanning',
+    async ({ eventId }, { dispatch, rejectWithValue }) => {
+        try {
+            if (!eventId) return rejectWithValue('Event ID is required');
+
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(eventId))}/confirm`,
+                { method: 'POST' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                const msg = data?.message || 'Failed to confirm planning';
+                return rejectWithValue(msg);
+            }
+
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Failed to confirm planning');
+        }
+    }
+);
+
 // ─── Slice ───────────────────────────────────────────────────────────────────
 
 const planningSlice = createSlice({
@@ -305,6 +382,15 @@ const planningSlice = createSlice({
         razorpayOrderId: null,
         razorpayKeyId:  null,
         transactionId:  null,
+
+        myPlanningsStatus: 'idle', // idle | loading | succeeded | failed
+        myPlannings: [],
+        myPlanningsPagination: null,
+        myPlanningsError: null,
+
+        confirmStatus: 'idle', // idle | loading | succeeded | failed
+        confirmedPlanning: null,
+        confirmError: null,
 
         error: null,
     },
@@ -368,6 +454,37 @@ const planningSlice = createSlice({
             .addCase(verifyPayment.rejected, (state, action) => {
                 state.verifyStatus = 'failed';
                 state.error        = action.payload || action.error.message;
+            });
+
+        // Fetch my plannings
+        builder
+            .addCase(fetchMyPlannings.pending, (state) => {
+                state.myPlanningsStatus = 'loading';
+                state.myPlanningsError = null;
+            })
+            .addCase(fetchMyPlannings.fulfilled, (state, action) => {
+                state.myPlanningsStatus = 'succeeded';
+                state.myPlannings = action.payload.plannings;
+                state.myPlanningsPagination = action.payload.pagination;
+            })
+            .addCase(fetchMyPlannings.rejected, (state, action) => {
+                state.myPlanningsStatus = 'failed';
+                state.myPlanningsError = action.payload || action.error.message;
+            });
+
+        // Confirm planning
+        builder
+            .addCase(confirmPlanning.pending, (state) => {
+                state.confirmStatus = 'loading';
+                state.confirmError = null;
+            })
+            .addCase(confirmPlanning.fulfilled, (state, action) => {
+                state.confirmStatus = 'succeeded';
+                state.confirmedPlanning = action.payload;
+            })
+            .addCase(confirmPlanning.rejected, (state, action) => {
+                state.confirmStatus = 'failed';
+                state.confirmError = action.payload || action.error.message;
             });
     },
 });

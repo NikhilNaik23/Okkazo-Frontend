@@ -4,14 +4,30 @@ import { BsXLg, BsStarFill, BsCheck, BsArrowRight } from 'react-icons/bs';
 import { BsGlobe, BsTelephone, BsEnvelope, BsInstagram } from 'react-icons/bs';
 import { MdLocationOn } from 'react-icons/md';
 import ReviewsTab from './ReviewsTab';
-import { categoryPackages, servicePackages as defaultPackages, vendorHighlights } from '../../../../data/vendorSelectionData';
+import { vendorHighlights } from '../../../../data/vendorSelectionData';
 
-const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected, priceMultiplier = 1, guestCount = 0 }) => {
+const MAX_PRICE_MULTIPLIER = 1.25;
+
+const VendorDetailsModal = ({
+    vendor,
+    onClose,
+    onSelect,
+    isSelected,
+    priceMultiplier = 1,
+    guestCount = 0,
+    attendeeCount: attendeeCountProp,
+    attendeeLabel: attendeeLabelProp,
+}) => {
     const [activeTab, setActiveTab] = React.useState('Services');
     const [expandedPackageId, setExpandedPackageId] = React.useState(null);
 
-    const currentPackages = vendor ? (categoryPackages[vendor.category] || defaultPackages) : [];
-    const expandedPackage = currentPackages.find(p => p.id === expandedPackageId);
+    const attendeeCountRaw = Number(attendeeCountProp ?? guestCount ?? 0);
+    const attendeeCount = Number.isFinite(attendeeCountRaw) ? attendeeCountRaw : 0;
+    const attendeeLabel = attendeeLabelProp || 'Guests';
+    const attendeeCountForPricing = Math.max(1, attendeeCount || 0);
+
+    const currentPackages = Array.isArray(vendor?.services) ? vendor.services : [];
+    const expandedPackage = currentPackages.find(p => (p.serviceId || p.id) === expandedPackageId);
 
     React.useEffect(() => {
         if (!vendor) return;
@@ -27,9 +43,12 @@ const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected, priceMultip
 
     if (!vendor) return null;
 
-    // Price Range Calculation (Mock logic if max missing)
     const priceMin = (vendor.priceMin || 0) * priceMultiplier;
     const priceMax = (vendor.priceMax || Math.round((vendor.priceMin || 0) * 1.5)) * priceMultiplier;
+
+    const isPerPlate =
+        String(vendor.category || '').toLowerCase().includes('catering') ||
+        String(vendor.categoryId || '').toLowerCase().includes('catering');
 
     return (
         <motion.div
@@ -71,6 +90,17 @@ const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected, priceMultip
                         <h2 className="text-4xl font-serif-premium italic mb-2 leading-tight">{vendor.name}</h2>
                         <p className="text-white/70 text-sm font-medium flex items-center gap-2 mb-4 tracking-wide uppercase text-[11px]">
                             <MdLocationOn className="text-secondary" size={16} /> {vendor.location}
+                            {vendor.mapsUrl && (
+                                <a
+                                    href={vendor.mapsUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-white/90 underline"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    Map
+                                </a>
+                            )}
                         </p>
                         {vendor.capacity && (
                             <p className="text-white/70 text-sm font-medium flex items-center gap-2 mb-8 tracking-wide uppercase text-[11px]">
@@ -134,7 +164,7 @@ const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected, priceMultip
                                     <section>
                                         <h3 className="text-2xl font-serif-premium text-primary mb-4">About the Experience</h3>
                                         <p className="text-gray-500 leading-loose text-sm font-light">
-                                            Immerse yourself in the exquisite offerings of {vendor.name}. Known for our attention to detail and bespoke services, we curate moments that linger in memory. From intimate gatherings to grand celebrations, our venue spaces and services are designed to elevate your event.
+                                            {vendor.description || `About ${vendor.name}`}
                                         </p>
                                     </section>
                                     <section>
@@ -171,50 +201,51 @@ const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected, priceMultip
                                             <>
                                                 <div>
                                                     <h3 className="text-2xl font-serif-premium text-primary mb-2">Offered Packages</h3>
-                                                    <p className="text-gray-400 text-xs uppercase tracking-widest font-bold">Select a tier for your event ({guestCount} Guests)</p>
+                                                    <p className="text-gray-400 text-xs uppercase tracking-widest font-bold">Select a tier for your event ({attendeeCount} {attendeeLabel})</p>
                                                 </div>
 
                                                 <div className="grid grid-cols-1 gap-6">
                                                     {currentPackages.map((pkg, i) => {
-                                                        const isPerUnit = pkg.unit?.toLowerCase().includes('plate') || pkg.unit?.toLowerCase().includes('person');
-                                                        const displayPrice = pkg.price * priceMultiplier;
+                                                        const pkgId = pkg.serviceId || pkg.id || String(i);
+                                                        const unitPrice = (Number(pkg.price || 0)) * priceMultiplier;
 
                                                         return (
-                                                            <div key={pkg.id} className="p-6 rounded-2xl border border-gray-100 hover:border-primary/20 hover:bg-gray-50 transition-all group flex flex-col relative overflow-hidden">
+                                                            <div key={pkgId} className="p-6 rounded-2xl border border-gray-100 hover:border-primary/20 hover:bg-gray-50 transition-all group flex flex-col relative overflow-hidden">
                                                                 <div className="flex justify-between items-start mb-4">
                                                                     <div>
                                                                         <span className="inline-block px-3 py-1 rounded-full bg-surface border border-primary/10 text-[9px] font-bold uppercase tracking-widest text-primary mb-2">
-                                                                            {pkg.tier}
+                                                                            {pkg.tier || 'Package'}
                                                                         </span>
-                                                                        <h4 className="text-xl font-bold text-primary group-hover:text-secondary transition-colors">{pkg.name}</h4>
+                                                                        <h4 className="text-xl font-bold text-primary group-hover:text-secondary transition-colors">{pkg.name || vendor.name}</h4>
                                                                     </div>
                                                                     <div className="text-right">
-                                                                        <span className="block text-2xl font-serif-premium text-primary">₹{displayPrice.toLocaleString()}</span>
-                                                                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">/ {pkg.unit || 'Event'}</span>
+                                                                            <span className="block text-2xl font-serif-premium text-primary">₹{unitPrice.toLocaleString()}</span>
+                                                                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">/ {isPerPlate ? 'Per Plate' : 'Event'}</span>
                                                                     </div>
                                                                 </div>
 
-                                                                <p className="text-sm text-gray-500 mb-6 leading-relaxed">{pkg.desc}</p>
+                                                                <p className="text-sm text-gray-500 mb-6 leading-relaxed">{pkg.description || 'Package details'}</p>
 
 
 
                                                                 <div className="grid grid-cols-2 gap-4 mt-auto">
                                                                     <button
-                                                                        onClick={() => setExpandedPackageId(pkg.id)}
+                                                                        onClick={() => setExpandedPackageId(pkgId)}
                                                                         className="py-3 rounded-xl border border-primary/10 text-primary font-bold text-[10px] uppercase tracking-widest hover:bg-white hover:border-primary/30 transition-colors"
                                                                     >
                                                                         Explore
                                                                     </button>
                                                                     <button
                                                                         onClick={() => {
-                                                                            const isPerUnit = pkg.unit?.toLowerCase().includes('plate') || pkg.unit?.toLowerCase().includes('person');
-                                                                            const unitMultiplier = isPerUnit ? (guestCount || 1) : 1;
-
+                                                                            const pricingUnit = isPerPlate ? 'PER_PLATE' : 'EVENT';
                                                                             const updatedVendor = {
                                                                                 ...vendor,
-                                                                                priceMin: pkg.price * unitMultiplier,
-                                                                                priceMax: pkg.price * unitMultiplier * 1.2,
-                                                                                selectedPackage: pkg
+                                                                                pricingUnit,
+                                                                                unitPrice,
+                                                                                priceMin: unitPrice,
+                                                                                priceMax: Math.round(unitPrice * MAX_PRICE_MULTIPLIER),
+                                                                                maxPriceMultiplier: MAX_PRICE_MULTIPLIER,
+                                                                                selectedPackage: pkg,
                                                                             };
                                                                             onSelect(updatedVendor);
                                                                             onClose();
@@ -243,18 +274,18 @@ const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected, priceMultip
                                                     <div className="flex justify-between items-start mb-8 border-b border-primary/5 pb-8">
                                                         <div>
                                                             <span className="text-secondary font-serif-premium italic text-lg mb-1 block">Selected Tier</span>
-                                                            <h2 className="text-3xl md:text-4xl font-bold text-primary mb-2">{expandedPackage.name}</h2>
-                                                            <p className="text-gray-500">{expandedPackage.desc}</p>
+                                                            <h2 className="text-3xl md:text-4xl font-bold text-primary mb-2">{expandedPackage.name || vendor.name}</h2>
+                                                            <p className="text-gray-500">{expandedPackage.description || 'Package details'}</p>
                                                         </div>
                                                         <div className="text-right">
-                                                            <div className="text-4xl font-serif-premium text-primary">₹{(expandedPackage.price * priceMultiplier).toLocaleString()}</div>
-                                                            <div className="text-xs font-bold uppercase tracking-widest text-gray-400">/ {expandedPackage.unit || 'Event'}</div>
+                                                            <div className="text-4xl font-serif-premium text-primary">₹{((Number(expandedPackage.price || 0)) * priceMultiplier).toLocaleString()}</div>
+                                                            <div className="text-xs font-bold uppercase tracking-widest text-gray-400">/ {isPerPlate ? 'Per Plate' : 'Event'}</div>
                                                         </div>
                                                     </div>
 
                                                     <h3 className="text-sm font-bold uppercase tracking-widest text-primary mb-6">Complete Inclusions</h3>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
-                                                        {expandedPackage.includes.map((item, idx) => (
+                                                        {(expandedPackage?.details?.items || []).map((item, idx) => (
                                                             <div key={idx} className="flex items-start gap-3 p-4 bg-white rounded-xl border border-gray-100">
                                                                 <div className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
                                                                     <BsCheck size={12} strokeWidth={1} />
@@ -268,22 +299,25 @@ const VendorDetailsModal = ({ vendor, onClose, onSelect, isSelected, priceMultip
                                                         <div>
                                                             <span className="block text-[10px] font-bold uppercase tracking-widest text-primary/60 mb-1">Total Estimated Cost</span>
                                                             <div className="text-2xl font-serif-premium text-primary">
-                                                                ₹{(expandedPackage.price * priceMultiplier * ((expandedPackage.unit?.toLowerCase().includes('plate') || expandedPackage.unit?.toLowerCase().includes('person')) ? (guestCount || 1) : 1)).toLocaleString()}
+                                                                ₹{((Number(expandedPackage.price || 0)) * priceMultiplier * (isPerPlate ? attendeeCountForPricing : 1)).toLocaleString()}
                                                             </div>
                                                             <span className="text-xs text-gray-500">
-                                                                {(expandedPackage.unit?.toLowerCase().includes('plate') || expandedPackage.unit?.toLowerCase().includes('person')) ? `For ${guestCount} guests` : 'Fixed Event Price'}
+                                                                {isPerPlate ? `For ${attendeeCount} ${attendeeLabel.toLowerCase()}` : 'Fixed Event Price'}
                                                             </span>
                                                         </div>
                                                         <button
                                                             onClick={() => {
-                                                                const isPerUnit = expandedPackage.unit?.toLowerCase().includes('plate') || expandedPackage.unit?.toLowerCase().includes('person');
-                                                                const unitMultiplier = isPerUnit ? (guestCount || 1) : 1;
+                                                                const unitPrice = (Number(expandedPackage.price || 0)) * priceMultiplier;
+                                                                const pricingUnit = isPerPlate ? 'PER_PLATE' : 'EVENT';
 
                                                                 const updatedVendor = {
                                                                     ...vendor,
-                                                                    priceMin: expandedPackage.price * unitMultiplier,
-                                                                    priceMax: expandedPackage.price * unitMultiplier * 1.2,
-                                                                    selectedPackage: expandedPackage
+                                                                    pricingUnit,
+                                                                    unitPrice,
+                                                                    priceMin: unitPrice,
+                                                                    priceMax: Math.round(unitPrice * MAX_PRICE_MULTIPLIER),
+                                                                    maxPriceMultiplier: MAX_PRICE_MULTIPLIER,
+                                                                    selectedPackage: expandedPackage,
                                                                 };
                                                                 onSelect(updatedVendor);
                                                                 onClose();

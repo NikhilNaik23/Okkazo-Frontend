@@ -41,6 +41,17 @@ const VendorCard = ({ vendor, isSelected, onViewDetails }) => {
                 <div className="flex justify-between items-start mb-3">
                     <span className="text-[9px] font-bold tracking-[0.25em] text-gray-400 uppercase block">
                         {vendor.location}
+                        {vendor.mapsUrl && (
+                            <a
+                                href={vendor.mapsUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="ml-2 text-primary hover:text-secondary underline"
+                            >
+                                Map
+                            </a>
+                        )}
                     </span>
                     {vendor.capacity && (
                         <span className="text-[9px] font-bold uppercase tracking-widest text-secondary bg-secondary/10 px-2 py-1 rounded-md">

@@ -67,23 +67,23 @@ const EventRequestsModal = ({ isOpen, onClose, requests, onAccept, onReject }) =
                 </div>
 
                 {rejectingId !== event.id ? (
-                  <div className="flex flex-wrap items-center gap-3 w-full md:w-auto mt-4 md:mt-0">
+                  <div className="flex items-center gap-3 w-full md:w-auto">
                     <button
                       onClick={() => navigate(`/vendor/event/${event.id}`)}
-                      className="flex-1 md:flex-none px-5 py-2.5 bg-white border border-gray-200 text-[#0b2d49] rounded-xl font-bold text-sm hover:border-[#0b2d49] transition-all flex items-center justify-center gap-2"
+                      className="flex-1 md:flex-none px-4 py-3 bg-white border border-gray-200 text-[#0b2d49] rounded-xl font-bold text-sm hover:border-[#0b2d49] transition-all flex items-center justify-center gap-2"
                     >
                       <BsEye />
                       Details
                     </button>
                     <button
                       onClick={() => setRejectingId(event.id)}
-                      className="flex-1 md:flex-none px-6 py-2.5 bg-red-50 text-red-500 rounded-xl font-bold text-sm hover:bg-red-500 hover:text-white transition-all shadow-sm active:scale-95"
+                      className="flex-1 md:flex-none px-6 py-3 bg-red-50 text-red-500 rounded-xl font-bold text-sm hover:bg-red-500 hover:text-white transition-all shadow-sm active:scale-95"
                     >
                       Reject
                     </button>
                     <button
                       onClick={() => onAccept(event.id)}
-                      className="flex-1 md:flex-none px-8 py-2.5 bg-[#0b2d49] text-white rounded-xl font-bold text-sm hover:bg-[#d7a444] transition-all shadow-lg shadow-[#0b2d49]/10 active:scale-95"
+                      className="flex-1 md:flex-none px-8 py-3 bg-[#0b2d49] text-white rounded-xl font-bold text-sm hover:bg-[#d7a444] transition-all shadow-lg shadow-[#0b2d49]/10 active:scale-95"
                     >
                       Accept Request
                     </button>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import {
     BsChevronLeft,
@@ -16,16 +16,98 @@ import { dummyVendors } from "../../../data/vendorData";
 import { vendorServiceCategories, isDateHighDemand } from "../../../data/planningWizardData";
 import { filterOptions } from "../../../data/vendorSelectionData";
 import SharedCalendar from "./SharedCalendar";
+import { fetchWithAuth } from '../../../utils/apiHandler';
+import { useDispatch } from 'react-redux';
+import { refreshAccessToken } from '../../../store/slices/authSlice';
 
 // Extracted Components
 import { VendorDetailsModal, VendorCard, SelectionSidebar } from './VendorSelection';
 
+const API_BASE_URL = 'http://localhost:8080';
+
+const safeJson = async (response) => {
+    try {
+        return await response.json();
+    } catch {
+        return null;
+    }
+};
+
+const pickFallbackImage = (category, index = 0) => {
+    const list = dummyVendors?.[category];
+    if (Array.isArray(list) && list.length > 0) {
+        return list[index % list.length]?.image;
+    }
+    return "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=2069&auto=format&fit=crop";
+};
+
+const mapBackendVendorToCard = (vendor, category, index = 0) => {
+    const name = vendor?.businessName || 'Vendor';
+    const rating = vendor?.rating != null ? String(vendor.rating) : '0';
+    const location = vendor?.location?.name || 'Location TBD';
+
+    const services = Array.isArray(vendor?.services) ? vendor.services : [];
+    const priceMin = vendor?.priceMin != null ? Number(vendor.priceMin) : (services[0]?.price != null ? Number(services[0].price) : 0);
+    const priceMax = vendor?.priceMax != null ? Number(vendor.priceMax) : Math.round(priceMin * 1.5);
+
+    const image = services?.[0]?.details?.image || pickFallbackImage(category, index);
+
+    return {
+        id: vendor?.vendorAuthId || `${category}-${index}`,
+        vendorAuthId: vendor?.vendorAuthId || null,
+        name,
+        rating,
+        reviews: Number(vendor?.reviews || 0),
+        priceMin,
+        priceMax,
+        image,
+        location,
+        mapsUrl: vendor?.location?.mapsUrl || null,
+        categoryId: vendor?.categoryId || null,
+        isPopular: Boolean(vendor?.isPopular),
+        capacity: vendor?.capacity,
+        distanceKm: vendor?.distanceKm,
+        description: vendor?.description || null,
+        services,
+        category,
+        _raw: vendor,
+    };
+};
+
 const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTab, setActiveServiceTab, handleSelectVendor, handleChange, minDateString }) => {
+    const dispatch = useDispatch();
     const activeCategory = formData.services[activeServiceTab] || "Venue";
+    const eventId = formData?.id;
+
+    const attendeeInfo = useMemo(() => {
+        const listingType = String(formData?.listingType || 'Private');
+
+        if (listingType === 'Public') {
+            const capacity = parseInt(formData?.totalCapacity, 10);
+            const fallbackTicketsTotal = Array.isArray(formData?.tickets)
+                ? formData.tickets.reduce((acc, t) => acc + (parseInt(t?.quantity, 10) || 0), 0)
+                : 0;
+
+            return {
+                attendeeCount: Number.isFinite(capacity) && capacity > 0 ? capacity : fallbackTicketsTotal,
+                attendeeLabel: 'Tickets',
+            };
+        }
+
+        const guests = parseInt(formData?.guests, 10);
+        return {
+            attendeeCount: Number.isFinite(guests) ? guests : 0,
+            attendeeLabel: 'Guests',
+        };
+    }, [formData?.guests, formData?.listingType, formData?.tickets, formData?.totalCapacity]);
 
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedVendorForDetails, setSelectedVendorForDetails] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
+
+    const [vendorsLoading, setVendorsLoading] = useState(false);
+    const [vendorsError, setVendorsError] = useState(null);
+    const [vendorsByCategory, setVendorsByCategory] = useState({});
 
     // Sort/Filter placeholders
     const [sortOption, setSortOption] = useState("Recommended");
@@ -40,14 +122,90 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     const isHighDemand = isDateHighDemand(formData.date);
     const priceMultiplier = isHighDemand ? 1.5 : 1;
 
-    const handleSelectVendorWrapper = (category, vendor) => {
-        const adjustedVendor = {
-            ...vendor,
-            priceMin: (vendor.priceMin || 0) * priceMultiplier,
-            priceMax: (vendor.priceMax || Math.round((vendor.priceMin || 0) * 1.5)) * priceMultiplier,
-            priceMultiplier: priceMultiplier
-        };
+    const persistVendorSelection = async ({ category, vendor }) => {
+        if (!eventId || !category || !vendor) return true;
+
+        const vendorAuthId = vendor.vendorAuthId || vendor.authId;
+        if (!vendorAuthId) return true;
+
+        const attendeeCountForPricing = Math.max(1, Number(attendeeInfo?.attendeeCount || 0));
+        const pricingUnit = vendor?.pricingUnit
+            || (String(category || '').toLowerCase().includes('catering') ? 'PER_PLATE' : 'EVENT');
+        const unitPrice = Number(vendor?.unitPrice ?? vendor?.priceMin ?? 0);
+        const maxMultiplier = Number(vendor?.maxPriceMultiplier || 1.25);
+
+        const lineMin = pricingUnit === 'PER_PLATE'
+            ? Math.round(unitPrice * attendeeCountForPricing)
+            : Math.round(unitPrice);
+        const lineMax = Math.round(lineMin * (Number.isFinite(maxMultiplier) && maxMultiplier > 0 ? maxMultiplier : 1.25));
+
+        const response = await fetchWithAuth(
+            `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(eventId))}/vendors`,
+            {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    service: category,
+                    vendorAuthId,
+                    servicePrice: {
+                        min: Number.isFinite(lineMin) && lineMin > 0 ? lineMin : 0,
+                        max: Number.isFinite(lineMax) && lineMax > 0 ? lineMax : 0,
+                    },
+                }),
+            },
+            { dispatch, refreshAction: refreshAccessToken }
+        );
+
+        const data = await safeJson(response);
+        if (!response.ok || !data?.success) {
+            throw new Error(data?.message || 'Failed to save vendor selection');
+        }
+
+        return true;
+    };
+
+    const handleSelectVendorWrapper = async (category, vendor) => {
+        const MAX_PRICE_MULTIPLIER = 1.25;
+        const hasExplicitUnitPricing = vendor?.unitPrice != null;
+
+        const adjustedVendor = hasExplicitUnitPricing
+            ? {
+                ...vendor,
+                priceMin: vendor.priceMin != null ? vendor.priceMin : Number(vendor.unitPrice || 0),
+                priceMax: vendor.priceMax != null ? vendor.priceMax : Math.round(Number(vendor.unitPrice || 0) * MAX_PRICE_MULTIPLIER),
+                maxPriceMultiplier: vendor.maxPriceMultiplier || MAX_PRICE_MULTIPLIER,
+                priceMultiplier: priceMultiplier,
+            }
+            : {
+                ...vendor,
+                priceMin: (vendor.priceMin || 0) * priceMultiplier,
+                priceMax: (vendor.priceMax || Math.round((vendor.priceMin || 0) * 1.5)) * priceMultiplier,
+                priceMultiplier: priceMultiplier,
+            };
+
+        try {
+            await persistVendorSelection({ category, vendor: adjustedVendor });
+        } catch (e) {
+            console.error('Failed to persist vendor selection:', e);
+        }
+
         handleSelectVendor(category, adjustedVendor);
+    };
+
+    const persistSelectedServices = async (nextServices) => {
+        if (!eventId) return;
+        const response = await fetchWithAuth(
+            `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(eventId))}/services`,
+            {
+                method: 'PATCH',
+                body: JSON.stringify({ selectedServices: nextServices }),
+            },
+            { dispatch, refreshAction: refreshAccessToken }
+        );
+
+        const data = await safeJson(response);
+        if (!response.ok || !data?.success) {
+            throw new Error(data?.message || 'Failed to update selected services');
+        }
     };
 
     const handleAddService = (service) => {
@@ -55,6 +213,10 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         handleChange('services', newServices);
         setActiveServiceTab(newServices.length - 1);
         setShowAddServiceDropdown(false);
+
+        persistSelectedServices(newServices).catch((e) => {
+            console.error('Failed to persist selected services:', e);
+        });
     };
 
     const handleRemoveService = (index) => {
@@ -75,6 +237,10 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         } else if (newServices.length <= activeServiceTab) {
             setActiveServiceTab(Math.max(0, newServices.length - 1));
         }
+
+        persistSelectedServices(newServices).catch((e) => {
+            console.error('Failed to persist selected services:', e);
+        });
     };
 
     const handleRemoveVendorSelection = (category) => {
@@ -91,8 +257,96 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         setCurrentPage(1);
     }, [activeCategory]);
 
+    // Ensure VendorSelection exists (and optionally hydrate services) once we have an eventId
+    useEffect(() => {
+        if (!eventId) return;
+
+        let cancelled = false;
+        const run = async () => {
+            try {
+                const response = await fetchWithAuth(
+                    `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(eventId))}`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+
+                const data = await safeJson(response);
+                if (!response.ok || !data?.success) return;
+                const selection = data.data;
+                const selectedServices = selection?.selectedServices;
+
+                if (!cancelled && Array.isArray(selectedServices) && selectedServices.length > 0) {
+                    // Only hydrate services if wizard doesn't have them yet
+                    if (!Array.isArray(formData.services) || formData.services.length === 0) {
+                        handleChange('services', selectedServices);
+                        setActiveServiceTab(0);
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to ensure vendor selection:', e);
+            }
+        };
+
+        run();
+        return () => { cancelled = true; };
+    }, [dispatch, eventId, formData.services, handleChange, setActiveServiceTab]);
+
+    // Fetch vendors from backend per category + filters
+    const searchDebounceRef = useRef(null);
+    useEffect(() => {
+        if (!eventId || !activeCategory) return;
+
+        if (searchDebounceRef.current) {
+            clearTimeout(searchDebounceRef.current);
+        }
+
+        searchDebounceRef.current = setTimeout(async () => {
+            setVendorsLoading(true);
+            setVendorsError(null);
+
+            try {
+                const qs = new URLSearchParams({
+                    serviceCategory: activeCategory,
+                    sort: sortOption,
+                    priceMin: String(priceRange.min ?? 0),
+                    priceMax: String(priceRange.max ?? 0),
+                });
+                if (searchQuery?.trim()) qs.set('q', searchQuery.trim());
+
+                const response = await fetchWithAuth(
+                    `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(eventId))}/vendors?${qs.toString()}`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+
+                const data = await safeJson(response);
+                if (!response.ok || !data?.success) {
+                    throw new Error(data?.message || 'Failed to fetch vendors');
+                }
+
+                const vendors = Array.isArray(data?.data?.vendors) ? data.data.vendors : [];
+                const mapped = vendors.map((v, idx) => mapBackendVendorToCard(v, activeCategory, idx));
+
+                setVendorsByCategory((prev) => ({
+                    ...prev,
+                    [activeCategory]: mapped,
+                }));
+            } catch (e) {
+                console.error('Vendor fetch failed:', e);
+                setVendorsError(e.message || 'Failed to fetch vendors');
+            } finally {
+                setVendorsLoading(false);
+            }
+        }, 250);
+
+        return () => {
+            if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+        };
+    }, [activeCategory, dispatch, eventId, priceRange.max, priceRange.min, searchQuery, sortOption]);
+
     const filteredVendors = useMemo(() => {
-        let allVendors = dummyVendors[activeCategory] || [];
+        const fetched = vendorsByCategory[activeCategory];
+        let allVendors = Array.isArray(fetched) && fetched.length > 0 ? fetched : (dummyVendors[activeCategory] || []);
 
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
@@ -102,8 +356,8 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
             );
         }
 
-        if (activeCategory === "Venue" && formData.guests) {
-            allVendors = allVendors.filter(v => (v.capacity || 1000) >= formData.guests);
+        if (activeCategory === "Venue" && attendeeInfo.attendeeCount) {
+            allVendors = allVendors.filter(v => (v.capacity || 1000) >= attendeeInfo.attendeeCount);
         }
 
         allVendors = allVendors.filter(v => {
@@ -119,7 +373,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                 allVendors = [...allVendors].sort((a, b) => b.reviews - a.reviews || (b.isPopular === a.isPopular ? 0 : b.isPopular ? 1 : -1));
                 break;
             case 'Nearest':
-                allVendors = [...allVendors].reverse();
+                allVendors = [...allVendors].sort((a, b) => (Number(a.distanceKm || 0) - Number(b.distanceKm || 0)));
                 break;
             case 'Price: Low to High':
                 allVendors = [...allVendors].sort((a, b) => a.priceMin - b.priceMin);
@@ -138,14 +392,31 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         }
 
         return allVendors;
-    }, [activeCategory, searchQuery, sortOption, priceRange]);
+    }, [activeCategory, searchQuery, sortOption, priceRange, vendorsByCategory]);
 
     const totalPages = Math.ceil(filteredVendors.length / ITEMS_PER_PAGE);
     const paginatedVendors = filteredVendors.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
     const allServicesSelected = formData.services?.every(service => formData.vendors[service]);
-    const estimatedTotal = Object.values(formData.vendors).reduce((acc, v) => acc + (v.priceMin || 0), 0);
-    const estimatedMax = Object.values(formData.vendors).reduce((acc, v) => acc + (v.priceMax || Math.round((v.priceMin || 0) * 1.5)), 0);
+    const MAX_PRICE_MULTIPLIER = 1.25;
+    const attendeeCountForPricing = Math.max(1, attendeeInfo.attendeeCount || 0);
+
+    const getVendorLineMin = (v) => {
+        const unitPrice = Number(v?.unitPrice ?? v?.priceMin ?? 0);
+        if (!Number.isFinite(unitPrice) || unitPrice <= 0) return 0;
+
+        const pricingUnit = v?.pricingUnit
+            || (String(v?.category || '').toLowerCase().includes('catering') ? 'PER_PLATE' : 'EVENT');
+
+        const multiplier = pricingUnit === 'PER_PLATE' ? attendeeCountForPricing : 1;
+        return Math.round(unitPrice * multiplier);
+    };
+
+    const estimatedTotal = Object.values(formData.vendors).reduce((acc, v) => acc + getVendorLineMin(v), 0);
+    const estimatedMax = Object.values(formData.vendors).reduce(
+        (acc, v) => acc + Math.round(getVendorLineMin(v) * MAX_PRICE_MULTIPLIER),
+        0
+    );
 
     return (
         <div className="w-full min-h-screen bg-surface relative flex flex-col overflow-hidden">
@@ -160,12 +431,14 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                         onSelect={(v) => handleSelectVendorWrapper(activeCategory, v || selectedVendorForDetails)}
                         isSelected={formData.vendors[activeCategory]?.id === selectedVendorForDetails.id}
                         priceMultiplier={priceMultiplier}
+                        attendeeCount={attendeeInfo.attendeeCount}
+                        attendeeLabel={attendeeInfo.attendeeLabel}
                         guestCount={formData.guests}
                     />
                 )}
             </AnimatePresence>
 
-            <div className="flex-1 flex max-w-[1920px] mx-auto w-full relative">
+            <div className="flex-1 flex max-w-480 mx-auto w-full relative">
                 {/* Main Content (Scrollable) */}
                 <div className="flex-1 h-screen overflow-y-auto scrollbar-hide">
                     <div className="px-8 md:px-16 pt-32 pb-48 max-w-7xl mx-auto">
@@ -247,8 +520,8 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
 
                                     {showAddServiceDropdown && (
                                         <>
-                                            <div className="fixed inset-0 z-[60]" onClick={() => setShowAddServiceDropdown(false)} />
-                                            <div className="absolute right-0 top-full mt-2 w-64 max-h-80 overflow-y-auto bg-white rounded-2xl shadow-xl border border-primary/10 p-2 z-[70] animate-fade-in-up scrollbar-thin scrollbar-thumb-gray-200">
+                                            <div className="fixed inset-0 z-60" onClick={() => setShowAddServiceDropdown(false)} />
+                                            <div className="absolute right-0 top-full mt-2 w-64 max-h-80 overflow-y-auto bg-white rounded-2xl shadow-xl border border-primary/10 p-2 z-70 animate-fade-in-up scrollbar-thin scrollbar-thumb-gray-200">
                                                 <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-primary/40 border-b border-gray-100 mb-1">
                                                     Add Service
                                                 </div>

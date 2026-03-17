@@ -3,10 +3,13 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { BsArrowLeft, BsChatDots, BsCheckCircleFill, BsClock, BsSend, BsFileEarmarkZip, BsDownload, BsCircle, BsTicketPerforated } from "react-icons/bs";
 import { myOrganizedEvents } from "../../../data/myEventsData";
 import { toast, Toaster } from "react-hot-toast";
+import { useDispatch } from "react-redux";
+import { fetchPlanningByEventId } from "../../../store/slices/planningSlice";
 
 const UserEventManagement = () => {
     const { eventId } = useParams();
     const navigate = useNavigate();
+    const dispatch = useDispatch();
     const [event, setEvent] = useState(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("overview"); // "overview" (Command Center) or "chat" (Manager Sync)
@@ -16,17 +19,60 @@ const UserEventManagement = () => {
     ]);
 
     useEffect(() => {
-        setTimeout(() => {
-            const foundEvent = myOrganizedEvents.find(e => e.id === parseInt(eventId) || e.id === eventId);
-            if (foundEvent) {
-                setEvent(foundEvent);
-            } else {
+        let cancelled = false;
+
+        const toDisplayStatus = (status) => {
+            const s = String(status || '').trim();
+            if (!s) return '';
+            // Keep original spacing/format if backend already returns a readable status.
+            return s;
+        };
+
+        const load = async () => {
+            setLoading(true);
+            try {
+                // 1) Prefer backend planning fetch (UUID eventId route)
+                if (eventId && String(eventId).trim()) {
+                    const result = await dispatch(fetchPlanningByEventId(String(eventId).trim()));
+                    if (result.meta?.requestStatus === 'fulfilled' && result.payload) {
+                        const p = result.payload;
+                        const mapped = {
+                            id: p?.eventId || eventId,
+                            title: p?.eventTitle || 'Event',
+                            location: p?.location?.name || 'Location TBD',
+                            image: p?.eventBanner || p?.banner || null,
+                            status: toDisplayStatus(p?.status || 'PENDING APPROVAL'),
+                            listingType: String(p?.category || '').toLowerCase() === 'public' ? 'Public' : 'Private',
+                            assignedManagerId: p?.assignedManagerId || null,
+                            guestCount: typeof p?.guestCount === 'number' ? p.guestCount : null,
+                            ticketTiers: Array.isArray(p?.tickets?.tiers) ? p.tickets.tiers : [],
+                        };
+
+                        if (!cancelled) setEvent(mapped);
+                        return;
+                    }
+                }
+
+                // 2) Fallback to legacy dummy/local data
+                const parsed = Number.isFinite(Number(eventId)) ? parseInt(eventId, 10) : null;
+                const foundEvent = myOrganizedEvents.find((e) => e.id === parsed || e.id === eventId);
+                if (foundEvent) {
+                    if (!cancelled) setEvent(foundEvent);
+                    return;
+                }
+
                 toast.error("Event not found");
                 navigate("/user/my-events");
+            } finally {
+                if (!cancelled) setLoading(false);
             }
-            setLoading(false);
-        }, 800);
-    }, [eventId, navigate]);
+        };
+
+        load();
+        return () => {
+            cancelled = true;
+        };
+    }, [dispatch, eventId, navigate]);
 
     const handleSendMessage = (e) => {
         e.preventDefault();
@@ -44,8 +90,8 @@ const UserEventManagement = () => {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-[#eff6f7] flex items-center justify-center pt-28">
-                <div className="w-16 h-16 border-4 border-[#09637E] border-t-transparent rounded-full animate-spin"></div>
+            <div className="min-h-screen bg-surface flex items-center justify-center pt-28">
+                <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
             </div>
         );
     }
@@ -53,50 +99,86 @@ const UserEventManagement = () => {
     if (!event) return null;
 
     // Roadmap Status Logic
+    const normalizedStatus = String(event?.status || '').toUpperCase().replace(/_/g, ' ').trim();
+    const isPendingApproval = normalizedStatus === 'PENDING APPROVAL' || normalizedStatus === 'PENDING_APPROVAL';
+    const isLive = normalizedStatus === 'LIVE';
+    const isRejected = normalizedStatus === 'REJECTED';
+    const isCompleted = normalizedStatus === 'COMPLETED';
+
+    const hasManagerAssigned = Boolean(event?.assignedManagerId);
+
+    const displayStatus = isPendingApproval
+        ? 'Pending Approval'
+        : isLive
+            ? 'Live'
+            : isRejected
+                ? 'Rejected'
+                : isCompleted
+                    ? 'Completed'
+                : (event?.status || '');
+
     const steps = [
-        { id: 1, label: "Application Received", status: "completed" },
-        { id: 2, label: "Manager Assigned", status: event.status === 'Pending Approval' ? 'current' : 'completed' },
-        { id: 3, label: "Application in Review", status: (event.status === 'Pending Approval') ? 'pending' : (event.status === 'Live' || event.status === 'Rejected') ? 'completed' : 'current' },
-        { id: 4, label: event.status === 'Rejected' ? "Refund Processed" : "Success / Live", status: (event.status === 'Live' || event.status === 'Rejected') ? 'completed' : 'pending' }
+        {
+            id: 1,
+            label: 'Application Received',
+            status: hasManagerAssigned || isLive || isRejected || isCompleted ? 'completed' : 'current',
+        },
+        {
+            id: 2,
+            label: 'Manager Assigned',
+            status: hasManagerAssigned ? 'completed' : 'pending',
+        },
+        {
+            id: 3,
+            label: 'Application in Review',
+            status: hasManagerAssigned
+                ? (isPendingApproval ? 'current' : (isLive || isRejected || isCompleted) ? 'completed' : 'current')
+                : 'pending',
+        },
+        {
+            id: 4,
+            label: isRejected ? 'Rejected' : isCompleted ? 'Completed' : 'Success / Live',
+            status: (isLive || isRejected || isCompleted) ? 'completed' : 'pending',
+        },
     ];
 
     const StepIcon = ({ status }) => {
-        if (status === 'completed') return <div className="w-8 h-8 rounded-full bg-[#09637E] text-white flex items-center justify-center"><BsCheckCircleFill /></div>;
-        if (status === 'current') return <div className="w-8 h-8 rounded-full border-4 border-[#09637E]/20 text-[#09637E] flex items-center justify-center bg-white"><div className="w-2.5 h-2.5 rounded-full bg-[#09637E] animate-pulse" /></div>;
+        if (status === 'completed') return <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center"><BsCheckCircleFill /></div>;
+        if (status === 'current') return <div className="w-8 h-8 rounded-full border-4 border-primary/20 text-primary flex items-center justify-center bg-white"><div className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" /></div>;
         return <div className="w-8 h-8 rounded-full border-2 border-gray-200 bg-white" />;
     };
 
     return (
-        <div className="min-h-screen bg-[#eff6f7] pt-28 font-sans text-[#09637E] selection:bg-[#7AB2B2] selection:text-white">
+        <div className="min-h-screen bg-surface pt-28 font-sans text-primary selection:bg-accent selection:text-white">
             <Toaster position="top-center" />
 
-            <main className="max-w-[1400px] mx-auto px-8 pb-20">
+            <main className="max-w-350 mx-auto px-8 pb-20">
 
                 {/* Header Section */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-12">
                     <div>
-                        <Link to="/user/my-events" className="inline-flex items-center gap-2 text-[#09637E]/50 hover:text-[#09637E] font-bold text-[10px] uppercase tracking-widest mb-4 transition-colors group">
+                        <Link to="/user/my-events" className="inline-flex items-center gap-2 text-primary/50 hover:text-primary font-bold text-[10px] uppercase tracking-widest mb-4 transition-colors group">
                             <BsArrowLeft className="group-hover:-translate-x-1 transition-transform" />
                             Back to My Events
                         </Link>
                         <div className="flex items-center gap-3 mb-2">
                             <h1 className="text-4xl md:text-5xl font-serif-premium italic text-[#0b2d49]">{event.title}</h1>
-                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${event.status === 'Pending Approval' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-[#EBF4F6] text-[#09637E] border-[#09637E]/10'}`}>
-                                {event.status}
+                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${isPendingApproval ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-surface text-primary border-primary/10'}`}>
+                                {displayStatus}
                             </span>
                         </div>
                     </div>
 
-                    <div className="bg-white p-1.5 rounded-xl flex gap-1 shadow-sm border border-[#09637E]/5">
+                    <div className="bg-white p-1.5 rounded-xl flex gap-1 shadow-sm border border-primary/5">
                         <button
                             onClick={() => setActiveTab("overview")}
-                            className={`px-6 py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'overview' ? 'bg-[#eff6f7] text-[#09637E] shadow-sm' : 'text-[#09637E]/40 hover:text-[#09637E]'}`}
+                            className={`px-6 py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'overview' ? 'bg-surface text-primary shadow-sm' : 'text-primary/40 hover:text-primary'}`}
                         >
                             Command Center
                         </button>
                         <button
                             onClick={() => setActiveTab("chat")}
-                            className={`px-6 py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'chat' ? 'bg-[#eff6f7] text-[#09637E] shadow-sm' : 'text-[#09637E]/40 hover:text-[#09637E]'}`}
+                            className={`px-6 py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'chat' ? 'bg-surface text-primary shadow-sm' : 'text-primary/40 hover:text-primary'}`}
                         >
                             Manager Sync
                         </button>
@@ -106,30 +188,30 @@ const UserEventManagement = () => {
                 {activeTab === "overview" && (
                     <div className="space-y-8 animate-fade-in-up">
                         {/* Roadmap Card */}
-                        <div className="bg-white rounded-[32px] p-10 shadow-sm border border-[#09637E]/5 relative overflow-hidden">
+                        <div className="bg-white rounded-4xl p-10 shadow-sm border border-primary/5 relative overflow-hidden">
                             <div className="flex justify-between items-start mb-12">
                                 <div>
                                     <h2 className="text-xl font-serif-premium text-[#0b2d49] mb-1">Event Planning Roadmap</h2>
-                                    {event.status === 'Rejected' && (
-                                        <Link to="/refund-policy" className="text-[10px] font-bold uppercase tracking-widest text-[#09637E]/50 hover:text-[#09637E] transition-colors">
+                                    {isRejected && (
+                                        <Link to="/refund-policy" className="text-[10px] font-bold uppercase tracking-widest text-primary/50 hover:text-primary transition-colors">
                                             Refer Refund Policy details
                                         </Link>
                                     )}
                                 </div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/40">Tracking Status: {event.status}</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-primary/40">Tracking Status: {displayStatus}</p>
                             </div>
 
                             <div className="relative z-10">
                                 {/* Connecting Line */}
-                                <div className="absolute top-4 left-0 right-0 h-[2px] bg-gray-100 -z-10" />
-                                <div className="absolute top-4 left-0 h-[2px] bg-[#09637E]/20 transition-all duration-1000" style={{ width: event.status === 'Pending Approval' ? '33%' : '66%' }} />
+                                <div className="absolute top-4 left-0 right-0 h-0.5 bg-gray-100 -z-10" />
+                                <div className="absolute top-4 left-0 h-0.5 bg-primary/20 transition-all duration-1000" style={{ width: isPendingApproval ? '33%' : '66%' }} />
 
                                 <div className="grid grid-cols-4 gap-4">
                                     {steps.map((step) => (
                                         <div key={step.id} className="flex flex-col items-center gap-4 text-center">
                                             <StepIcon status={step.status} />
                                             <div>
-                                                <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${step.status === 'completed' || step.status === 'current' ? 'text-[#09637E]' : 'text-gray-300'}`}>
+                                                <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${step.status === 'completed' || step.status === 'current' ? 'text-primary' : 'text-gray-300'}`}>
                                                     {step.id}. {step.label}
                                                 </p>
                                                 <p className="text-[9px] font-medium text-gray-400">
@@ -148,26 +230,26 @@ const UserEventManagement = () => {
                             {/* Left Content */}
                             <div className="lg:col-span-2 space-y-8">
                                 {/* Asset Preview */}
-                                <div className="bg-white rounded-[32px] p-8 shadow-sm border border-[#09637E]/5">
-                                    <h3 className="text-sm font-serif-premium text-[#09637E] mb-6">Asset Preview</h3>
+                                <div className="bg-white rounded-4xl p-8 shadow-sm border border-primary/5">
+                                    <h3 className="text-sm font-serif-premium text-primary mb-6">Asset Preview</h3>
 
                                     <div className="relative h-64 rounded-2xl overflow-hidden bg-gray-100 mb-8 border border-gray-100 group">
                                         <div className="absolute top-4 left-4 z-20 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">Minimal Banner</div>
                                         <img src={event.image || "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1200&q=80"} alt="Asset" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 filter grayscale group-hover:grayscale-0" />
-                                        <div className="absolute inset-0 bg-gradient-to-t from-gray-900/60 to-transparent flex flex-col justify-end p-8 text-white">
+                                        <div className="absolute inset-0 bg-linear-to-t from-gray-900/60 to-transparent flex flex-col justify-end p-8 text-white">
                                             <h4 className="font-serif-premium italic text-2xl">{event.title} 2024</h4>
                                             <p className="text-[10px] uppercase tracking-widest opacity-80">{event.location}</p>
                                         </div>
                                     </div>
 
                                     <div className="prose prose-sm max-w-none text-[#0b2d49]/70 leading-relaxed text-xs">
-                                        <h4 className="font-bold text-[#09637E] uppercase tracking-widest text-[10px] mb-2">Event Synopsis</h4>
+                                        <h4 className="font-bold text-primary uppercase tracking-widest text-[10px] mb-2">Event Synopsis</h4>
                                         <p>
                                             The {event.title} is a bespoke experience bringing together the finest artistic and digital innovations.
                                             This event features live workshops, immersive galleries, and a curated set of interactive panels.
                                         </p>
                                         <div className="flex items-center gap-6 mt-6 pt-6 border-t border-gray-100">
-                                            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#09637E]">
+                                            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-primary">
                                                 <div className="w-2 h-2 rounded-full bg-green-400" /> Ticket Sales Active
                                             </div>
                                             <div className="text-[10px] font-bold text-gray-400">ID: #{event.id}</div>
@@ -176,74 +258,103 @@ const UserEventManagement = () => {
                                 </div>
 
                                 {/* Ticket Inventory */}
-                                <div className="bg-white rounded-[32px] p-8 shadow-sm border border-[#09637E]/5 overflow-hidden relative">
-                                    <div className="flex justify-between items-center mb-6">
-                                        <h3 className="text-sm font-serif-premium text-[#09637E]">Ticket Inventory</h3>
-                                        <button className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/50 hover:text-[#09637E]">View Details</button>
+                                {String(event?.listingType || '').toLowerCase() === 'private' ? (
+                                    <div className="bg-white rounded-4xl p-8 shadow-sm border border-primary/5 overflow-hidden relative">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <h3 className="text-sm font-serif-premium text-primary">Guest Count</h3>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <div className="bg-surface rounded-xl p-4">
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-primary/50 mb-1">Guests</p>
+                                                <p className="text-2xl font-serif-premium text-[#0b2d49]">
+                                                    {typeof event?.guestCount === 'number' ? event.guestCount : '—'}
+                                                </p>
+                                            </div>
+                                            <div className="bg-surface rounded-xl p-4">
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-primary/50 mb-1">Listing Type</p>
+                                                <p className="text-2xl font-serif-premium text-[#0b2d49]">Private</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="grid grid-cols-3 gap-4">
-                                        <div className="bg-[#eff6f7] rounded-xl p-4">
-                                            <p className="text-[9px] font-black uppercase tracking-widest text-[#09637E]/50 mb-1">General</p>
-                                            <p className="text-xl font-serif-premium text-[#0b2d49]">150<span className="text-xs opacity-40 ml-1">/ 200</span></p>
+                                ) : (
+                                    <div className="bg-white rounded-4xl p-8 shadow-sm border border-primary/5 overflow-hidden relative">
+                                        <div className="flex justify-between items-center mb-6">
+                                            <h3 className="text-sm font-serif-premium text-primary">Tickets</h3>
                                         </div>
-                                        <div className="bg-[#eff6f7] rounded-xl p-4">
-                                            <p className="text-[9px] font-black uppercase tracking-widest text-[#09637E]/50 mb-1">VIP</p>
-                                            <p className="text-xl font-serif-premium text-[#0b2d49]">45<span className="text-xs opacity-40 ml-1">/ 50</span></p>
-                                        </div>
-                                        <div className="bg-[#09637E] rounded-xl p-4 text-white">
-                                            <p className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-1">Total Rev</p>
-                                            <p className="text-xl font-serif-premium">₹12.5k</p>
-                                        </div>
+
+                                        {Array.isArray(event?.ticketTiers) && event.ticketTiers.length > 0 ? (
+                                            <div className="space-y-3">
+                                                {event.ticketTiers.map((tier, idx) => (
+                                                    <div key={tier?._id || tier?.name || idx} className="flex items-center justify-between bg-surface rounded-xl p-4">
+                                                        <div>
+                                                            <p className="text-[9px] font-black uppercase tracking-widest text-primary/50 mb-1">Tier</p>
+                                                            <p className="text-sm font-bold text-[#0b2d49]">{tier?.name || `Tier ${idx + 1}`}</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="text-[9px] font-black uppercase tracking-widest text-primary/50 mb-1">Quantity</p>
+                                                            <p className="text-sm font-bold text-[#0b2d49]">
+                                                                {typeof tier?.sold === 'number' ? tier.sold : '—'}
+                                                                {typeof tier?.quantity === 'number' ? ` / ${tier.quantity}` : ''}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="bg-surface rounded-xl p-6 text-sm text-[#0b2d49]/70">
+                                                No ticket tiers configured.
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
+                                )}
                             </div>
 
                             {/* Right Content */}
                             <div className="space-y-8">
                                 {/* Consultation / Manager Card */}
-                                <div className="relative bg-[#09637E] text-white rounded-[32px] p-8 shadow-xl overflow-hidden flex flex-col justify-between min-h-[300px]">
+                                <div className="relative bg-primary text-white rounded-4xl p-8 shadow-xl overflow-hidden flex flex-col justify-between min-h-75">
                                     {/* Decorative BG */}
                                     <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full blur-[50px] -mr-10 -mt-10 pointer-events-none" />
 
                                     <div className="relative z-10">
                                         <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center mb-6 text-white backdrop-blur-sm">
-                                            {event.status === 'Pending Approval' ? <BsClock size={20} /> : <BsChatDots size={20} />}
+                                            {isPendingApproval ? <BsClock size={20} /> : <BsChatDots size={20} />}
                                         </div>
 
                                         <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60 mb-2">Consultation</p>
                                         <h3 className="text-2xl font-serif-premium italic mb-4">
-                                            {event.status === 'Pending Approval'
+                                            {!hasManagerAssigned
                                                 ? 'Manager Selection'
-                                                : event.status === 'Rejected'
+                                                : isRejected
                                                     ? 'Application Closed'
                                                     : 'Manager Connected'
                                             }
                                         </h3>
-                                        <p className="text-xs opacity-80 leading-relaxed max-w-[250px]">
-                                            {event.status === 'Pending Approval'
-                                                ? "A dedicated manager will be assigned to optimize your experience once your event is approved."
-                                                : event.status === 'Rejected'
+                                        <p className="text-xs opacity-80 leading-relaxed max-w-62.5">
+                                            {!hasManagerAssigned
+                                                ? "A dedicated manager will be assigned once your event moves forward in the review process."
+                                                : isRejected
                                                     ? "Your application was not approved. A refund has been processed according to our policy."
-                                                    : "Sarah Jenkins is assigned to your event. Sync up for strategy and execution details."
+                                                    : "Your manager is assigned to your event. Sync up for strategy and execution details."
                                             }
                                         </p>
                                     </div>
 
                                     <button
-                                        onClick={() => event.status !== 'Pending Approval' && event.status !== 'Rejected' && setActiveTab("chat")}
-                                        disabled={event.status === 'Pending Approval' || event.status === 'Rejected'}
-                                        className={`mt-8 w-full py-4 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${event.status === 'Pending Approval' || event.status === 'Rejected'
+                                        onClick={() => hasManagerAssigned && !isRejected && setActiveTab("chat")}
+                                        disabled={!hasManagerAssigned || isRejected}
+                                        className={`mt-8 w-full py-4 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${!hasManagerAssigned || isRejected
                                             ? 'bg-white/10 text-white/50 cursor-not-allowed'
-                                            : 'bg-white text-[#09637E] hover:bg-white/90'
+                                            : 'bg-white text-primary hover:bg-white/90'
                                             }`}
                                     >
-                                        {event.status === 'Pending Approval' ? 'Assignment Pending' : event.status === 'Rejected' ? 'Refund Processed' : 'Chat with Manager'}
+                                        {!hasManagerAssigned ? 'Assignment Pending' : isRejected ? 'Refund Processed' : 'Chat with Manager'}
                                     </button>
                                 </div>
 
                                 {/* Promotion Assets */}
-                                <div className="bg-white rounded-[32px] p-8 shadow-sm border border-[#09637E]/5">
-                                    <h3 className="text-sm font-serif-premium text-[#09637E] mb-6">Promotion Assets</h3>
+                                <div className="bg-white rounded-4xl p-8 shadow-sm border border-primary/5">
+                                    <h3 className="text-sm font-serif-premium text-primary mb-6">Promotion Assets</h3>
 
                                     <div className="space-y-3">
                                         {[
@@ -251,9 +362,9 @@ const UserEventManagement = () => {
                                             { name: "Social_Banners.zip", size: "12 MB" },
                                             { name: "Event_Logos.ai", size: "4 MB" }
                                         ].map((file, i) => (
-                                            <div key={i} className="group flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-[#09637E]/20 hover:bg-[#eff6f7]/50 transition-all cursor-pointer">
+                                            <div key={i} className="group flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-primary/20 hover:bg-surface/50 transition-all cursor-pointer">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-xl bg-[#eff6f7] text-[#09637E] flex items-center justify-center group-hover:bg-white group-hover:shadow-sm transition-all">
+                                                    <div className="w-10 h-10 rounded-xl bg-surface text-primary flex items-center justify-center group-hover:bg-white group-hover:shadow-sm transition-all">
                                                         <BsFileEarmarkZip size={18} />
                                                     </div>
                                                     <div>
@@ -261,13 +372,13 @@ const UserEventManagement = () => {
                                                         <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{file.size}</p>
                                                     </div>
                                                 </div>
-                                                <button className="text-[#09637E]/40 group-hover:text-[#09637E] transition-colors">
+                                                <button className="text-primary/40 group-hover:text-primary transition-colors">
                                                     <BsDownload size={14} />
                                                 </button>
                                             </div>
                                         ))}
                                     </div>
-                                    <button className="w-full mt-6 py-3 border border-dashed border-[#09637E]/30 rounded-xl text-[10px] font-black uppercase tracking-widest text-[#09637E]/60 hover:text-[#09637E] hover:border-[#09637E] transition-colors">
+                                    <button className="w-full mt-6 py-3 border border-dashed border-primary/30 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary/60 hover:text-primary hover:border-primary transition-colors">
                                         Request New Asset
                                     </button>
                                 </div>
@@ -277,36 +388,36 @@ const UserEventManagement = () => {
                 )}
 
                 {activeTab === "chat" && (
-                    <div className="bg-white rounded-[32px] shadow-sm border border-[#09637E]/5 overflow-hidden flex flex-col h-[700px] animate-fade-in-up">
-                        {event.status === 'Pending Approval' ? (
+                    <div className="bg-white rounded-4xl shadow-sm border border-primary/5 overflow-hidden flex flex-col h-175 animate-fade-in-up">
+                        {isPendingApproval ? (
                             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center opacity-60">
-                                <div className="w-24 h-24 bg-[#eff6f7] rounded-full flex items-center justify-center mb-8 text-[#09637E]">
+                                <div className="w-24 h-24 bg-surface rounded-full flex items-center justify-center mb-8 text-primary">
                                     <BsChatDots size={40} />
                                 </div>
                                 <h3 className="text-2xl font-serif-premium text-[#0b2d49] mb-3">Sync Unavailable</h3>
-                                <p className="text-sm text-[#09637E] max-w-sm leading-relaxed">
+                                <p className="text-sm text-primary max-w-sm leading-relaxed">
                                     Manager Sync will be unlocked once your event passes the Admin Review stage.
                                 </p>
                             </div>
                         ) : (
                             <>
-                                <div className="p-8 border-b border-[#09637E]/10 flex items-center justify-between bg-[#eff6f7]/30">
+                                <div className="p-8 border-b border-primary/10 flex items-center justify-between bg-surface/30">
                                     <div>
                                         <h3 className="font-serif-premium text-xl text-[#0b2d49]">Manager Sync</h3>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/50">Direct Line • Sarah Jenkins</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/50">Direct Line • Sarah Jenkins</p>
                                     </div>
-                                    <Link to="#" className="px-4 py-2 bg-white border border-[#09637E]/10 rounded-lg text-[9px] font-black uppercase tracking-widest text-[#09637E] hover:bg-[#09637E] hover:text-white transition-all">
+                                    <Link to="#" className="px-4 py-2 bg-white border border-primary/10 rounded-lg text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary hover:text-white transition-all">
                                         View Profile
                                     </Link>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-[#f8fafc]">
+                                <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-surface">
                                     <div className="flex justify-center mb-8">
-                                        <span className="px-4 py-1.5 bg-[#eff6f7] text-[#09637E]/60 text-[9px] font-bold rounded-full uppercase tracking-widest">Today</span>
+                                        <span className="px-4 py-1.5 bg-surface text-primary/60 text-[9px] font-bold rounded-full uppercase tracking-widest">Today</span>
                                     </div>
                                     {chatHistory.map((msg, index) => (
                                         <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[60%] p-5 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.sender === 'user' ? 'bg-[#09637E] text-white rounded-br-none' : 'bg-white text-[#0b2d49] border border-gray-100 rounded-bl-none'}`}>
+                                            <div className={`max-w-[60%] p-5 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.sender === 'user' ? 'bg-primary text-white rounded-br-none' : 'bg-white text-[#0b2d49] border border-gray-100 rounded-bl-none'}`}>
                                                 <p>{msg.text}</p>
                                                 <p className={`text-[9px] mt-2 font-bold uppercase tracking-widest text-right ${msg.sender === 'user' ? 'text-white/60' : 'text-gray-300'}`}>{msg.time}</p>
                                             </div>
@@ -314,16 +425,16 @@ const UserEventManagement = () => {
                                     ))}
                                 </div>
 
-                                <div className="p-6 bg-white border-t border-[#09637E]/10">
+                                <div className="p-6 bg-white border-t border-primary/10">
                                     <form onSubmit={handleSendMessage} className="flex gap-4 relative">
                                         <input
                                             type="text"
                                             value={chatMessage}
                                             onChange={(e) => setChatMessage(e.target.value)}
                                             placeholder="Type your message..."
-                                            className="flex-1 bg-[#eff6f7] border-none rounded-2xl px-6 py-4 text-sm focus:ring-2 focus:ring-[#09637E]/20 text-[#0b2d49] placeholder:text-gray-400"
+                                            className="flex-1 bg-surface border-none rounded-2xl px-6 py-4 text-sm focus:ring-2 focus:ring-primary/20 text-[#0b2d49] placeholder:text-gray-400"
                                         />
-                                        <button type="submit" className="absolute right-2 top-2 bottom-2 w-12 bg-[#09637E] text-white rounded-xl flex items-center justify-center hover:bg-[#088395] transition-all shadow-md">
+                                        <button type="submit" className="absolute right-2 top-2 bottom-2 w-12 bg-primary text-white rounded-xl flex items-center justify-center hover:bg-primary/90 transition-all shadow-md">
                                             <BsSend size={18} />
                                         </button>
                                     </form>

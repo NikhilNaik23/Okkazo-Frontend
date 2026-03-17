@@ -34,7 +34,6 @@ import ManagerChatPage from "./pages/Home/manager/ManagerChatPage";
 import ManagerReports from "./pages/Home/manager/ManagerReports";
 import ManagerProfile from "./pages/Home/manager/ManagerProfile";
 import ManagerLogout from "./pages/Home/manager/ManagerLogout";
-import ManagerNotifications from "./pages/Home/manager/ManagerNotifications";
 
 import UserLayout from "./components/Layout/user/UserLayout";
 
@@ -300,7 +299,6 @@ const App = () => {
             <Route path="reports" element={<ManagerReports />} />
             <Route path="profile" element={<ManagerProfile />} />
             <Route path="logout" element={<ManagerLogout />} />
-            <Route path="notifications" element={<ManagerNotifications />} />
           </Route>
 
 

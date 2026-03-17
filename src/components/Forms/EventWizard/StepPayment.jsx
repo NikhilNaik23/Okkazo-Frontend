@@ -37,6 +37,9 @@ const STEPS = [
     { key: 'verify', label: 'Verifying payment...' },
 ];
 
+const MotionDiv = motion.div;
+const MotionP = motion.p;
+
 // ─── Inline progress indicator ───────────────────────────────────────────────
 const FlowProgress = ({ activeStep, error }) => (
     <div className="w-full max-w-md mx-auto mt-8">
@@ -49,7 +52,7 @@ const FlowProgress = ({ activeStep, error }) => (
                 const failed  = active && !!error;
 
                 return (
-                    <motion.div
+                    <MotionDiv
                         key={step.key}
                         initial={{ opacity: 0, x: -10 }}
                         animate={{ opacity: pending ? 0.3 : 1, x: 0 }}
@@ -79,18 +82,18 @@ const FlowProgress = ({ activeStep, error }) => (
                         {active && !error && (
                             <div className="ml-auto w-4 h-4 border-2 border-[#09637E]/20 border-t-[#09637E] rounded-full animate-spin" />
                         )}
-                    </motion.div>
+                    </MotionDiv>
                 );
             })}
         </div>
         {error && (
-            <motion.p
+            <MotionP
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="mt-6 text-xs font-bold text-red-500 bg-red-50 border border-red-100 rounded-xl px-4 py-3"
             >
                 {error}
-            </motion.p>
+            </MotionP>
         )}
     </div>
 );
@@ -99,16 +102,16 @@ const FlowProgress = ({ activeStep, error }) => (
 const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
     const dispatch = useDispatch();
 
-    const { saveStatus, orderStatus, verifyStatus, eventId, razorpayOrderId, razorpayKeyId, transactionId, error } =
-        useSelector((state) => state.planning);
+    const { transactionId } = useSelector((state) => state.planning);
 
-    const [isSuccess,    setIsSuccess]    = useState(false);
+    const [localSuccess, setLocalSuccess] = useState(false);
     const [countdown,    setCountdown]    = useState(3);
     const [paymentMethod, setPaymentMethod] = useState('card');
     const [flowActive,   setFlowActive]   = useState(false);
     const [activeStep,   setActiveStep]   = useState(null); // 'save'|'order'|'razor'|'verify'
     const [flowError,    setFlowError]    = useState(null);
-    const [cancelled,    setCancelled]    = useState(false);
+
+    const isSuccess = localSuccess || Boolean(formData.isPaid);
 
     // ── Countdown → advance wizard on success ────────────────────────────────
     useEffect(() => {
@@ -117,11 +120,6 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
         const t = setTimeout(() => setCountdown(c => c - 1), 1000);
         return () => clearTimeout(t);
     }, [isSuccess, countdown, onNext]);
-
-    // ── If already paid (resumed wizard), skip straight to success ───────────
-    useEffect(() => {
-        if (formData.isPaid) setIsSuccess(true);
-    }, [formData.isPaid]);
 
     // ── Reset slice on unmount ───────────────────────────────────────────────
     useEffect(() => {
@@ -133,9 +131,10 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
     // ── Main payment orchestration ───────────────────────────────────────────
     const handlePayment = useCallback(async () => {
         setFlowError(null);
-        setCancelled(false);
         setFlowActive(true);
         dispatch(clearPlanningError());
+
+        const draftIdBeforeSave = formData.id;
 
         // ── 1. Save event ────────────────────────────────────────────────────
         setActiveStep('save');
@@ -189,7 +188,6 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                     : {}),
                 modal: {
                     ondismiss: () => {
-                        setCancelled(true);
                         setFlowError('Payment was cancelled. You can try again.');
                         setFlowActive(false);
                         resolve();
@@ -219,28 +217,23 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                     handleChange('isPaid', true);
                     handleChange('transactionId', txnId);
 
-                    // Persist to localStorage for My Events page
+                    // Clear draft(s) once payment is successful
                     try {
-                        const existingEvents = JSON.parse(localStorage.getItem('my_organized_events') || '[]');
-                        const newEvent = {
-                            id: savedEventId,
-                            title:    formData.title || `${formData.type} Planning`,
-                            date:     formData.date   || 'Date Pending',
-                            location: formData.location || 'Location TBD',
-                            status:   'Immediate Action',
-                            formData: { ...formData, id: savedEventId, isPaid: true, transactionId: txnId },
-                            image: 'https://images.unsplash.com/photo-1540317580384-e5d43616b9aa?q=80&w=2574&auto=format&fit=crop',
-                            sold: '0',
-                        };
-                        localStorage.setItem(
-                            'my_organized_events',
-                            JSON.stringify([newEvent, ...existingEvents])
-                        );
-                        window.dispatchEvent(new Event('savedUpdated'));
-                    } catch (_) { /* non-critical */ }
+                        const idsToRemove = new Set([
+                            String(savedEventId),
+                            draftIdBeforeSave ? String(draftIdBeforeSave) : null,
+                        ].filter(Boolean));
+
+                        const drafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
+                        if (Array.isArray(drafts) && drafts.length > 0) {
+                            const nextDrafts = drafts.filter((d) => !idsToRemove.has(String(d.id)));
+                            localStorage.setItem('planningWizardDrafts', JSON.stringify(nextDrafts));
+                            window.dispatchEvent(new Event('savedUpdated'));
+                        }
+                    } catch { /* non-critical */ }
 
                     setFlowActive(false);
-                    setIsSuccess(true);
+                    setLocalSuccess(true);
                     resolve();
                 },
             };
@@ -277,7 +270,7 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                             <AnimatePresence mode="wait">
                                 {showProgress ? (
                                     /* ── In-flight progress view ─────────────────────────────── */
-                                    <motion.div
+                                    <MotionDiv
                                         key="progress"
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
@@ -315,10 +308,10 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                                                 </button>
                                             </div>
                                         )}
-                                    </motion.div>
+                                    </MotionDiv>
                                 ) : paymentMethod === 'card' ? (
                                     /* ── Card payment CTA ────────────────────────────────────── */
-                                    <motion.div
+                                    <MotionDiv
                                         key="card"
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
@@ -354,10 +347,10 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                                         >
                                             Complete Payment <BsArrowRight />
                                         </button>
-                                    </motion.div>
+                                    </MotionDiv>
                                 ) : (
                                     /* ── UPI payment CTA (uses Razorpay UPI) ─────────────────── */
-                                    <motion.div
+                                    <MotionDiv
                                         key="upi"
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
@@ -393,7 +386,7 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                                         >
                                             Continue to UPI <BsArrowRight />
                                         </button>
-                                    </motion.div>
+                                    </MotionDiv>
                                 )}
                             </AnimatePresence>
                         </div>

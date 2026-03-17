@@ -2,19 +2,12 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { MdLogout, MdClose } from "react-icons/md";
 import { adminMenuSections, adminBottomItems } from "../../../data/adminData";
-import { vendorNotificationsData } from "../../../data/vendorNotificationsData";
-import { chatMessages } from "../../../data/chatData";
 
-const Navbar = ({ isOpen, onClose, onToggleNotifications }) => {
+const Navbar = ({ isOpen, onClose }) => {
   const location = useLocation();
 
   const menuSections = adminMenuSections;
   const bottomItems = adminBottomItems;
-
-  const currentUserId = 'manager'; // Default admin ID in chatData
-
-  const unreadNotifications = vendorNotificationsData.new.some(n => n.unread);
-  const unreadChatCount = chatMessages.filter(m => m.receiverId === currentUserId && m.status !== 'read').length;
 
   const handleLogout = () => {
     localStorage.clear();
@@ -79,12 +72,7 @@ const Navbar = ({ isOpen, onClose, onToggleNotifications }) => {
                       }`}
                     >
                       <Icon className={`text-[22px] ${active ? "text-[#d7a444]" : "text-[#708aa0] group-hover:text-[#0b2d49]"}`} />
-                      <span className="flex-1">{item.label}</span>
-                      {item.label === "Chat" && unreadChatCount > 0 && (
-                        <span className="bg-[#d7a444] text-[#0b2d49] text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm">
-                          {unreadChatCount}
-                        </span>
-                      )}
+                      {item.label}
                     </Link>
                   );
                 })}
@@ -98,29 +86,7 @@ const Navbar = ({ isOpen, onClose, onToggleNotifications }) => {
           <div className="space-y-1">
             {bottomItems.map((item) => {
               const Icon = item.icon;
-              const active = item.path && isActive(item.path);
-              
-              if (item.action === "toggleNotifications") {
-                return (
-                  <button 
-                    key="notifications-toggle"
-                    onClick={() => {
-                      onToggleNotifications();
-                      onClose && window.innerWidth < 768 && onClose();
-                    }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl text-[#5a5b44] hover:bg-[#e9eff1] hover:text-[#0b2d49] transition-colors"
-                  >
-                     <div className="relative">
-                        <Icon className="text-[22px] text-[#708aa0]" />
-                        {unreadNotifications && (
-                          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 border-2 border-[#f8fafc] rounded-full"></span>
-                        )}
-                      </div>
-                      {item.label}
-                    </button>
-                );
-              }
-
+              const active = isActive(item.path);
               return (
                 <Link 
                   key={item.path}
