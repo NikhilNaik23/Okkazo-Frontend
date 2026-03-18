@@ -86,10 +86,7 @@ const UserProfile = () => {
                                             <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
                                         </div>
                                     </div>
-                                    {/* Edit Badge */}
-                                    <div className="absolute bottom-2 right-2 w-10 h-10 bg-[#09637E] rounded-full flex items-center justify-center text-white border-4 border-[#EBF4F6] shadow-lg group-hover:scale-110 transition-transform">
-                                        <BsCameraFill size={14} />
-                                    </div>
+
                                 </div>
 
                                 <h1 className="text-5xl font-serif-premium italic font-bold mb-2 tracking-tight text-[#09637E] text-center">{user.name}</h1>

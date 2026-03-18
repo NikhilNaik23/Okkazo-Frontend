@@ -296,9 +296,21 @@ export const updateProfile = createAsyncThunk(
     'auth/updateProfile',
     async (profileData, { dispatch, rejectWithValue }) => {
         try {
+            // Never allow client-side self-service updates to mutate protected fields.
+            // Backend also enforces this, but stripping here avoids unnecessary 400s.
+            const {
+                email,
+                authId,
+                role,
+                memberSince,
+                createdAt,
+                updatedAt,
+                ...safeProfileData
+            } = profileData || {};
+
             const response = await fetchWithAuth(`${API_BASE_URL}/api/users/me`, {
                 method: 'PUT',
-                body: JSON.stringify(profileData),
+                body: JSON.stringify(safeProfileData),
             }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await response.json();

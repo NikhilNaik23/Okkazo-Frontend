@@ -7,6 +7,7 @@ import { useDispatch, useSelector } from 'react-redux';
 // Wizard Components
 import VerticalStepTransition from "../../../components/Forms/PromoteEvent/Wizard/VerticalStepTransition";
 import StepDetails from "../../../components/Forms/PromoteEvent/Wizard/StepDetails";
+import StepSphere from "../../../components/Forms/PromoteEvent/Wizard/StepSphere";
 import StepMedia from "../../../components/Forms/PromoteEvent/Wizard/StepMedia";
 import StepTickets from "../../../components/Forms/PromoteEvent/Wizard/StepTickets";
 import StepSchedule from "../../../components/Forms/PromoteEvent/Wizard/StepSchedule";
@@ -79,18 +80,19 @@ const PromoteEvent = () => {
     const steps = promoteEventSteps.map(step => ({
         ...step,
         completed: (
-            (step.id === 1 && !!formData.eventName && !!formData.category && (formData.category !== 'Other' || !!formData.customCategory?.trim()) && (formData.eventDescription?.trim().length || 0) >= 10) ||
-            (step.id === 2 && !!formData.banner && !!formData.bannerFile) ||
-            (step.id === 3 &&
+            (step.id === 1 && !!formData.eventName && (formData.eventDescription?.trim().length || 0) >= 10) ||
+            (step.id === 2 && !!formData.category && (formData.category !== 'Other' || !!formData.customCategory?.trim()) && (formData.interests?.length || 0) > 0) ||
+            (step.id === 3 && !!formData.banner && !!formData.bannerFile) ||
+            (step.id === 4 &&
                 formData.totalCapacity > 0 &&
                 formData.tickets.length > 0 &&
                 formData.tickets.reduce((sum, t) => sum + (parseInt(t.quantity) || 0), 0) === parseInt(formData.totalCapacity) &&
                 formData.tickets.every(t => !!t.name && (formData.ticketType === 'free' || (t.price !== "" && t.price > 0)))
             ) ||
-            (step.id === 4 && !!formData.startDate && !!formData.endDate && !!formData.ticketReleaseDate && !!formData.ticketSalesEndDate && !!formData.address && !!formData.lat && !!formData.lng) ||
-            (step.id === 5) || // Promote is optional
-            (step.id === 6 && formData.authDocuments?.length > 0) || // Verify: at least 1 doc
-            (step.id === 7) // Review
+            (step.id === 5 && !!formData.startDate && !!formData.endDate && !!formData.ticketReleaseDate && !!formData.ticketSalesEndDate && !!formData.address && !!formData.lat && !!formData.lng) ||
+            (step.id === 6) || // Promote is optional
+            (step.id === 7 && formData.authDocuments?.length > 0) || // Verify: at least 1 doc
+            (step.id === 8) // Review
         )
     }));
 
@@ -144,7 +146,7 @@ const PromoteEvent = () => {
 
     // Navigation
     const handleNext = () => {
-        if (currentStep < 7) {
+        if (currentStep < 8) {
             setCurrentStep(prev => prev + 1);
         } else {
             setIsPaymentStep(true);
@@ -252,8 +254,9 @@ const PromoteEvent = () => {
                         ) : (
                             <div className="transition-all duration-500 ease-in-out">
                                 {currentStep === 1 && <StepDetails formData={formData} setFormData={setFormData} />}
-                                {currentStep === 2 && <StepMedia formData={formData} setFormData={setFormData} />}
-                                {currentStep === 3 && (
+                                {currentStep === 2 && <StepSphere formData={formData} setFormData={setFormData} />}
+                                {currentStep === 3 && <StepMedia formData={formData} setFormData={setFormData} />}
+                                {currentStep === 4 && (
                                     <StepTickets
                                         formData={formData}
                                         setFormData={setFormData}
@@ -263,10 +266,10 @@ const PromoteEvent = () => {
                                         onChange={handleTicketChange}
                                     />
                                 )}
-                                {currentStep === 4 && <StepSchedule formData={formData} setFormData={setFormData} />}
-                                {currentStep === 5 && <StepPromote formData={formData} setFormData={setFormData} />}
-                                {currentStep === 6 && <StepVerify formData={formData} setFormData={setFormData} />}
-                                {currentStep === 7 && (
+                                {currentStep === 5 && <StepSchedule formData={formData} setFormData={setFormData} />}
+                                {currentStep === 6 && <StepPromote formData={formData} setFormData={setFormData} />}
+                                {currentStep === 7 && <StepVerify formData={formData} setFormData={setFormData} />}
+                                {currentStep === 8 && (
                                     <StepReview
                                         formData={formData}
                                         platformFee={platformFee ?? 15000}
@@ -297,7 +300,7 @@ const PromoteEvent = () => {
                                 : 'bg-[#09637E]/10 text-[#09637E]/40 cursor-not-allowed'
                                 }`}
                         >
-                            <span>{currentStep === 7 ? 'Finalize & Pay' : 'Next Step'}</span>
+                            <span>{currentStep === 8 ? 'Finalize & Pay' : 'Next Step'}</span>
                             <BsArrowRight size={18} className={`${isCurrentStepCompleted ? 'group-hover:translate-x-1' : ''} transition-transform`} />
                         </button>
                     </div>

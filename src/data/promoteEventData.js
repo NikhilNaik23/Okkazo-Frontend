@@ -1,11 +1,12 @@
 export const promoteEventSteps = [
-    { id: 1, label: "Details", desc: "Event name & category" },
-    { id: 2, label: "Media", desc: "Banner & images" },
-    { id: 3, label: "Tickets", desc: "Pricing & availability" },
-    { id: 4, label: "Schedule", desc: "Dates & timing" },
-    { id: 5, label: "Promote", desc: "Optional boost" },
-    { id: 6, label: "Verify", desc: "Authenticity & Permissions" },
-    { id: 7, label: "Review", desc: "Final verification" }
+    { id: 1, label: "Details", desc: "Event name & description" },
+    { id: 2, label: "Sphere", desc: "Category & fields" },
+    { id: 3, label: "Media", desc: "Banner & images" },
+    { id: 4, label: "Tickets", desc: "Pricing & availability" },
+    { id: 5, label: "Schedule", desc: "Dates & timing" },
+    { id: 6, label: "Promote", desc: "Optional boost" },
+    { id: 7, label: "Verify", desc: "Authenticity & Permissions" },
+    { id: 8, label: "Review", desc: "Final verification" }
 ];
 
 export const initialPromoteEventState = {

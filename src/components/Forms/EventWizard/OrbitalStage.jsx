@@ -11,6 +11,13 @@ import OrbitalTickets from './OrbitalTickets';
 import OrbitalPromote from './OrbitalPromote';
 import CustomDatePicker from '../PromoteEvent/Wizard/CustomDatePicker';
 
+const PREDEFINED_INTERESTS = [
+    "Tech & Innovation", "Art & Design", "Music & Live Events", "Food & Culinary",
+    "Health & Wellness", "Travel & Adventure", "Business & Networking", "Science & Education",
+    "Sports & Fitness", "Gaming & E-Sports", "Fashion & Lifestyle", "Literature & Writing",
+    "Photography", "Film & Cinema", "Startups & Entrepreneurship", "Social Impact"
+];
+
 const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSaveDraft, handleAddTicket, handleRemoveTicket, handleTicketChange }) => {
     const [activeIndex, setActiveIndex] = useState(0);
     const [isMapOpen, setIsMapOpen] = useState(false);
@@ -36,6 +43,7 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
 
     const dynamicSteps = formData.listingType === 'Public' ? steps.filter(s => s.id !== 'date').flatMap(s => {
         if (s.id === 'title') return [s, { id: 'description', label: 'Description', hint: 'Tell your story' }];
+        if (s.id === 'type') return [s, { id: 'field', label: 'Event Field', hint: 'Define your domain' }];
         if (s.id === 'guests') return [{ id: 'banner', label: 'Event Banner', hint: 'Upload Banner' }];
         return [s];
     }).concat([
@@ -51,6 +59,7 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
             case 'title': return !!formData.title;
             case 'description': return !!formData.eventDescription?.trim();
             case 'type': return !!formData.type && (formData.type !== 'Other' || formData.customType?.trim());
+            case 'field': return !!formData.interests && formData.interests.length > 0;
             case 'date': return !!formData.date && formData.date >= minDateString;
             case 'location': return !!formData.locationValid;
             case 'time':
@@ -255,6 +264,37 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
+                                </div>
+                            )}
+
+                            {/* 3b. Field Focus (Public Only) */}
+                            {currentStep.id === 'field' && (
+                                <div className="max-w-md max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+                                    <div className="grid grid-cols-2 gap-3 mb-4 p-1">
+                                        {PREDEFINED_INTERESTS.map(interest => {
+                                            const isSelected = (formData.interests || []).includes(interest);
+                                            return (
+                                                <motion.button
+                                                    key={interest}
+                                                    whileHover={{ backgroundColor: 'rgba(15,118,110,0.05)' }}
+                                                    onClick={() => {
+                                                        const currentInterests = formData.interests || [];
+                                                        if (currentInterests.includes(interest)) {
+                                                            setFormData(prev => ({ ...prev, interests: [] }));
+                                                        } else {
+                                                            setFormData(prev => ({ ...prev, interests: [interest] }));
+                                                            setTimeout(handleNext, 400);
+                                                        }
+                                                    }}
+                                                    className={`px-6 py-4 rounded-2xl border transition-all text-left ${isSelected ? 'border-teal-700 bg-teal-50 shadow-md transform scale-[1.02]' : 'border-teal-900/5 hover:border-teal-900/10'}`}
+                                                >
+                                                    <span className="text-lg font-serif-premium text-teal-900">
+                                                        {interest}
+                                                    </span>
+                                                </motion.button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             )}
 

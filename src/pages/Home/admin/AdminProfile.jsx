@@ -183,9 +183,7 @@ const AdminProfile = () => {
                                         {getInitials(userInfo.name)}
                                     </div>
                                 )}
-                                <button className="absolute -bottom-2 -right-2 p-2 bg-[#0b2d49] text-[#d7a444] rounded-xl shadow-lg border-4 border-white opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-95">
-                                    <Camera size={20} />
-                                </button>
+
                             </div>
                         </div>
 
