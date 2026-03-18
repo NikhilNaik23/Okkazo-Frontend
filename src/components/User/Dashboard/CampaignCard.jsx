@@ -1,15 +1,18 @@
 import React from 'react';
 import { BsClock, BsCheckCircleFill } from 'react-icons/bs';
 
-const CampaignCard = ({ camp }) => {
+const CampaignCard = ({ camp, onAction }) => {
     return (
         <div className={`relative rounded-[40px] p-8 flex flex-col justify-between overflow-hidden text-white ${camp.gradient} shadow-lg hover:-translate-y-2 transition-transform duration-500`}>
             {/* Status Pill */}
             <div className="flex justify-start">
-                <span className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-2 shadow-sm ${camp.status.includes('Live') ? 'bg-emerald-400 text-[#09637E]' :
-                    camp.status.includes('Sold Out') ? 'bg-emerald-600 text-white' : 'bg-[#d7a444] text-[#0b2d49]'
+                <span className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-2 shadow-sm ${camp.status?.includes('Live') ? 'bg-emerald-400 text-[#09637E]' :
+                    camp.status?.includes('Complete') ? 'bg-emerald-600 text-white' :
+                    camp.status?.includes('Pending') ? 'bg-[#EBF4F6] text-[#09637E]' :
+                    camp.status?.includes('Payment') ? 'bg-[#d7a444] text-[#0b2d49]' :
+                    'bg-[#d7a444] text-[#0b2d49]'
                     }`}>
-                    {camp.status.includes('Live') && <span className="w-1.5 h-1.5 bg-[#09637E] rounded-full animate-pulse" />}
+                    {camp.status?.includes('Live') && <span className="w-1.5 h-1.5 bg-[#09637E] rounded-full animate-pulse" />}
                     {camp.status}
                 </span>
             </div>
@@ -48,10 +51,10 @@ const CampaignCard = ({ camp }) => {
 
                 <div className="flex justify-end items-end">
                     <button
-                        onClick={() => window.location.href = `/user/promote-event/${camp.id}`}
-                        className={`px-6 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${camp.status === 'Sold Out' ? 'bg-[#09637E] text-white hover:bg-[#074d63]' : 'bg-white text-[#09637E] hover:bg-gray-100 shadow-lg'
+                        onClick={() => (typeof onAction === 'function' ? onAction(camp) : (window.location.href = `/user/promote-event/${camp.id}`))}
+                        className={`px-6 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${camp.status === 'Complete' ? 'bg-[#09637E] text-white hover:bg-[#074d63]' : 'bg-white text-[#09637E] hover:bg-gray-100 shadow-lg'
                             }`}>
-                        View
+                        {camp.buttonText || 'View'}
                     </button>
                 </div>
             </div>

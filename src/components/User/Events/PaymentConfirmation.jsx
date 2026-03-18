@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch } from "react-redux";
 import { motion, AnimatePresence } from "framer-motion";
 import { BsShieldCheck, BsArrowLeft, BsGem, BsArrowRight } from "react-icons/bs";
 import {
@@ -30,6 +30,9 @@ const STEPS = [
     { key: 'verify', label: 'Verifying payment...' },
 ];
 
+const MotionDiv = motion.div;
+const MotionP = motion.p;
+
 const FlowProgress = ({ activeStep, error }) => (
     <div className="w-full max-w-md mx-auto mt-6 space-y-3">
         {STEPS.map((step, idx) => {
@@ -39,7 +42,7 @@ const FlowProgress = ({ activeStep, error }) => (
             const pending = idx > stepIdx;
             const failed  = active && !!error;
             return (
-                <motion.div
+                <MotionDiv
                     key={step.key}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: pending ? 0.3 : 1, x: 0 }}
@@ -68,27 +71,25 @@ const FlowProgress = ({ activeStep, error }) => (
                     {active && !error && (
                         <div className="ml-auto w-4 h-4 border-2 border-[#09637E]/20 border-t-[#09637E] rounded-full animate-spin" />
                     )}
-                </motion.div>
+                </MotionDiv>
             );
         })}
         {error && (
-            <motion.p
+            <MotionP
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="mt-4 text-xs font-bold text-red-500 bg-red-50 border border-red-100 rounded-xl px-4 py-3"
             >
                 {error}
-            </motion.p>
+            </MotionP>
         )}
     </div>
 );
 
 // ─── Payment Confirmation Component ──────────────────────────────────────────
-const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaymentSuccess }) => {
+// existingPayment: { eventId: string, amount?: number, eventTitle?: string }
+const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaymentSuccess, existingPayment = null }) => {
     const dispatch = useDispatch();
-
-    const { saveStatus, orderStatus, verifyStatus, error } =
-        useSelector((state) => state.promote);
 
     const [flowActive, setFlowActive]   = useState(false);
     const [activeStep, setActiveStep]   = useState(null);
@@ -99,6 +100,8 @@ const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaym
     // Reset slice on unmount
     useEffect(() => () => { dispatch(resetPromoteCheckoutState()); }, [dispatch]);
 
+    const isExistingPayment = !!existingPayment?.eventId;
+
     // Promotion costs
     const promoCosts = Object.keys(formData.promotions || {}).reduce((acc, key) => {
         if (formData.promotions[key] === true && promotePrices[key]) {
@@ -107,9 +110,16 @@ const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaym
         return acc;
     }, 0);
 
-    const subtotal  = platformFee + promoCosts;
-    const tax       = subtotal * 0.05;
-    const finalTotal = subtotal + tax;
+    const computedSubtotal = platformFee + promoCosts;
+    const computedTax = computedSubtotal * 0.05;
+    const computedFinalTotal = computedSubtotal + computedTax;
+
+    const amountOverride = (typeof existingPayment?.amount === 'number' && Number.isFinite(existingPayment.amount))
+        ? existingPayment.amount
+        : null;
+
+    const tax = isExistingPayment ? 0 : computedTax;
+    const finalTotal = isExistingPayment ? (amountOverride ?? computedFinalTotal) : computedFinalTotal;
 
     // ─── Main payment orchestration ───────────────────────────────────────────
     const handleTransact = useCallback(async () => {
@@ -117,19 +127,24 @@ const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaym
         setFlowActive(true);
         dispatch(clearPromoteError());
 
-        // ── 1. Save promote event ─────────────────────────────────────────────
-        setActiveStep('save');
+        let eventIdToUse = savedEventId; // Reuse if already resolved (retry case)
 
-        let eventIdToUse = savedEventId; // Reuse if already saved (retry case)
-        if (!eventIdToUse) {
-            const saveResult = await dispatch(savePromoteEvent({ formData }));
-            if (savePromoteEvent.rejected.match(saveResult)) {
-                setFlowError(saveResult.payload || 'Failed to save event. Please try again.');
-                setFlowActive(false);
-                return;
+        if (isExistingPayment) {
+            eventIdToUse = existingPayment.eventId;
+            setSavedEventId(existingPayment.eventId);
+        } else {
+            // ── 1. Save promote event ─────────────────────────────────────────
+            setActiveStep('save');
+            if (!eventIdToUse) {
+                const saveResult = await dispatch(savePromoteEvent({ formData }));
+                if (savePromoteEvent.rejected.match(saveResult)) {
+                    setFlowError(saveResult.payload || 'Failed to save event. Please try again.');
+                    setFlowActive(false);
+                    return;
+                }
+                eventIdToUse = saveResult.payload.eventId;
+                setSavedEventId(eventIdToUse);
             }
-            eventIdToUse = saveResult.payload.eventId;
-            setSavedEventId(eventIdToUse);
         }
 
         // ── 2. Create Razorpay order ──────────────────────────────────────────
@@ -198,7 +213,7 @@ const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaym
             const rzp = new window.Razorpay(options);
             rzp.open();
         });
-    }, [dispatch, formData, finalTotal, savedEventId, handlePaymentSuccess]);
+    }, [dispatch, formData, finalTotal, savedEventId, handlePaymentSuccess, isExistingPayment, existingPayment]);
 
     const isProcessing = flowActive && !flowError;
     const showProgress = flowActive || (flowError && activeStep);
@@ -280,20 +295,29 @@ const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaym
                             <div>
                                 <h4 className="font-serif-premium text-2xl italic text-[#09637E] mb-8">Summary</h4>
                                 <ul className="space-y-5">
-                                    <li className="flex justify-between items-center text-[#09637E]/70">
-                                        <span className="text-xs font-bold uppercase tracking-wider">Platform</span>
-                                        <span className="font-mono text-sm">₹{platformFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                    </li>
-                                    {promoCosts > 0 && (
+                                    {isExistingPayment ? (
                                         <li className="flex justify-between items-center text-[#09637E]/70">
-                                            <span className="text-xs font-bold uppercase tracking-wider">Marketing</span>
-                                            <span className="font-mono text-sm">₹{promoCosts.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            <span className="text-xs font-bold uppercase tracking-wider">Amount Due</span>
+                                            <span className="font-mono text-sm">₹{finalTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                         </li>
+                                    ) : (
+                                        <>
+                                            <li className="flex justify-between items-center text-[#09637E]/70">
+                                                <span className="text-xs font-bold uppercase tracking-wider">Platform</span>
+                                                <span className="font-mono text-sm">₹{platformFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            </li>
+                                            {promoCosts > 0 && (
+                                                <li className="flex justify-between items-center text-[#09637E]/70">
+                                                    <span className="text-xs font-bold uppercase tracking-wider">Marketing</span>
+                                                    <span className="font-mono text-sm">₹{promoCosts.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                </li>
+                                            )}
+                                            <li className="flex justify-between items-center text-[#09637E]/70">
+                                                <span className="text-xs font-bold uppercase tracking-wider">Tax (5%)</span>
+                                                <span className="font-mono text-sm">₹{tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            </li>
+                                        </>
                                     )}
-                                    <li className="flex justify-between items-center text-[#09637E]/70">
-                                        <span className="text-xs font-bold uppercase tracking-wider">Tax (5%)</span>
-                                        <span className="font-mono text-sm">₹{tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                    </li>
                                 </ul>
                             </div>
 

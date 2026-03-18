@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { toast, Toaster } from "react-hot-toast";
 import { BsArrowRight } from "react-icons/bs";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from 'react-redux';
 
 // Wizard Components
 import VerticalStepTransition from "../../../components/Forms/PromoteEvent/Wizard/VerticalStepTransition";
@@ -15,13 +17,63 @@ import PaymentConfirmation from "../../../components/User/Events/PaymentConfirma
 import SuccessConfirmation from "../../../components/User/Events/SuccessConfirmation";
 
 import { promoteEventSteps, initialPromoteEventState } from "../../../data/promoteEventData";
+import {
+    fetchFeesConfig,
+    selectFeesStatus,
+    selectPlatformFee,
+    selectServiceChargePercent,
+} from '../../../store/slices/feesSlice';
 
 const PromoteEvent = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const dispatch = useDispatch();
+
+    const payForEvent = location.state?.payForEvent;
+    const isPaymentOnlyEntry = Boolean(payForEvent?.eventId);
+
+    const platformFee = useSelector(selectPlatformFee);
+    const serviceChargePercent = useSelector(selectServiceChargePercent);
+    const feesStatus = useSelector(selectFeesStatus);
+
     const [currentStep, setCurrentStep] = useState(1);
-    const [isPaymentStep, setIsPaymentStep] = useState(false);
+    const [isPaymentStep, setIsPaymentStep] = useState(() => !!payForEvent?.eventId);
     const [isSuccessStep, setIsSuccessStep] = useState(false);
 
-    const [formData, setFormData] = useState(initialPromoteEventState);
+    const [payContext] = useState(() => (
+        payForEvent?.eventId
+            ? {
+                eventId: payForEvent.eventId,
+                eventTitle: payForEvent.eventTitle,
+                amount: payForEvent.amount,
+              }
+            : null
+    ));
+
+    const [formData, setFormData] = useState(() => {
+        // Payment-only entry from Campaign Studio
+        if (payForEvent?.eventId) {
+            return {
+                ...initialPromoteEventState,
+                eventName: payForEvent.eventTitle || 'Promote Event',
+                promotions: {},
+                authDocuments: [],
+            };
+        }
+
+        // Normal wizard entry: restore draft if present
+        try {
+            const saved = localStorage.getItem('promoteEventDraft_v3');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (parsed && typeof parsed === 'object') return parsed;
+            }
+        } catch (e) {
+            console.error('Draft load failed', e);
+        }
+
+        return initialPromoteEventState;
+    });
 
     // Helper: Step definitions (calculated dynamically for completion status)
     const steps = promoteEventSteps.map(step => ({
@@ -44,22 +96,17 @@ const PromoteEvent = () => {
 
     const isCurrentStepCompleted = steps[currentStep - 1]?.completed;
 
-    // Persist draft
     useEffect(() => {
-        const saved = localStorage.getItem('promoteEventDraft_v3');
-        if (saved) {
-            try {
-                setFormData(JSON.parse(saved));
-                // toast.success("Draft restored", { style: { background: '#088395', color: '#fff' } });
-            } catch (e) {
-                console.error("Draft load failed", e);
-            }
-        }
-    }, []);
+        if (payContext?.eventId) return;
+        localStorage.setItem('promoteEventDraft_v3', JSON.stringify(formData));
+    }, [formData, payContext]);
 
     useEffect(() => {
-        localStorage.setItem('promoteEventDraft_v3', JSON.stringify(formData));
-    }, [formData]);
+        // Wizard flow needs platform fee for payment.
+        if (isPaymentOnlyEntry) return;
+        if (feesStatus === 'loading' || platformFee != null) return;
+        dispatch(fetchFeesConfig());
+    }, [dispatch, isPaymentOnlyEntry, platformFee, feesStatus]);
 
     // Ticket Handlers
     const handleAddTicket = () => {
@@ -115,6 +162,13 @@ const PromoteEvent = () => {
     };
 
     const handlePaymentSuccess = (eventId, transactionId) => {
+        // If we entered as payment-only for an existing promote record, just show success.
+        if (payContext?.eventId) {
+            setIsPaymentStep(false);
+            setIsSuccessStep(true);
+            return;
+        }
+
         // Build campaign object with real eventId from backend
         const isFree = formData.tickets.every(t => !t.price || parseFloat(t.price) === 0);
 
@@ -180,9 +234,20 @@ const PromoteEvent = () => {
                         {isPaymentStep ? (
                             <PaymentConfirmation
                                 formData={formData}
-                                platformFee={15000}
-                                setCurrentStep={() => setIsPaymentStep(false)}
+                                platformFee={platformFee ?? 15000}
+                                setCurrentStep={() => {
+                                    if (payContext?.eventId) {
+                                        navigate('/user/my-events');
+                                    } else {
+                                        setIsPaymentStep(false);
+                                    }
+                                }}
                                 handlePaymentSuccess={handlePaymentSuccess}
+                                existingPayment={payContext ? {
+                                    eventId: payContext.eventId,
+                                    amount: payContext.amount,
+                                    eventTitle: payContext.eventTitle,
+                                } : null}
                             />
                         ) : (
                             <div className="transition-all duration-500 ease-in-out">
@@ -201,7 +266,13 @@ const PromoteEvent = () => {
                                 {currentStep === 4 && <StepSchedule formData={formData} setFormData={setFormData} />}
                                 {currentStep === 5 && <StepPromote formData={formData} setFormData={setFormData} />}
                                 {currentStep === 6 && <StepVerify formData={formData} setFormData={setFormData} />}
-                                {currentStep === 7 && <StepReview formData={formData} />}
+                                {currentStep === 7 && (
+                                    <StepReview
+                                        formData={formData}
+                                        platformFee={platformFee ?? 15000}
+                                        serviceChargePercent={serviceChargePercent ?? 2.5}
+                                    />
+                                )}
                             </div>
                         )}
                     </div>

@@ -4,6 +4,7 @@ import adminReducer from './slices/adminSlice';
 import planningReducer from './slices/planningSlice';
 import vendorReducer from './slices/vendorSlice';
 import promoteReducer from './slices/promoteSlice';
+import feesReducer from './slices/feesSlice';
 
 export const store = configureStore({
     reducer: {
@@ -12,6 +13,7 @@ export const store = configureStore({
         planning: planningReducer,
         vendor: vendorReducer,
         promote: promoteReducer,
+        fees: feesReducer,
     },
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({

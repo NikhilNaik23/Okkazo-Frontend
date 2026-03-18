@@ -2,11 +2,12 @@ import React from 'react';
 import { BsCalendar, BsGeoAlt, BsTicketPerforated, BsCurrencyRupee } from "react-icons/bs";
 import { promotePrices } from '../../../../data/promoteEventData';
 
-const StepReview = ({ formData }) => {
+const StepReview = ({ formData, platformFee = 15000, serviceChargePercent = 2.5 }) => {
     // Calculate totals
     const totalTickets = formData.tickets.reduce((acc, t) => acc + (t.quantity || 0), 0);
     const grossRevenue = formData.tickets.reduce((acc, t) => acc + ((t.price * t.quantity) || 0), 0);
-    const serviceCharge = grossRevenue * 0.025;
+    const rate = Math.max(0, Math.min(100, Number(serviceChargePercent))) / 100;
+    const serviceCharge = grossRevenue * rate;
     const netRevenue = grossRevenue - serviceCharge;
 
     // Promotion costs
@@ -17,7 +18,6 @@ const StepReview = ({ formData }) => {
         return acc;
     }, 0);
 
-    const platformFee = 15000;
     const subtotal = platformFee + promoCosts;
     const tax = subtotal * 0.05;
     const finalTotal = subtotal + tax;
@@ -77,7 +77,7 @@ const StepReview = ({ formData }) => {
                             <p className="text-[10px] text-[#09637E]/60 font-black uppercase tracking-widest mb-2">Est. Net Revenue</p>
                             <div className="flex flex-col">
                                 <span className="text-3xl font-serif-premium text-[#09637E] italic">₹{netRevenue.toLocaleString()}</span>
-                                <span className="text-[9px] font-bold text-[#09637E]/40 uppercase tracking-wider mt-1">Post 2.5% Service Fee</span>
+                                <span className="text-[9px] font-bold text-[#09637E]/40 uppercase tracking-wider mt-1">Post {serviceChargePercent}% Service Fee</span>
                             </div>
                         </div>
                     </div>
@@ -90,7 +90,7 @@ const StepReview = ({ formData }) => {
                         <ul className="space-y-4 text-sm font-bold opacity-80">
                             <li className="flex justify-between border-b border-[#09637E]/20 pb-2">
                                 <span>Platform Fee</span>
-                                <span>₹15,000.00</span>
+                                <span>₹{Number(platformFee).toFixed(2)}</span>
                             </li>
                             {promoCosts > 0 && (
                                 <li className="flex justify-between border-b border-[#09637E]/20 pb-2">

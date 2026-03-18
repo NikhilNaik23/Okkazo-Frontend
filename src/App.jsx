@@ -351,7 +351,7 @@ const App = () => {
             element={
               // <ProtectedRoute allowedRoles={['VENDOR']}>
               <VendorLayout />
-              // </ProtectedRoute>
+              //  </ProtectedRoute> 
             }
           >
             <Route index element={<Navigate to="dashboard" replace />} />

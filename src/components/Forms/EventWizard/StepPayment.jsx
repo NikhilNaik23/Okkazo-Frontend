@@ -10,6 +10,11 @@ import {
     clearPlanningError,
 } from '../../../store/slices/planningSlice';
 import {
+    fetchFeesConfig,
+    selectFeesStatus,
+    selectPlatformFee,
+} from '../../../store/slices/feesSlice';
+import {
     PaymentSummary,
     PaymentSuccess,
     PaymentMethodSelector,
@@ -103,6 +108,8 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
     const dispatch = useDispatch();
 
     const { transactionId } = useSelector((state) => state.planning);
+    const platformFee = useSelector(selectPlatformFee);
+    const feesStatus = useSelector(selectFeesStatus);
 
     const [localSuccess, setLocalSuccess] = useState(false);
     const [countdown,    setCountdown]    = useState(3);
@@ -112,6 +119,12 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
     const [flowError,    setFlowError]    = useState(null);
 
     const isSuccess = localSuccess || Boolean(formData.isPaid);
+
+    useEffect(() => {
+        if (feesStatus === 'idle') {
+            dispatch(fetchFeesConfig());
+        }
+    }, [dispatch, feesStatus]);
 
     // ── Countdown → advance wizard on success ────────────────────────────────
     useEffect(() => {
@@ -149,7 +162,11 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
 
         // ── 2. Create Razorpay order ─────────────────────────────────────────
         setActiveStep('order');
-        const orderResult = await dispatch(createOrder({ eventId: savedEventId }));
+        // Pass dynamic platform fee (INR) so admin updates apply immediately.
+        // If not loaded yet, fallback to existing backend default.
+        // Note: createOrder accepts INR; backend converts to paise.
+        const feeAmount = (typeof platformFee === 'number' && Number.isFinite(platformFee)) ? platformFee : undefined;
+        const orderResult = await dispatch(createOrder({ eventId: savedEventId, amount: feeAmount }));
         if (createOrder.rejected.match(orderResult)) {
             setFlowError(orderResult.payload || 'Failed to create payment order. Please try again.');
             setFlowActive(false);
@@ -241,7 +258,7 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
             const rzp = new window.Razorpay(options);
             rzp.open();
         });
-    }, [dispatch, formData, handleChange, paymentMethod]);
+    }, [dispatch, formData, handleChange, paymentMethod, platformFee]);
 
     // ── Derive a friendly "isProcessing" flag ────────────────────────────────
     const isProcessing = flowActive && !flowError;
@@ -252,7 +269,7 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
             <div className="w-full max-w-6xl min-h-[600px] flex flex-col md:flex-row bg-white rounded-[3rem] shadow-2xl overflow-hidden relative">
 
                 {/* Left Panel: Summary */}
-                <PaymentSummary onBack={onBack} formData={formData} />
+                <PaymentSummary onBack={onBack} formData={formData} platformFee={platformFee} />
 
                 {/* Right Panel */}
                 <div className="w-full md:w-7/12 bg-white relative p-8 md:p-12 lg:p-16 flex flex-col justify-center">
@@ -323,7 +340,7 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                                         <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 mb-8">
                                             <div className="flex justify-between items-center mb-3">
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Planning Fee</span>
-                                                <span className="text-2xl font-serif-premium italic font-bold text-[#09637E]">₹15,000</span>
+                                                <span className="text-2xl font-serif-premium italic font-bold text-[#09637E]">₹{(platformFee ?? 15000).toLocaleString()}</span>
                                             </div>
                                             <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
                                                 Secures your dates. Adjusted against final bill after vendor selection.
@@ -362,7 +379,7 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                                         <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 mb-8">
                                             <div className="flex justify-between items-center mb-3">
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Planning Fee</span>
-                                                <span className="text-2xl font-serif-premium italic font-bold text-[#09637E]">₹15,000</span>
+                                                <span className="text-2xl font-serif-premium italic font-bold text-[#09637E]">₹{(platformFee ?? 15000).toLocaleString()}</span>
                                             </div>
                                             <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
                                                 Pay securely via UPI. You can use Google Pay, PhonePe, Paytm, or any UPI app.

@@ -29,7 +29,7 @@ const toLocalIso = (value) => {
  * - authProofs  → File[]
  * - tickets, schedule, ticketAvailability, venue, promotion → JSON strings
  */
-const buildPromoteFormData = (formData, authState) => {
+const buildPromoteFormData = (formData) => {
     const tiers = (formData.tickets || [])
         .filter((t) => t && t.name && Number(t.quantity) > 0)
         .map((t) => ({
@@ -109,13 +109,12 @@ const buildPromoteFormData = (formData, authState) => {
 
 export const savePromoteEvent = createAsyncThunk(
     'promote/savePromoteEvent',
-    async ({ formData }, { dispatch, rejectWithValue, getState }) => {
+    async ({ formData }, { dispatch, rejectWithValue }) => {
         try {
             const token = localStorage.getItem('accessToken');
             if (!token) return rejectWithValue('No access token — please log in first.');
 
-            const authState = getState().auth;
-            const body = buildPromoteFormData(formData, authState);
+            const body = buildPromoteFormData(formData);
 
             const response = await fetchWithAuth(
                 `${API_BASE_URL}/api/events/promote`,
@@ -238,6 +237,51 @@ export const fetchMyPromotes = createAsyncThunk(
     }
 );
 
+// ─── Platform fee config ─────────────────────────────────────────────────────
+
+export const fetchPromotePlatformFee = createAsyncThunk(
+    'promote/fetchPromotePlatformFee',
+    async (_, { dispatch, rejectWithValue }) => {
+        try {
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/promote/platform-fee`,
+                { method: 'GET' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                return rejectWithValue(data?.message || 'Failed to fetch platform fee');
+            }
+            return data?.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const updatePromotePlatformFee = createAsyncThunk(
+    'promote/updatePromotePlatformFee',
+    async ({ platformFee }, { dispatch, rejectWithValue }) => {
+        try {
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/promote/platform-fee`,
+                {
+                    method: 'PATCH',
+                    body: JSON.stringify({ platformFee }),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                return rejectWithValue(data?.message || 'Failed to update platform fee');
+            }
+            return data?.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
 // ─── Slice ────────────────────────────────────────────────────────────────────
 
 const promoteSlice = createSlice({
@@ -262,6 +306,11 @@ const promoteSlice = createSlice({
         myPromotes: [],
         myPromotesStatus: 'idle',
         myPromotesError: null,
+
+        // Promote platform fee
+        platformFee: null,
+        platformFeeStatus: 'idle',
+        platformFeeError: null,
     },
     reducers: {
         resetPromoteCheckoutState: (state) => {
@@ -345,6 +394,24 @@ const promoteSlice = createSlice({
                 state.myPromotesStatus = 'failed';
                 state.myPromotesError = action.payload || action.error.message;
             });
+
+        // Platform fee
+        builder
+            .addCase(fetchPromotePlatformFee.pending, (state) => {
+                state.platformFeeStatus = 'loading';
+                state.platformFeeError = null;
+            })
+            .addCase(fetchPromotePlatformFee.fulfilled, (state, action) => {
+                state.platformFeeStatus = 'succeeded';
+                state.platformFee = action.payload?.platformFee ?? null;
+            })
+            .addCase(fetchPromotePlatformFee.rejected, (state, action) => {
+                state.platformFeeStatus = 'failed';
+                state.platformFeeError = action.payload || action.error.message;
+            })
+            .addCase(updatePromotePlatformFee.fulfilled, (state, action) => {
+                state.platformFee = action.payload?.platformFee ?? state.platformFee;
+            });
     },
 });
 
@@ -354,5 +421,8 @@ export const { resetPromoteCheckoutState, clearPromoteError } = promoteSlice.act
 export const selectPromoteCheckout = (state) => state.promote;
 export const selectMyPromotes = (state) => state.promote.myPromotes;
 export const selectMyPromotesStatus = (state) => state.promote.myPromotesStatus;
+export const selectPromotePlatformFee = (state) => state.promote.platformFee;
+export const selectPromotePlatformFeeStatus = (state) => state.promote.platformFeeStatus;
+export const selectPromotePlatformFeeError = (state) => state.promote.platformFeeError;
 
 export default promoteSlice.reducer;
