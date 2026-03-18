@@ -71,9 +71,9 @@ const VendorApplicationStatus = () => {
             e.target.value = '';
             return;
         }
-        const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+        const allowed = ['image/jpeg', 'image/jpg', 'image/png'];
         if (!allowed.includes(file.type)) {
-            toast.error("Only PDF, JPG, and PNG files are allowed.");
+            toast.error("Only JPG and PNG files are allowed.");
             e.target.value = '';
             return;
         }
@@ -248,12 +248,12 @@ const VendorApplicationStatus = () => {
                                         {/* Business License Upload */}
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black text-[#09637E] uppercase tracking-widest">Business License</label>
-                                            <input type="file" ref={businessLicenseRef} onChange={(e) => handleFileSelect(e, 'businessLicense')} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
+                                            <input type="file" ref={businessLicenseRef} onChange={(e) => handleFileSelect(e, 'businessLicense')} accept=".jpg,.jpeg,.png" className="hidden" />
                                             {!businessLicense ? (
                                                 <div onClick={() => businessLicenseRef.current?.click()} className="w-full bg-[#EBF4F6]/50 rounded-2xl p-5 border-2 border-dashed border-[#7AB2B2]/30 hover:border-[#7AB2B2] hover:bg-white transition-all cursor-pointer group text-center">
                                                     <BsCloudUpload size={24} className="mx-auto mb-2 text-[#7AB2B2] group-hover:scale-110 transition-transform" />
                                                     <p className="text-[#09637E] font-bold text-xs">Tap to upload</p>
-                                                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB &bull; PDF, JPG, PNG</p>
+                                                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB &bull; JPG, PNG</p>
                                                 </div>
                                             ) : (
                                                 <div className="w-full bg-white rounded-2xl p-4 border border-[#7AB2B2]/20 flex items-center justify-between shadow-sm">
@@ -273,12 +273,12 @@ const VendorApplicationStatus = () => {
                                         {/* Owner Identity Upload */}
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black text-[#09637E] uppercase tracking-widest">Owner Identity</label>
-                                            <input type="file" ref={ownerIdentityRef} onChange={(e) => handleFileSelect(e, 'ownerIdentity')} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
+                                            <input type="file" ref={ownerIdentityRef} onChange={(e) => handleFileSelect(e, 'ownerIdentity')} accept=".jpg,.jpeg,.png" className="hidden" />
                                             {!ownerIdentity ? (
                                                 <div onClick={() => ownerIdentityRef.current?.click()} className="w-full bg-[#EBF4F6]/50 rounded-2xl p-5 border-2 border-dashed border-[#7AB2B2]/30 hover:border-[#7AB2B2] hover:bg-white transition-all cursor-pointer group text-center">
                                                     <BsCloudUpload size={24} className="mx-auto mb-2 text-[#7AB2B2] group-hover:scale-110 transition-transform" />
                                                     <p className="text-[#09637E] font-bold text-xs">Tap to upload</p>
-                                                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB &bull; PDF, JPG, PNG</p>
+                                                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB &bull; JPG, PNG</p>
                                                 </div>
                                             ) : (
                                                 <div className="w-full bg-white rounded-2xl p-4 border border-[#7AB2B2]/20 flex items-center justify-between shadow-sm">
@@ -324,12 +324,12 @@ const VendorApplicationStatus = () => {
                                                     <span className="font-bold">Rejected:</span> {vendorApplication.documents.businessLicense.rejectionReason}
                                                 </p>
                                             )}
-                                            <input type="file" ref={businessLicenseRef} onChange={(e) => handleFileSelect(e, 'businessLicense')} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
+                                            <input type="file" ref={businessLicenseRef} onChange={(e) => handleFileSelect(e, 'businessLicense')} accept=".jpg,.jpeg,.png" className="hidden" />
                                             {!businessLicense ? (
                                                 <div onClick={() => businessLicenseRef.current?.click()} className="w-full bg-[#EBF4F6]/50 rounded-2xl p-5 border-2 border-dashed border-[#7AB2B2]/30 hover:border-[#7AB2B2] hover:bg-white transition-all cursor-pointer group text-center">
                                                     <BsCloudUpload size={24} className="mx-auto mb-2 text-[#7AB2B2] group-hover:scale-110 transition-transform" />
                                                     <p className="text-[#09637E] font-bold text-xs">Tap to upload</p>
-                                                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB &bull; PDF, JPG, PNG</p>
+                                                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB &bull; JPG, PNG</p>
                                                 </div>
                                             ) : (
                                                 <div className="w-full bg-white rounded-2xl p-4 border border-[#7AB2B2]/20 flex items-center justify-between shadow-sm">
@@ -356,12 +356,12 @@ const VendorApplicationStatus = () => {
                                                     <span className="font-bold">Rejected:</span> {vendorApplication.documents.ownerIdentity.rejectionReason}
                                                 </p>
                                             )}
-                                            <input type="file" ref={ownerIdentityRef} onChange={(e) => handleFileSelect(e, 'ownerIdentity')} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
+                                            <input type="file" ref={ownerIdentityRef} onChange={(e) => handleFileSelect(e, 'ownerIdentity')} accept=".jpg,.jpeg,.png" className="hidden" />
                                             {!ownerIdentity ? (
                                                 <div onClick={() => ownerIdentityRef.current?.click()} className="w-full bg-[#EBF4F6]/50 rounded-2xl p-5 border-2 border-dashed border-[#7AB2B2]/30 hover:border-[#7AB2B2] hover:bg-white transition-all cursor-pointer group text-center">
                                                     <BsCloudUpload size={24} className="mx-auto mb-2 text-[#7AB2B2] group-hover:scale-110 transition-transform" />
                                                     <p className="text-[#09637E] font-bold text-xs">Tap to upload</p>
-                                                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB &bull; PDF, JPG, PNG</p>
+                                                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB &bull; JPG, PNG</p>
                                                 </div>
                                             ) : (
                                                 <div className="w-full bg-white rounded-2xl p-4 border border-[#7AB2B2]/20 flex items-center justify-between shadow-sm">
