@@ -15,7 +15,7 @@ const FileUploadField = ({ label, file, onFileChange, onRemove, inputRef }) => {
         }
 
         if (!fileUploadConfig.allowedTypes.includes(selectedFile.type)) {
-            toast.error("Only JPG and PNG files are allowed ⚠️");
+            toast.error("Only PDF, JPG, and PNG files are allowed ⚠️");
             e.target.value = ''; // Clear the input
             return;
         }
@@ -31,7 +31,7 @@ const FileUploadField = ({ label, file, onFileChange, onRemove, inputRef }) => {
                 type="file"
                 ref={inputRef}
                 onChange={handleFileUpload}
-                accept=".jpg,.jpeg,.png"
+                accept=".pdf,.jpg,.jpeg,.png"
                 className="hidden"
             />
             {!file ? (
@@ -41,7 +41,7 @@ const FileUploadField = ({ label, file, onFileChange, onRemove, inputRef }) => {
                 >
                     <BsCloudUpload size={24} className="mx-auto mb-2 text-[#7AB2B2] group-hover:scale-110 transition-transform" />
                     <p className="text-[#09637E] font-bold text-xs">Tap to upload</p>
-                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB • JPG, PNG</p>
+                    <p className="text-[#708aa0] text-[10px] mt-1">Max 5MB • PDF, JPG, PNG</p>
                 </div>
             ) : (
                 <div className="w-full bg-white rounded-2xl p-4 border border-[#7AB2B2]/20 flex items-center justify-between shadow-sm">
@@ -76,7 +76,7 @@ const MultiFileUpload = ({ files, onAddFile, onRemoveFile, inputRef, maxFiles = 
         }
 
         if (!fileUploadConfig.allowedTypes.includes(selectedFile.type)) {
-            toast.error("Only JPG and PNG files are allowed ⚠️");
+            toast.error("Only PDF, JPG, and PNG files are allowed ⚠️");
             e.target.value = ''; // Clear the input
             return;
         }
@@ -92,7 +92,7 @@ const MultiFileUpload = ({ files, onAddFile, onRemoveFile, inputRef, maxFiles = 
                 type="file"
                 ref={inputRef}
                 onChange={handleFileUpload}
-                accept=".jpg,.jpeg,.png"
+                accept=".pdf,.jpg,.jpeg,.png"
                 className="hidden"
             />
 

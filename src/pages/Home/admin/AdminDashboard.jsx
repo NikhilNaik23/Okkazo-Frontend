@@ -1,4 +1,6 @@
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 import { 
   Search, 
   Bell, 
@@ -12,8 +14,60 @@ import {
   IndianRupee
 } from 'lucide-react';
 
+import {
+  fetchFeesConfig,
+  updateFeesConfig,
+  selectFeesError,
+  selectFeesStatus,
+  selectPlatformFee,
+  selectServiceChargePercent,
+} from '../../../store/slices/feesSlice';
+
 const AdminDashboard = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+
+  const platformFee = useSelector(selectPlatformFee);
+  const serviceChargePercent = useSelector(selectServiceChargePercent);
+  const feesStatus = useSelector(selectFeesStatus);
+  const feesError = useSelector(selectFeesError);
+
+  // Draft inputs: when undefined, the UI falls back to the latest store values.
+  const [feeInput, setFeeInput] = useState(undefined);
+  const [serviceInput, setServiceInput] = useState(undefined);
+
+  useEffect(() => {
+    if (feesStatus === 'idle') {
+      dispatch(fetchFeesConfig());
+    }
+  }, [dispatch, feesStatus]);
+
+  const feeInputValue = feeInput ?? (platformFee != null ? String(platformFee) : '');
+  const serviceInputValue = serviceInput ?? (serviceChargePercent != null ? String(serviceChargePercent) : '');
+
+  const isSaving = feesStatus === 'loading';
+  const canSave = useMemo(() => {
+    const fee = Number(feeInputValue);
+    const pct = Number(serviceInputValue);
+    if (!Number.isFinite(fee) || fee < 0) return false;
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) return false;
+    return true;
+  }, [feeInputValue, serviceInputValue]);
+
+  const handleSaveFees = async () => {
+    const fee = Number(feeInputValue);
+    const pct = Number(serviceInputValue);
+    if (!Number.isFinite(fee) || fee < 0) return;
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) return;
+
+    const resultAction = await dispatch(updateFeesConfig({ platformFee: fee, serviceChargePercent: pct }));
+    if (updateFeesConfig.fulfilled.match(resultAction)) {
+      setFeeInput(undefined);
+      setServiceInput(undefined);
+      dispatch(fetchFeesConfig());
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#e9eff1]">
       {/* Dashboard Header */}
@@ -144,22 +198,67 @@ const AdminDashboard = () => {
             </div>
           </div>
 
-          {/* Vendor Health */}
+          {/* Fees Settings */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-[#e9eff1] flex flex-col">
             <div className="mb-6">
-              <h3 className="text-lg font-bold text-[#0b2d49]">Vendor performance</h3>
-              <p className="text-sm text-[#5a5b44]">Partner performance scores</p>
+              <h3 className="text-lg font-bold text-[#0b2d49]">Fees settings</h3>
+              <p className="text-sm text-[#5a5b44]">Update platform fee and service %</p>
             </div>
 
-            <div className="space-y-6 flex-1">
-              <HealthBar label="Catering Elite" percentage={94} color="bg-[#0b2d49]" />
-              <HealthBar label="Global AV Systems" percentage={82} color="bg-[#0b2d49]" />
-              <HealthBar label="Urban Decor Ltd" percentage={68} color="bg-[#d7a444]" />
+            <div className="space-y-5 flex-1">
+              <div className="bg-[#f8fafc] rounded-xl border border-[#e9eff1] p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[#708aa0] mb-2">Current</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-[#5a5b44]">Platform fee (₹)</p>
+                    <p className="text-lg font-bold text-[#0b2d49]">{platformFee != null ? `₹${Number(platformFee).toLocaleString()}` : '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-[#5a5b44]">Service charge (%)</p>
+                    <p className="text-lg font-bold text-[#0b2d49]">{serviceChargePercent != null ? `${serviceChargePercent}%` : '—'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#708aa0] uppercase tracking-wider mb-2">Platform fee (INR)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={feeInputValue}
+                    onChange={(e) => setFeeInput(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white border border-[#e9eff1] rounded-xl text-sm focus:border-[#d7a444] focus:ring-1 focus:ring-[#d7a444] focus:outline-none transition-all text-[#0b2d49]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#708aa0] uppercase tracking-wider mb-2">Service charge (%)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    value={serviceInputValue}
+                    onChange={(e) => setServiceInput(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-white border border-[#e9eff1] rounded-xl text-sm focus:border-[#d7a444] focus:ring-1 focus:ring-[#d7a444] focus:outline-none transition-all text-[#0b2d49]"
+                  />
+                </div>
+
+                {feesError && (
+                  <div className="text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+                    {feesError}
+                  </div>
+                )}
+              </div>
             </div>
 
-            <button className="flex items-center gap-2 text-sm font-bold text-[#d7a444] hover:text-[#d0a862] mt-6 group">
-              View all vendors
-              <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
+            <button
+              onClick={handleSaveFees}
+              disabled={!canSave || isSaving}
+              className="mt-6 w-full px-4 py-3 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#0b2d49] text-white hover:bg-[#0b2d49]/90 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            >
+              {isSaving ? 'Saving…' : 'Save changes'}
             </button>
           </div>
         </div>
@@ -238,21 +337,6 @@ const StatCard = ({ icon, iconBg, label, value, trend, trendUp, onClick, trendCo
     <div className="mt-auto">
        <span className="text-sm font-medium text-[#708aa0]">{label}</span>
        <h3 className="text-2xl font-bold text-[#0b2d49] mt-1">{value}</h3>
-    </div>
-  </div>
-);
-
-const HealthBar = ({ label, percentage, color }) => (
-  <div>
-    <div className="flex justify-between mb-2">
-      <span className="text-sm font-bold text-[#0b2d49]">{label}</span>
-      <span className={`text-sm font-bold ${percentage > 80 ? 'text-[#0b2d49]' : 'text-[#d7a444]'}`}>{percentage}%</span>
-    </div>
-    <div className="w-full bg-[#f8fafc] rounded-full h-2 overflow-hidden">
-      <div 
-        className={`h-full rounded-full transition-all duration-1000 ${color}`} 
-        style={{ width: `${percentage}%` }}
-      ></div>
     </div>
   </div>
 );

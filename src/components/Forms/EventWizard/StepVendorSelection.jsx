@@ -19,6 +19,7 @@ import SharedCalendar from "./SharedCalendar";
 import { fetchWithAuth } from '../../../utils/apiHandler';
 import { useDispatch } from 'react-redux';
 import { refreshAccessToken } from '../../../store/slices/authSlice';
+import { toast } from 'react-hot-toast';
 
 // Extracted Components
 import { VendorDetailsModal, VendorCard, SelectionSidebar } from './VendorSelection';
@@ -101,13 +102,25 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         };
     }, [formData?.guests, formData?.listingType, formData?.tickets, formData?.totalCapacity]);
 
+    const isVendorStepComplete = useMemo(() => {
+        const services = Array.isArray(formData?.services) ? formData.services : [];
+        if (services.length === 0) return false;
+
+        const chosen = formData?.vendors || {};
+        return services.every((service) => {
+            const v = chosen?.[service];
+            return Boolean(v && (v.vendorAuthId || v.authId || v.id));
+        });
+    }, [formData?.services, formData?.vendors]);
+
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedVendorForDetails, setSelectedVendorForDetails] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
 
-    const [vendorsLoading, setVendorsLoading] = useState(false);
-    const [vendorsError, setVendorsError] = useState(null);
+    const [, setVendorsLoading] = useState(false);
+    const [, setVendorsError] = useState(null);
     const [vendorsByCategory, setVendorsByCategory] = useState({});
+    const [vendorsRefreshKey, setVendorsRefreshKey] = useState(0);
 
     // Sort/Filter placeholders
     const [sortOption, setSortOption] = useState("Recommended");
@@ -157,7 +170,9 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
 
         const data = await safeJson(response);
         if (!response.ok || !data?.success) {
-            throw new Error(data?.message || 'Failed to save vendor selection');
+            const err = new Error(data?.message || 'Failed to save vendor selection');
+            err.status = response.status;
+            throw err;
         }
 
         return true;
@@ -186,10 +201,39 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
             await persistVendorSelection({ category, vendor: adjustedVendor });
         } catch (e) {
             console.error('Failed to persist vendor selection:', e);
+            if (e?.status === 409) {
+                toast.error('Vendor just became unavailable for this date. Refreshing list...');
+                setVendorsRefreshKey((k) => k + 1);
+            } else {
+                toast.error(e?.message || 'Failed to select vendor');
+            }
+            return;
         }
 
         handleSelectVendor(category, adjustedVendor);
     };
+
+    // Auto-refresh vendor list (helps with concurrent selections)
+    useEffect(() => {
+        if (!eventId || !activeCategory) return;
+        if (isVendorStepComplete) return;
+
+        const interval = setInterval(() => {
+            setVendorsRefreshKey((k) => k + 1);
+        }, 10000);
+
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                setVendorsRefreshKey((k) => k + 1);
+            }
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
+    }, [activeCategory, eventId, isVendorStepComplete]);
 
     const persistSelectedServices = async (nextServices) => {
         if (!eventId) return;
@@ -312,6 +356,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                     priceMax: String(priceRange.max ?? 0),
                 });
                 if (searchQuery?.trim()) qs.set('q', searchQuery.trim());
+                if (formData?.date) qs.set('day', String(formData.date));
 
                 const response = await fetchWithAuth(
                     `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(eventId))}/vendors?${qs.toString()}`,
@@ -342,7 +387,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         return () => {
             if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
         };
-    }, [activeCategory, dispatch, eventId, priceRange.max, priceRange.min, searchQuery, sortOption]);
+    }, [activeCategory, dispatch, eventId, formData?.date, priceRange.max, priceRange.min, searchQuery, sortOption, vendorsRefreshKey]);
 
     const filteredVendors = useMemo(() => {
         const fetched = vendorsByCategory[activeCategory];
@@ -392,7 +437,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         }
 
         return allVendors;
-    }, [activeCategory, searchQuery, sortOption, priceRange, vendorsByCategory]);
+    }, [activeCategory, attendeeInfo.attendeeCount, searchQuery, sortOption, priceRange, vendorsByCategory]);
 
     const totalPages = Math.ceil(filteredVendors.length / ITEMS_PER_PAGE);
     const paginatedVendors = filteredVendors.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);

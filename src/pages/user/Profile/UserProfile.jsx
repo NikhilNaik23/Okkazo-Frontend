@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
-import { BsPencil, BsGear, BsEnvelope, BsTelephone, BsGeoAlt, BsStars, BsClockHistory, BsCameraFill } from "react-icons/bs";
+import { BsPencil, BsGear, BsEnvelope, BsTelephone, BsGeoAlt, BsStars, BsClockHistory, BsCameraFill, BsBoxArrowRight } from "react-icons/bs";
 import { toast } from "react-hot-toast";
-import { selectUser, selectIsLoading as selectAuthLoading, selectIsAuthenticated, fetchCurrentUser } from "../../../store/slices/authSlice";
+import { selectUser, selectIsLoading as selectAuthLoading, selectIsAuthenticated, fetchCurrentUser, logout } from "../../../store/slices/authSlice";
 
 const UserProfile = () => {
     const navigate = useNavigate();
@@ -15,6 +15,12 @@ const UserProfile = () => {
 
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+
+    const handleLogout = () => {
+        dispatch(logout());
+        toast.success("Logged out successfully");
+        navigate("/", { replace: true });
+    };
 
     // Fetch user data and map to local state
     useEffect(() => {
@@ -89,20 +95,29 @@ const UserProfile = () => {
                                 <h1 className="text-5xl font-serif-premium italic font-bold mb-2 tracking-tight text-[#09637E] text-center">{user.name}</h1>
                                 <p className="text-[#088395] font-medium mb-8">Member since {user.memberSince}</p>
 
-                                <div className="flex gap-4">
+                                <div className="flex flex-col items-center gap-3">
+                                    <div className="flex flex-col sm:flex-row gap-4">
+                                        <button
+                                            onClick={() => navigate("/user/edit-profile")}
+                                            className="flex items-center justify-center gap-2 bg-[#09637E] text-white px-8 py-3 rounded-full font-bold text-sm hover:bg-[#088395] transition-all shadow-lg hover:shadow-xl active:scale-95"
+                                        >
+                                            <BsPencil size={14} />
+                                            Edit Profile
+                                        </button>
+                                        <button
+                                            onClick={() => navigate("/user/account-settings")}
+                                            className="flex items-center justify-center gap-2 bg-white text-[#09637E] px-8 py-3 rounded-full font-bold text-sm hover:bg-gray-50 transition-all border border-[#09637E]/10 shadow-sm active:scale-95"
+                                        >
+                                            <BsGear size={14} />
+                                            Account Settings
+                                        </button>
+                                    </div>
                                     <button
-                                        onClick={() => navigate("/user/edit-profile")}
-                                        className="flex items-center gap-2 bg-[#09637E] text-white px-8 py-3 rounded-full font-bold text-sm hover:bg-[#088395] transition-all shadow-lg hover:shadow-xl active:scale-95"
+                                        onClick={handleLogout}
+                                        className="flex items-center justify-center gap-2 bg-white text-red-600 px-8 py-3 rounded-full font-bold text-sm hover:bg-red-50 transition-all border border-red-200 shadow-sm active:scale-95"
                                     >
-                                        <BsPencil size={14} />
-                                        Edit Profile
-                                    </button>
-                                    <button
-                                        onClick={() => navigate("/user/account-settings")}
-                                        className="flex items-center gap-2 bg-white text-[#09637E] px-8 py-3 rounded-full font-bold text-sm hover:bg-gray-50 transition-all border border-[#09637E]/10 shadow-sm active:scale-95"
-                                    >
-                                        <BsGear size={14} />
-                                        Account Settings
+                                        <BsBoxArrowRight size={14} />
+                                        Logout
                                     </button>
                                 </div>
                             </div>

@@ -223,7 +223,7 @@ export const saveEventPlanning = createAsyncThunk(
 
 export const createOrder = createAsyncThunk(
     'planning/createOrder',
-    async ({ eventId }, { dispatch, rejectWithValue }) => {
+    async ({ eventId, amount }, { dispatch, rejectWithValue }) => {
         try {
             const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/create`, {
                 method: 'POST',
@@ -231,7 +231,7 @@ export const createOrder = createAsyncThunk(
                     eventId,
                     orderType: 'PLANNING EVENT', // required enum in PaymentOrder model
                     currency:  'INR',
-                    // amount omitted → backend defaults to DEFAULT_PLATFORM_FEE_INR (₹15,000)
+                    ...(amount !== undefined && amount !== null ? { amount } : {}),
                 }),
             }, { dispatch, refreshAction: refreshAccessToken });
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     BsChevronLeft,
@@ -9,41 +9,99 @@ import {
 } from 'react-icons/bs';
 import { toast } from 'react-hot-toast';
 
-const initialBookedDates = {
-    '2026-02-15': { type: 'event', label: 'Grand Wedding Gala', color: '#0b2d49' },
-    '2026-02-16': { type: 'event', label: 'Grand Wedding Gala', color: '#0b2d49' },
-    '2026-02-22': { type: 'event', label: 'Corporate Tech Expo', color: '#0b2d49' },
-    '2026-02-23': { type: 'event', label: 'Corporate Tech Expo', color: '#0b2d49' },
-    '2026-02-24': { type: 'event', label: 'Corporate Tech Expo', color: '#0b2d49' },
-    '2026-03-05': { type: 'event', label: 'Summer Music Festival', color: '#0b2d49' },
-    '2026-03-06': { type: 'event', label: 'Summer Music Festival', color: '#0b2d49' },
-    '2026-03-07': { type: 'event', label: 'Summer Music Festival', color: '#0b2d49' },
-    '2026-03-14': { type: 'event', label: 'Annual Charity Dinner', color: '#0b2d49' },
-    '2026-03-20': { type: 'event', label: 'Birthday Celebration', color: '#0b2d49' },
-    '2026-04-10': { type: 'event', label: 'Product Launch Party', color: '#0b2d49' },
-    '2026-04-11': { type: 'event', label: 'Product Launch Party', color: '#0b2d49' },
-};
+import { useDispatch } from 'react-redux';
+import { fetchWithAuth } from '../../utils/apiHandler';
+import { refreshAccessToken } from '../../store/slices/authSlice';
 
-const initialBlockedDates = {
-    '2026-02-18': { reason: 'Personal day off' },
-    '2026-02-19': { reason: 'Equipment maintenance' },
-    '2026-03-01': { reason: 'Team holiday' },
-    '2026-03-15': { reason: 'Not available' },
+const API_BASE_URL = 'http://localhost:8080';
+
+const safeJson = async (response) => {
+    try {
+        return await response.json();
+    } catch {
+        return null;
+    }
 };
 
 const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+const MotionDiv = motion.div;
+
 const VendorAvailabilityCalendar = ({ compact = false }) => {
+    const dispatch = useDispatch();
     const today = new Date();
     const [currentMonth, setCurrentMonth] = useState(today.getMonth());
     const [currentYear, setCurrentYear] = useState(today.getFullYear());
-    const [bookedDates] = useState(initialBookedDates);
-    const [blockedDates, setBlockedDates] = useState(initialBlockedDates);
+    const [bookedDates, setBookedDates] = useState({});
+    const [blockedDates, setBlockedDates] = useState({});
     const [selectedDate, setSelectedDate] = useState(null);
     const [showBlockModal, setShowBlockModal] = useState(false);
     const [blockReason, setBlockReason] = useState('');
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const from = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
+        const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
+        const to = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+        const run = async () => {
+            try {
+                const qs = new URLSearchParams({ from, to });
+                const response = await fetchWithAuth(
+                    `${API_BASE_URL}/api/vendor/me/availability?${qs.toString()}`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+
+                const data = await safeJson(response);
+                if (!response.ok || !data?.success) {
+                    throw new Error(data?.message || 'Failed to load availability');
+                }
+
+                const unavailable = Array.isArray(data?.data?.unavailable) ? data.data.unavailable : [];
+                const nextBooked = {};
+                const nextBlocked = {};
+
+                unavailable.forEach((item) => {
+                    const day = item?.day;
+                    if (!day) return;
+
+                    const source = String(item?.source || '').toUpperCase();
+                    if (source === 'BOOKING') {
+                        nextBooked[day] = {
+                            type: 'event',
+                            label: item?.reason || 'Booked',
+                            color: '#0b2d49',
+                        };
+                        return;
+                    }
+
+                    if (source === 'MANUAL' && !nextBooked[day]) {
+                        nextBlocked[day] = { reason: item?.reason || 'Not available' };
+                    }
+                });
+
+                if (!cancelled) {
+                    setBookedDates(nextBooked);
+                    setBlockedDates(nextBlocked);
+                }
+            } catch (e) {
+                if (!cancelled) {
+                    console.error('Failed to load vendor availability:', e);
+                    setBookedDates({});
+                    setBlockedDates({});
+                }
+            }
+        };
+
+        run();
+        return () => {
+            cancelled = true;
+        };
+    }, [currentMonth, currentYear, dispatch]);
 
     const BLOCK_REASONS = [
         "Not available",
@@ -72,19 +130,36 @@ const VendorAvailabilityCalendar = ({ compact = false }) => {
     const nextMonth = () => { if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(y => y + 1); } else setCurrentMonth(m => m + 1); };
 
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    const isPast = (d) => d && new Date(d) < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayStart = useMemo(() => new Date(`${todayStr}T00:00:00`), [todayStr]);
+    const isPast = useCallback((d) => d && new Date(d) < todayStart, [todayStart]);
 
-    const handleDateClick = (dateStr) => {
+    const handleDateClick = async (dateStr) => {
         if (!dateStr || isPast(dateStr)) return;
         if (bookedDates[dateStr]) {
             toast(`📅 ${bookedDates[dateStr].label}`, { style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' } });
             return;
         }
         if (blockedDates[dateStr]) {
-            const updated = { ...blockedDates };
-            delete updated[dateStr];
-            setBlockedDates(updated);
-            toast.success('Date unblocked!', { style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' } });
+            try {
+                const qs = new URLSearchParams({ day: dateStr });
+                const response = await fetchWithAuth(
+                    `${API_BASE_URL}/api/vendor/me/availability/unavailable?${qs.toString()}`,
+                    { method: 'DELETE' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+                const data = await safeJson(response);
+                if (!response.ok || !data?.success) {
+                    throw new Error(data?.message || 'Failed to unblock date');
+                }
+
+                const updated = { ...blockedDates };
+                delete updated[dateStr];
+                setBlockedDates(updated);
+                toast.success('Date unblocked!', { style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' } });
+            } catch (e) {
+                console.error('Failed to unblock date:', e);
+                toast.error(e?.message || 'Failed to unblock date');
+            }
             return;
         }
         setSelectedDate(dateStr);
@@ -92,12 +167,33 @@ const VendorAvailabilityCalendar = ({ compact = false }) => {
         setBlockReason('');
     };
 
-    const handleBlockDate = () => {
+    const handleBlockDate = async () => {
         if (!selectedDate) return;
-        setBlockedDates({ ...blockedDates, [selectedDate]: { reason: blockReason || 'Not available' } });
-        setShowBlockModal(false);
-        setSelectedDate(null);
-        toast.success('Marked as unavailable!', { style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' } });
+        try {
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/vendor/me/availability/unavailable`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        day: selectedDate,
+                        reason: blockReason || 'Not available',
+                    }),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.message || 'Failed to block date');
+            }
+
+            setBlockedDates({ ...blockedDates, [selectedDate]: { reason: blockReason || 'Not available' } });
+            setShowBlockModal(false);
+            setSelectedDate(null);
+            toast.success('Marked as unavailable!', { style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' } });
+        } catch (e) {
+            console.error('Failed to block date:', e);
+            toast.error(e?.message || 'Failed to block date');
+        }
     };
 
     const upcomingEvents = useMemo(() => {
@@ -106,7 +202,7 @@ const VendorAvailabilityCalendar = ({ compact = false }) => {
             if (!seen[info.label]) { seen[info.label] = true; acc.push(info); }
             return acc;
         }, []).slice(0, 4);
-    }, [bookedDates]);
+    }, [bookedDates, isPast]);
 
     const cellSize = compact ? 40 : 40;
 
@@ -273,7 +369,7 @@ const VendorAvailabilityCalendar = ({ compact = false }) => {
                                         {/* Click Outside Listener (Invisible Backdrop) */}
                                         <div className="fixed inset-0 z-10" onClick={() => setIsDropdownOpen(false)} />
 
-                                        <motion.div
+                                        <MotionDiv
                                             initial={{ opacity: 0, y: -8, scale: 0.98 }}
                                             animate={{ opacity: 1, y: 0, scale: 1 }}
                                             exit={{ opacity: 0, y: -8, scale: 0.98 }}
@@ -290,7 +386,7 @@ const VendorAvailabilityCalendar = ({ compact = false }) => {
                                                     {blockReason === reason && <div className="w-1.5 h-1.5 rounded-full bg-[#d7a444]" />}
                                                 </div>
                                             ))}
-                                        </motion.div>
+                                        </MotionDiv>
                                     </>
                                 )}
                             </AnimatePresence>

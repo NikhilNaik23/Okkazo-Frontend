@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { fetchWithAuth } from '../../utils/apiHandler';
+import { clearLocalStorage } from '../../utils/clearLocalStorage';
 
 const API_BASE_URL = 'http://localhost:8080';
 
@@ -443,9 +444,7 @@ const authSlice = createSlice({
     initialState,
     reducers: {
         logout: (state) => {
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
-            localStorage.removeItem('userRole');
+            clearLocalStorage();
             state.user = null;
             state.role = null;
             state.vendorApplication = null;

@@ -8,6 +8,7 @@ import { useDispatch } from "react-redux";
 import { myOrganizedEvents, myTickets as myTicketsData } from "../../../data/myEventsData";
 import { promotedCampaigns } from "../../../data/myEventsDashboardData";
 import { fetchMyPlannings, fetchPlanningByEventId } from "../../../store/slices/planningSlice";
+import { fetchMyPromotes } from "../../../store/slices/promoteSlice";
 import {
     OrganizedEventCard,
     CampaignCard,
@@ -18,6 +19,74 @@ import {
 } from "../../../components/User/Dashboard";
 
 const MotionDiv = motion.div;
+
+const normalizePromoteStatus = (value) =>
+    String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/_+/g, '-');
+
+const mapPromoteToCampaign = (promote, idx) => {
+    const raw = String(promote?.eventStatus || '').trim();
+    const normalized = normalizePromoteStatus(raw);
+
+    const statusLabel = (() => {
+        if (normalized === 'payment-required') return 'Payment Required';
+        if (normalized === 'manager-unassigned') return 'Pending Review';
+        if (normalized === 'in-review') return 'Pending Review';
+        if (normalized === 'live') return 'Live';
+        if (normalized === 'complete') return 'Complete';
+        return raw ? raw.replace(/_/g, ' ') : 'Pending Review';
+    })();
+
+    const gradient = (() => {
+        if (normalized === 'live') return 'bg-gradient-to-b from-[#7AB2B2]/80 via-[#7AB2B2]/20 to-white/90';
+        if (normalized === 'payment-required') return 'bg-gradient-to-b from-[#EBF4F6]/80 via-[#d7a444]/20 to-white/90';
+        if (normalized === 'complete') return 'bg-gradient-to-b from-[#2d5c58]/70 via-[#7AB2B2]/10 to-white/90';
+        return 'bg-gradient-to-b from-[#EBF4F6]/80 via-[#7AB2B2]/20 to-white/90';
+    })();
+
+    const centerText = (() => {
+        if (normalized === 'payment-required') return 'Locked';
+        if (normalized === 'complete') return 'Check';
+        if (normalized === 'live') return 'LIVE';
+        // Keep short text so it fits the circular badge
+        return 'Review';
+    })();
+
+    const totalAmount = (typeof promote?.totalAmount === 'number' && Number.isFinite(promote.totalAmount))
+        ? promote.totalAmount
+        : null;
+
+    const platformFee = (typeof promote?.platformFee === 'number' && Number.isFinite(promote.platformFee))
+        ? promote.platformFee
+        : null;
+
+    const isPayRequired = normalized === 'payment-required';
+
+    const shownAmount = isPayRequired ? platformFee : totalAmount;
+    const revenueLabel = isPayRequired ? 'Platform Fee Due' : 'Total Amount';
+    const revenue = shownAmount != null
+        ? `₹${shownAmount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+        : '—';
+
+    return {
+        id: promote?.eventId,
+        title: promote?.eventTitle || 'Untitled Campaign',
+        subtitle: String(promote?.eventCategory || 'PROMOTION').toUpperCase(),
+        status: statusLabel,
+        eventStatus: normalized,
+        totalAmount,
+        platformFee,
+        revenueLabel,
+        revenue,
+        centerText,
+        gradient,
+        buttonText: normalized === 'payment-required' ? 'Pay Now' : 'Manage',
+        _idx: idx,
+    };
+};
 
 const formatPlanningDate = (planning) => {
     const dateValue = planning?.category === 'public' ? planning?.schedule?.startAt : planning?.eventDate;
@@ -132,6 +201,27 @@ const MyEvents = () => {
         }
     };
 
+    const handleCampaignManage = (camp) => {
+        const eventId = camp?.id;
+        if (!eventId) return;
+
+        if (camp?.eventStatus === 'payment-required') {
+            // Open Promote payment for this existing promote event
+            navigate('/user/promote', {
+                state: {
+                    payForEvent: {
+                        eventId,
+                        eventTitle: camp?.title,
+                        amount: camp?.platformFee,
+                    },
+                },
+            });
+            return;
+        }
+
+        navigate(`/user/promote-event/${eventId}`);
+    };
+
     // Filter States
     const [showFilters, setShowFilters] = useState(false);
     const [filterStatus, setFilterStatus] = useState("All");
@@ -190,16 +280,24 @@ const MyEvents = () => {
                 }));
                 setMyTickets(enhancedTickets);
 
-                // Load stored campaigns
-                const storedCampaigns = JSON.parse(localStorage.getItem('promoted_campaigns') || '[]');
-                const mergedCampaigns = [...(Array.isArray(storedCampaigns) ? storedCampaigns : []), ...promotedCampaigns];
-                setCampaigns(mergedCampaigns);
+                const promotesResult = await dispatch(fetchMyPromotes());
+                if (promotesResult.meta?.requestStatus === 'fulfilled') {
+                    const promotes = promotesResult.payload?.promotes || [];
+                    const mapped = promotes
+                        .filter((p) => p && p.eventId)
+                        .map((p, idx) => mapPromoteToCampaign(p, idx));
+                    setCampaigns(mapped);
+                } else {
+                    // Fallback to static data if API fails
+                    setCampaigns(promotedCampaigns);
+                }
 
                 fetchSaved();
             } catch (error) {
                 console.error("Fetch Data Error:", error);
                 toast.error("Failed to load your events");
                 setOrganizedEvents(myOrganizedEvents);
+                setCampaigns(promotedCampaigns);
             } finally {
                 setIsLoading(false);
             }
@@ -242,7 +340,9 @@ const MyEvents = () => {
     });
 
     const filteredCampaigns = campaigns.filter(c => {
-        const matchesSearch = c.title.toLowerCase().includes(searchQuery) || c.subtitle.toLowerCase().includes(searchQuery);
+        const title = String(c.title || '').toLowerCase();
+        const subtitle = String(c.subtitle || '').toLowerCase();
+        const matchesSearch = title.includes(searchQuery) || subtitle.includes(searchQuery);
         const matchesStatus = campaignFilterStatus === "All" || c.status === campaignFilterStatus;
         return matchesSearch && matchesStatus;
     });
@@ -694,7 +794,7 @@ const MyEvents = () => {
                                                 <FilterDropdown
                                                     label="Status"
                                                     value={campaignFilterStatus}
-                                                    options={["All", "Live", "Pending Review", "Sold Out"]}
+                                                    options={["All", "Payment Required", "Pending Review", "Live", "Complete"]}
                                                     onChange={(val) => {
                                                         setCampaignFilterStatus(val);
                                                         setCampaignPage(1); // Reset to first page on filter change
@@ -707,7 +807,7 @@ const MyEvents = () => {
 
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 min-h-[600px]">
                                     {currentCampaigns.map((camp) => (
-                                        <CampaignCard key={camp.id} camp={camp} />
+                                        <CampaignCard key={camp.id} camp={camp} onAction={() => handleCampaignManage(camp)} />
                                     ))}
                                     {filteredCampaigns.length === 0 && (
                                         <div className="col-span-4 text-center py-20 opacity-40">
