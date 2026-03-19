@@ -42,6 +42,84 @@ const pickFallbackImage = (category, index = 0) => {
     return "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=2069&auto=format&fit=crop";
 };
 
+const haversineKm = (lat1, lon1, lat2, lon2) => {
+    const a1 = Number(lat1);
+    const o1 = Number(lon1);
+    const a2 = Number(lat2);
+    const o2 = Number(lon2);
+    if (![a1, o1, a2, o2].every((v) => Number.isFinite(v))) return null;
+
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const R = 6371;
+    const dLat = toRad(a2 - a1);
+    const dLon = toRad(o2 - o1);
+
+    const sLat1 = toRad(a1);
+    const sLat2 = toRad(a2);
+
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(sLat1) * Math.cos(sLat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+};
+
+const getVenueServicePrimaryImage = (serviceDetails) => {
+    const images = Array.isArray(serviceDetails?.images) ? serviceDetails.images : [];
+    const first = images[0]?.url;
+    return first || serviceDetails?.image || null;
+};
+
+const mapBackendVenueServiceToCard = ({ vendor, service, index = 0, eventLat, eventLng }) => {
+    const serviceId = service?.serviceId || service?.id || null;
+    const details = service?.details || {};
+
+    const serviceLat = details?.locationLat ?? null;
+    const serviceLng = details?.locationLng ?? null;
+    const computedDistance = haversineKm(eventLat, eventLng, serviceLat, serviceLng);
+
+    const image = getVenueServicePrimaryImage(details) || pickFallbackImage('Venue', index);
+    const locationName =
+        details?.locationAreaName ||
+        details?.location ||
+        vendor?.location?.name ||
+        'Location TBD';
+
+    const unitPrice = Number(service?.price ?? vendor?.priceMin ?? 0);
+
+    return {
+        id: serviceId || `${vendor?.vendorAuthId || 'venue'}-${index}`,
+        serviceId: serviceId ? String(serviceId) : null,
+        vendorAuthId: vendor?.vendorAuthId || null,
+        vendorBusinessName: vendor?.businessName || null,
+        category: 'Venue',
+        categoryId: vendor?.categoryId || 'venues',
+
+        name: service?.name || vendor?.businessName || 'Venue',
+        rating: service?.rating != null ? String(service.rating) : (vendor?.rating != null ? String(vendor.rating) : '0'),
+        reviews: Number(vendor?.reviews || 0),
+        description: service?.description || vendor?.description || null,
+        image,
+        banner: image,
+        location: locationName,
+        mapsUrl: details?.locationMapsUrl || vendor?.location?.mapsUrl || null,
+        lat: Number.isFinite(Number(serviceLat)) ? Number(serviceLat) : null,
+        lng: Number.isFinite(Number(serviceLng)) ? Number(serviceLng) : null,
+        distanceKm: computedDistance != null ? computedDistance : vendor?.distanceKm,
+        capacity: details?.capacity != null ? Number(details.capacity) : vendor?.capacity,
+
+        pricingUnit: 'EVENT',
+        unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
+        priceMin: Number.isFinite(unitPrice) ? unitPrice : 0,
+        priceMax: Math.round((Number.isFinite(unitPrice) ? unitPrice : 0) * 1.25),
+
+        details,
+        services: Array.isArray(vendor?.services) ? vendor.services : [],
+        _raw: vendor,
+        _rawService: service,
+    };
+};
+
 const mapBackendVendorToCard = (vendor, category, index = 0) => {
     const name = vendor?.businessName || 'Vendor';
     const rating = vendor?.rating != null ? String(vendor.rating) : '0';
@@ -79,6 +157,8 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     const dispatch = useDispatch();
     const activeCategory = formData.services[activeServiceTab] || "Venue";
     const eventId = formData?.id;
+    const eventLat = formData?.lat;
+    const eventLng = formData?.lng;
 
     const attendeeInfo = useMemo(() => {
         const listingType = String(formData?.listingType || 'Private');
@@ -159,6 +239,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                 body: JSON.stringify({
                     service: category,
                     vendorAuthId,
+                    ...(category === 'Venue' && vendor?.serviceId ? { serviceId: String(vendor.serviceId) } : {}),
                     servicePrice: {
                         min: Number.isFinite(lineMin) && lineMin > 0 ? lineMin : 0,
                         max: Number.isFinite(lineMax) && lineMax > 0 ? lineMax : 0,
@@ -370,7 +451,21 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                 }
 
                 const vendors = Array.isArray(data?.data?.vendors) ? data.data.vendors : [];
-                const mapped = vendors.map((v, idx) => mapBackendVendorToCard(v, activeCategory, idx));
+                const mapped = activeCategory === 'Venue'
+                    ? vendors.flatMap((v, idx) => {
+                        const services = Array.isArray(v?.services) ? v.services : [];
+                        if (services.length === 0) {
+                            return [mapBackendVendorToCard(v, 'Venue', idx)];
+                        }
+                        return services.map((svc, svcIdx) => mapBackendVenueServiceToCard({
+                            vendor: v,
+                            service: svc,
+                            index: idx * 100 + svcIdx,
+                            eventLat,
+                            eventLng,
+                        }));
+                    })
+                    : vendors.map((v, idx) => mapBackendVendorToCard(v, activeCategory, idx));
 
                 setVendorsByCategory((prev) => ({
                     ...prev,
@@ -387,7 +482,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         return () => {
             if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
         };
-    }, [activeCategory, dispatch, eventId, formData?.date, priceRange.max, priceRange.min, searchQuery, sortOption, vendorsRefreshKey]);
+    }, [activeCategory, dispatch, eventId, eventLat, eventLng, formData?.date, priceRange.max, priceRange.min, searchQuery, sortOption, vendorsRefreshKey]);
 
     const filteredVendors = useMemo(() => {
         const fetched = vendorsByCategory[activeCategory];
@@ -436,6 +531,15 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                 break;
         }
 
+        // Venue should always be shown nearest-first (based on event/service coordinates).
+        if (activeCategory === 'Venue') {
+            allVendors = [...allVendors].sort((a, b) => {
+                const da = Number.isFinite(Number(a?.distanceKm)) ? Number(a.distanceKm) : Number.POSITIVE_INFINITY;
+                const db = Number.isFinite(Number(b?.distanceKm)) ? Number(b.distanceKm) : Number.POSITIVE_INFINITY;
+                return da - db;
+            });
+        }
+
         return allVendors;
     }, [activeCategory, attendeeInfo.attendeeCount, searchQuery, sortOption, priceRange, vendorsByCategory]);
 
@@ -479,6 +583,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                         attendeeCount={attendeeInfo.attendeeCount}
                         attendeeLabel={attendeeInfo.attendeeLabel}
                         guestCount={formData.guests}
+                        mode={activeCategory === 'Venue' ? 'venue-service' : undefined}
                     />
                 )}
             </AnimatePresence>

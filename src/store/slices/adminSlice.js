@@ -2,6 +2,26 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 
 const API_BASE_URL = 'http://localhost:8080';
 
+const isPendingInvite = (member) => typeof member?.authId === 'string' && member.authId.startsWith('pending:');
+
+const buildOptimisticManagerInvite = ({ name, email, department, assignedRole }) => {
+    const normalizedEmail = (email || '').trim().toLowerCase();
+    const trimmedName = (name || '').trim();
+
+    return {
+        authId: `pending:${normalizedEmail}`,
+        name: trimmedName,
+        email: normalizedEmail,
+        role: 'MANAGER',
+        assignedRole: assignedRole || 'Manager',
+        department,
+        isActive: true,
+        status: 'UNVERIFIED',
+        lastActive: null,
+        access: assignedRole || 'Manager Access',
+    };
+};
+
 // Async thunk for fetching Team Access data (Admin only)
 export const fetchTeamAccess = createAsyncThunk(
     'admin/fetchTeamAccess',
@@ -88,7 +108,7 @@ export const unblockTeamMember = createAsyncThunk(
 // Async thunk for creating a manager (Admin only)
 export const createManager = createAsyncThunk(
     'admin/createManager',
-    async ({ name, email, department, assignedRole }, { rejectWithValue }) => {
+    async ({ name, email, department, assignedRole }, { dispatch, rejectWithValue }) => {
         try {
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
@@ -104,6 +124,10 @@ export const createManager = createAsyncThunk(
 
             const data = await response.json();
             if (!response.ok) return rejectWithValue(data.message || 'Failed to create manager');
+
+            // Backend returns 202 and processes creation asynchronously (Kafka).
+            // We still trigger a refresh, but the UI will also optimistically show the invite.
+            dispatch(fetchTeamAccess({ page: 1, limit: 50 }));
 
             return data.data;
         } catch (error) {
@@ -387,9 +411,33 @@ const adminSlice = createSlice({
             })
             .addCase(fetchTeamAccess.fulfilled, (state, action) => {
                 state.teamLoading = false;
-                state.teamMembers = action.payload.members || [];
-                state.teamStats = action.payload.stats || state.teamStats;
-                state.teamPagination = action.payload.pagination || state.teamPagination;
+                const incomingMembers = action.payload.members || [];
+                const incomingStats = action.payload.stats || state.teamStats;
+                const incomingPagination = action.payload.pagination || state.teamPagination;
+
+                const incomingEmails = new Set(incomingMembers.map((m) => (m?.email || '').toLowerCase()));
+                const pendingInvites = (state.teamMembers || []).filter((m) => isPendingInvite(m) && !incomingEmails.has((m?.email || '').toLowerCase()));
+
+                state.teamMembers = [...pendingInvites, ...incomingMembers];
+
+                const pendingCount = pendingInvites.length;
+                if (pendingCount > 0) {
+                    state.teamStats = {
+                        ...incomingStats,
+                        totalMembers: (incomingStats.totalMembers || 0) + pendingCount,
+                        managers: (incomingStats.managers || 0) + pendingCount,
+                        activeMembers: (incomingStats.activeMembers || 0) + pendingCount,
+                        pendingInvites: (incomingStats.pendingInvites || 0) + pendingCount,
+                    };
+
+                    state.teamPagination = {
+                        ...incomingPagination,
+                        total: (incomingPagination.total || 0) + pendingCount,
+                    };
+                } else {
+                    state.teamStats = incomingStats;
+                    state.teamPagination = incomingPagination;
+                }
             })
             .addCase(fetchTeamAccess.rejected, (state, action) => {
                 state.teamLoading = false;
@@ -510,9 +558,37 @@ const adminSlice = createSlice({
                 state.submitError = null;
                 state.createManagerSuccess = false;
             })
-            .addCase(createManager.fulfilled, (state) => {
+            .addCase(createManager.fulfilled, (state, action) => {
                 state.submitting = false;
                 state.createManagerSuccess = true;
+
+                const payload = action.payload || {};
+                const name = payload.name || action.meta?.arg?.name;
+                const email = payload.email || action.meta?.arg?.email;
+                const department = payload.department || action.meta?.arg?.department;
+                const assignedRole = payload.assignedRole || action.meta?.arg?.assignedRole;
+
+                const normalizedEmail = (email || '').trim().toLowerCase();
+                if (!normalizedEmail) return;
+
+                const existsAlready = (state.teamMembers || []).some((m) => (m?.email || '').toLowerCase() === normalizedEmail);
+                if (!existsAlready) {
+                    const optimistic = buildOptimisticManagerInvite({ name, email: normalizedEmail, department, assignedRole });
+                    state.teamMembers = [optimistic, ...(state.teamMembers || [])];
+
+                    state.teamStats = {
+                        ...state.teamStats,
+                        totalMembers: (state.teamStats.totalMembers || 0) + 1,
+                        managers: (state.teamStats.managers || 0) + 1,
+                        activeMembers: (state.teamStats.activeMembers || 0) + 1,
+                        pendingInvites: (state.teamStats.pendingInvites || 0) + 1,
+                    };
+
+                    state.teamPagination = {
+                        ...state.teamPagination,
+                        total: (state.teamPagination.total || 0) + 1,
+                    };
+                }
             })
             .addCase(createManager.rejected, (state, action) => {
                 state.submitting = false;

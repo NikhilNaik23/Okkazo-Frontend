@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, Outlet, useLocation } from "react-router-dom";
-import { BsBell, BsGear } from "react-icons/bs";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { BsBell, BsBoxArrowRight, BsGear } from "react-icons/bs";
 import { useDispatch, useSelector } from "react-redux";
-import { vendorSidebarMenus, vendorLayoutData } from "../../../data/vendorLayoutData.jsx";
+import { vendorSidebarMenus } from "../../../data/vendorLayoutData.jsx";
 import VendorNotificationSidebar from "./VendorNotificationSidebar";
 import VendorImagesOnboardingModal from "../../Vendor/Profile/VendorImagesOnboardingModal";
 import {
   fetchVendorApplication,
+  logout,
   selectUserRole,
   selectVendorApplication,
   selectVendorApplicationLoading,
@@ -15,6 +16,7 @@ import {
 const VendorLayout = () => {
   const dispatch = useDispatch();
   const location = useLocation();
+  const navigate = useNavigate();
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isImagesModalOpen, setIsImagesModalOpen] = useState(false);
 
@@ -23,8 +25,12 @@ const VendorLayout = () => {
   const vendorApplicationLoading = useSelector(selectVendorApplicationLoading);
 
   const sidebarMenus = vendorSidebarMenus;
-  const vendorData = vendorLayoutData;
   const isMessagesPage = location.pathname === '/vendor/messages' || location.pathname.includes('/vendor/event/');
+
+  const handleLogout = () => {
+    dispatch(logout());
+    navigate("/", { replace: true });
+  };
 
   const needsImages = useMemo(() => {
     if (userRole !== 'VENDOR') return false;
@@ -101,13 +107,14 @@ const VendorLayout = () => {
             <span className="text-xl"><BsGear /></span>
             Settings
           </Link>
-          <div className="p-2 bg-[#f3ddb1]/30 rounded-4xl flex items-center gap-4 border border-[#f3ddb1]/50 shadow-sm group hover:border-[#d7a444]/50 transition-all cursor-pointer">
-            <div className="w-12 h-12 rounded-full bg-linear-to-br from-[#d7a444] to-[#d0a862] shadow-inner border-2 border-white group-hover:scale-105 transition-transform"></div>
-            <div className="flex-1 min-w-0">
-              <p className="font-black text-sm truncate">{vendorData.name}</p>
-              <p className="text-[10px] text-[#5a5b44] font-bold uppercase tracking-wider">{vendorData.role}</p>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold transition-all text-[#708aa0] hover:bg-[#e9eff1] hover:text-[#0b2d49]"
+          >
+            <span className="text-xl"><BsBoxArrowRight /></span>
+            Logout
+          </button>
         </div>
       </aside>
 

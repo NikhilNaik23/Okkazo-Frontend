@@ -24,11 +24,13 @@ const DEFAULT_TICKET_TIER_ID = 'default-tier';
 
 const PlanningWizard = () => {
     const [searchParams] = useSearchParams();
+    const searchKey = searchParams.toString();
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const [currentStep, setCurrentStep] = useState(1);
     const [isPreviewMode, setIsPreviewMode] = useState(false);
     const [activeServiceTab, setActiveServiceTab] = useState(0); // Index of active service tab
+    const [isRestoring, setIsRestoring] = useState(false);
 
     // Date calculation for minimum allowed booking (Available from Today + 6)
     const minDate = new Date();
@@ -106,10 +108,19 @@ const PlanningWizard = () => {
 
     // Resume Wizard from Event ID
     useEffect(() => {
-        const eventId = searchParams.get('eventId');
+        const params = new URLSearchParams(searchKey);
+        const eventId = params.get('eventId');
         if (eventId) {
-            const urlStep = searchParams.get('step');
-            const urlTab = searchParams.get('activeServiceTab');
+            const urlStep = params.get('step');
+            const urlTab = params.get('activeServiceTab');
+
+            // Ensure we have an id early so step components relying on it don't crash.
+            setFormData((prev) => ({
+                ...prev,
+                id: prev?.id || eventId,
+                vendors: prev?.vendors || {},
+                services: Array.isArray(prev?.services) ? prev.services : [],
+            }));
 
             const handleStepLogic = (data) => {
                     const defaultData = {
@@ -192,21 +203,8 @@ const PlanningWizard = () => {
             };
 
             const load = async () => {
+                setIsRestoring(true);
                 try {
-                    // If URL explicitly asks for a step/tab, apply immediately (even if data isn't found)
-                    if (urlStep) {
-                        const parsed = parseInt(urlStep, 10);
-                        if (!Number.isNaN(parsed)) {
-                            setCurrentStep(parsed);
-                            setIsPreviewMode(false);
-                        }
-                    }
-
-                    if (urlTab) {
-                        const parsedTab = parseInt(urlTab, 10);
-                        if (!Number.isNaN(parsedTab)) setActiveServiceTab(parsedTab);
-                    }
-
                     // 1) Check localStorage (legacy)
                     const myEvents = JSON.parse(localStorage.getItem('my_organized_events') || '[]');
                     const foundEvent = myEvents.find(e => e.id === eventId || e.id === Number(eventId));
@@ -287,12 +285,14 @@ const PlanningWizard = () => {
                     }
                 } catch (e) {
                     console.error('Failed to load event data', e);
+                } finally {
+                    setIsRestoring(false);
                 }
             };
 
             load();
         }
-    }, [searchParams, dispatch]);
+    }, [searchKey, dispatch]);
 
     const handleNext = async () => {
         if (currentComponentId === 'manifest' && !isPreviewMode) {
@@ -472,6 +472,21 @@ const PlanningWizard = () => {
     const isNextDisabled = (currentComponentId === 'category' && formData.services.length === 0) ||
         (currentComponentId === 'vendor' && Object.keys(formData.vendors).length < formData.services.length) ||
         (currentComponentId === 'review' && !isAtBottom);
+
+    if (isRestoring) {
+        return (
+            <div className="flex flex-col flex-1 min-h-screen bg-surface">
+                <div className="flex-1 flex items-center justify-center px-6">
+                    <div className="flex flex-col items-center gap-4">
+                        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                        <p className="text-[10px] font-black tracking-[0.3em] uppercase text-primary/50">
+                            Loading your event…
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     if (isPreviewMode) {
         return (
