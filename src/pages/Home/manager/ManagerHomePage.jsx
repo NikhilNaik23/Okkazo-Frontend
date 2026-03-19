@@ -9,8 +9,7 @@ import {
 	MdCheckCircle,
 	MdAccessTime,
 	MdCalendarMonth,
-	MdArrowForward,
-	MdNotifications
+	MdArrowForward
 } from "react-icons/md";
 import { motion } from "framer-motion";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -120,7 +119,7 @@ const ManagerHomePage = () => {
 	};
 
 	return (
-		<div className="px-6 py-8 space-y-8 max-w-[1920px] mx-auto min-h-screen">
+		<div className="px-6 py-8 space-y-8 max-w-480 mx-auto min-h-screen">
 			{/* Header Section */}
 			<motion.div
 				initial={{ opacity: 0, y: -20 }}
@@ -135,10 +134,6 @@ const ManagerHomePage = () => {
 					<p className="text-gray-500 font-medium mt-1">{formattedDate} • {formattedTime}</p>
 				</div>
 				<div className="flex items-center gap-4 mt-4 sm:mt-0">
-					<button className="p-2 rounded-full bg-white border border-gray-200 text-gray-400 hover:text-teal-600 hover:border-teal-200 transition-all shadow-sm relative">
-						<MdNotifications className="text-xl" />
-						<span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
-					</button>
 					<div className="flex items-center gap-3 bg-white px-4 py-2 rounded-full border border-gray-200 shadow-sm">
 						<div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold text-xs">MK</div>
 						<span className="text-sm font-bold text-gray-700">Manager Account</span>
@@ -158,7 +153,7 @@ const ManagerHomePage = () => {
 						key={stat.id}
 						variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
 						whileHover={{ y: -5 }}
-						className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col justify-between h-[130px] relative overflow-hidden group"
+						className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col justify-between h-32.5 relative overflow-hidden group"
 					>
 						<div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
 							{stat.topIcon}
@@ -225,7 +220,7 @@ const ManagerHomePage = () => {
 							className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
 						>
 							<h3 className="text-lg font-bold text-gray-900 mb-4">Revenue Trends</h3>
-							<div className="h-[250px] w-full">
+							<div className="h-62.5 w-full">
 								<ResponsiveContainer width="100%" height="100%">
 									<AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
 										<defs>
@@ -250,7 +245,7 @@ const ManagerHomePage = () => {
 							className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
 						>
 							<h3 className="text-lg font-bold text-gray-900 mb-4">Event Distribution</h3>
-							<div className="h-[250px] w-full relative">
+							<div className="h-62.5 w-full relative">
 								<ResponsiveContainer width="100%" height="100%">
 									<PieChart>
 										<Pie
@@ -281,7 +276,7 @@ const ManagerHomePage = () => {
 					</div>
 
 					{/* Alert Banner */}
-					<div className="bg-gradient-to-r from-red-50 to-white rounded-2xl p-1 shadow-sm border border-red-100">
+					<div className="bg-linear-to-r from-red-50 to-white rounded-2xl p-1 shadow-sm border border-red-100">
 						<div className="bg-white/50 backdrop-blur-sm rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
 							<div className="flex items-center gap-4">
 								<div className="p-2 bg-red-100 text-red-600 rounded-lg shrink-0 animate-pulse">
@@ -408,7 +403,7 @@ const ManagerHomePage = () => {
 						<div className="space-y-6">
 							{recentActivity.map((activity, idx) => (
 								<div key={activity.id} className="relative pl-6 before:absolute before:left-0 before:top-2 before:w-2 before:h-2 before:bg-gray-200 before:rounded-full">
-									{idx !== recentActivity.length - 1 && <div className="absolute left-[3px] top-4 bottom-[-24px] w-[1px] bg-gray-100" />}
+									{idx !== recentActivity.length - 1 && <div className="absolute left-0.75 top-4 -bottom-6 w-px bg-gray-100" />}
 									<p className="text-sm text-gray-800"><span className="font-bold">{activity.user}</span> {activity.action}</p>
 									<span className="text-xs text-gray-400 font-medium flex items-center gap-1 mt-1">
 										<Clock className="w-3 h-3" /> {activity.time}

@@ -1,27 +1,29 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-    Search, Volume2, Users, Briefcase, MoreVertical,
-    CheckCheck, Plus, Paperclip, Send, Smile, Clock, Check, ChevronDown, ChevronRight
+    Check,
+    CheckCheck,
+    Clock,
+    MoreVertical,
+    Paperclip,
+    Search,
+    Send,
+    Smile,
+    Users,
 } from 'lucide-react';
 import { toast } from "react-hot-toast";
 import EmojiPicker from 'emoji-picker-react';
 import { chatContacts, chatMessages as initialMessages } from '../../../data/chatData';
 
 const ManagerChatPage = () => {
-    // Current logged in user mock
     const currentUserId = 'manager';
 
     const [activeChannel, setActiveChannel] = useState(chatContacts[0]?.id || null);
     const [chatInput, setChatInput] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [messages, setMessages] = useState(initialMessages);
-    
-    // UI states
-    const [isVendorsOpen, setIsVendorsOpen] = useState(true);
-    const [isInternalOpen, setIsInternalOpen] = useState(true);
+
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-    
-    // Interaction states
+
     const [activeMessageMenu, setActiveMessageMenu] = useState(null);
     const [editingMessageId, setEditingMessageId] = useState(null);
     const [editInput, setEditInput] = useState('');
@@ -38,7 +40,7 @@ const ManagerChatPage = () => {
                 setShowEmojiPicker(false);
             }
             if (contextMenu.show && contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
-                setContextMenu(prev => ({ ...prev, show: false }));
+                setContextMenu((prev) => ({ ...prev, show: false }));
             }
             if (activeMessageMenu && messageMenuRef.current && !messageMenuRef.current.contains(event.target)) {
                 setActiveMessageMenu(null);
@@ -57,20 +59,14 @@ const ManagerChatPage = () => {
             x: e.pageX,
             y: e.pageY,
             show: true,
-            msgId: msgId
+            msgId,
         });
     };
 
-    // Filter contacts safely
-    const filteredContacts = chatContacts.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
-    
-    const admins = filteredContacts.filter(c => c.type === 'admin');
-    const clients = filteredContacts.filter(c => c.type === 'client');
-    const team = filteredContacts.filter(c => c.type === 'team');
-    const vendors = filteredContacts.filter(c => c.type === 'vendor');
-
-    // Get current active chat context
-    const currentContact = chatContacts.find(c => c.id === activeChannel);
+    const managerContacts = chatContacts.filter(
+        (c) => c.id !== currentUserId && c.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    const currentContact = managerContacts.find((c) => c.id === activeChannel);
 
     const handleSend = () => {
         if (!chatInput.trim() || !activeChannel) return;
@@ -82,7 +78,7 @@ const ManagerChatPage = () => {
             text: chatInput,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             status: 'sent',
-            date: Date.now()
+            date: Date.now(),
         };
 
         setMessages([...messages, newMsg]);
@@ -91,17 +87,17 @@ const ManagerChatPage = () => {
     };
 
     const handleDeleteMessage = (id) => {
-        setMessages(messages.filter(m => m.id !== id));
+        setMessages(messages.filter((m) => m.id !== id));
         toast.success("Message deleted");
     };
 
     const handleEditMessage = (id, newText) => {
-        setMessages(messages.map(m => m.id === id ? { ...m, text: newText, isEdited: true } : m));
+        setMessages(messages.map((m) => (m.id === id ? { ...m, text: newText, isEdited: true } : m)));
         toast.success("Message edited");
     };
 
     const handleEmojiClick = (emojiData) => {
-        setChatInput(prev => prev + emojiData.emoji);
+        setChatInput((prev) => prev + emojiData.emoji);
     };
 
     const handleAttachClick = () => {
@@ -129,10 +125,10 @@ const ManagerChatPage = () => {
     };
 
     const renderMessageActions = (msg, isMe) => {
-        const isEditable = isMe; // Allow edits for demo purposes
-        
+        const isEditable = isMe;
+
         return (
-            <div className={`absolute top-1 right-1 z-20`}>
+            <div className="absolute top-1 right-1 z-20">
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
@@ -146,7 +142,7 @@ const ManagerChatPage = () => {
                 {activeMessageMenu === msg.id && (
                     <div
                         ref={messageMenuRef}
-                        className={`absolute z-[60] top-full ${isMe ? 'right-0' : 'left-0'} mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 min-w-[140px] p-2 animate-in fade-in zoom-in-95 duration-200`}
+                        className={`absolute z-60 top-full ${isMe ? 'right-0' : 'left-0'} mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 min-w-35 p-2 animate-in fade-in zoom-in-95 duration-200`}
                     >
                         {isEditable && (
                             <button
@@ -168,32 +164,32 @@ const ManagerChatPage = () => {
         );
     };
 
-    const renderSidebarItem = (contact, Icon) => {
+    const renderSidebarItem = (contact) => {
         const isActive = activeChannel === contact.id;
-        const unreadCount = 0; 
+        const unreadCount = 0;
 
         return (
             <button
                 key={contact.id}
                 onClick={() => setActiveChannel(contact.id)}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${isActive ? 'bg-[#e7f7f5] border-l-4 border-teal-500 shadow-sm' : 'hover:bg-gray-50 border-l-4 border-transparent'}`}
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${isActive ? 'bg-teal-700 text-white shadow-md shadow-teal-900/10 border-l-4 border-teal-300' : 'hover:bg-gray-50 border-l-4 border-transparent'}`}
             >
-                <div className={`relative w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-white text-teal-600' : 'bg-gray-100 text-gray-500'}`}>
-                    {Icon ? <Icon size={18} /> : <span className="text-xs font-bold">{contact.name.substring(0, 2).toUpperCase()}</span>}
+                <div className={`relative w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-white/10 text-teal-100' : 'bg-gray-100 text-gray-500'}`}>
+                    <span className="text-xs font-bold">{contact.name.substring(0, 2).toUpperCase()}</span>
                     <div className={`absolute bottom-0 right-0 w-2.5 h-2.5 border-2 border-white rounded-full ${contact.online ? 'bg-green-500' : 'bg-gray-300'}`} />
                 </div>
 
                 <div className="flex-1 text-left min-w-0">
                     <div className="flex justify-between items-center">
-                        <p className={`text-sm font-bold truncate ${isActive ? 'text-teal-900' : 'text-gray-700'}`}>{contact.name}</p>
-                        {unreadCount > 0 && <div className="w-2 h-2 bg-green-500 rounded-full shrink-0 shadow-sm animate-pulse"></div>}
+                        <p className={`text-sm font-bold truncate ${isActive ? 'text-white' : 'text-gray-700'}`}>{contact.name}</p>
+                        {unreadCount > 0 && <div className="w-2 h-2 bg-white/80 rounded-full shrink-0 shadow-sm animate-pulse" />}
                     </div>
-                    <p className={`text-xs truncate ${isActive ? 'text-teal-600 font-medium' : 'text-gray-400'}`}>
+                    <p className={`text-xs truncate ${isActive ? 'text-teal-100/70 font-medium' : 'text-gray-400'}`}>
                         {contact.role || contact.lastSeen}
                     </p>
                 </div>
             </button>
-        )
+        );
     };
 
     return (
@@ -212,93 +208,15 @@ const ManagerChatPage = () => {
                         <input
                             type="text"
                             placeholder="Search contacts..."
-                            className="w-full bg-gray-50 border-none rounded-xl py-2.5 pl-10 pr-4 text-sm font-medium focus:ring-2 focus:ring-teal-500/10 text-gray-700 placeholder-gray-400"
+                            className="w-full bg-gray-50 border-none rounded-xl py-2.5 pl-10 pr-4 text-sm font-medium focus:ring-2 focus:ring-teal-700/10 text-gray-700 placeholder-gray-400"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-scroll p-4 space-y-6 custom-scrollbar">
-
-                    {/* Admin */}
-                    {admins.length > 0 && (
-                        <div>
-                            <div className="flex justify-between items-center px-3 mb-2">
-                                <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Admin</h4>
-                                <Users size={12} className="text-gray-300" />
-                            </div>
-                            <div className="space-y-1">
-                                {admins.map(c => renderSidebarItem(c, null))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Client */}
-                    {clients.length > 0 && (
-                        <div>
-                            <div className="flex justify-between items-center px-3 mb-2">
-                                <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Client</h4>
-                                <Users size={12} className="text-gray-300" />
-                            </div>
-                            <div className="space-y-1">
-                                {clients.map(c => renderSidebarItem(c, null))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Internal Team */}
-                    {team.length > 0 && (
-                        <div>
-                            <button
-                                onClick={() => setIsInternalOpen(!isInternalOpen)}
-                                className="w-full flex justify-between items-center px-3 mb-2 hover:bg-gray-50 rounded-lg py-1 transition-colors group cursor-pointer"
-                            >
-                                <div className="flex items-center gap-2">
-                                    {isInternalOpen ? (
-                                        <ChevronDown size={14} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
-                                    ) : (
-                                        <ChevronRight size={14} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
-                                    )}
-                                    <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider group-hover:text-gray-600 transition-colors">Internal Team</h4>
-                                </div>
-                                <Users size={12} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
-                            </button>
-
-                            {isInternalOpen && (
-                                <div className="space-y-1 animate-in slide-in-from-top-2 fade-in duration-200 origin-top">
-                                    {team.map(c => renderSidebarItem(c, null))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* Vendors */}
-                    {vendors.length > 0 && (
-                        <div>
-                            <button
-                                onClick={() => setIsVendorsOpen(!isVendorsOpen)}
-                                className="w-full flex justify-between items-center px-3 mb-2 hover:bg-gray-50 rounded-lg py-1 transition-colors group cursor-pointer"
-                            >
-                                <div className="flex items-center gap-2">
-                                    {isVendorsOpen ? (
-                                        <ChevronDown size={14} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
-                                    ) : (
-                                        <ChevronRight size={14} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
-                                    )}
-                                    <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider group-hover:text-gray-600 transition-colors">Vendors</h4>
-                                </div>
-                                <Briefcase size={12} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
-                            </button>
-
-                            {isVendorsOpen && (
-                                <div className="space-y-1 animate-in slide-in-from-top-2 fade-in duration-200 origin-top">
-                                    {vendors.map(c => renderSidebarItem(c, null))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
+                <div className="flex-1 overflow-y-scroll p-4 space-y-2 custom-scrollbar">
+                    <div className="space-y-1">{managerContacts.map((c) => renderSidebarItem(c))}</div>
                 </div>
             </div>
 
@@ -355,14 +273,14 @@ const ManagerChatPage = () => {
                                                             {editingMessageId === msg.id ? (
                                                                 <div className="flex flex-col gap-3">
                                                                     <textarea
-                                                                        className="bg-white/10 text-white rounded-xl p-3 text-[15px] outline-none border border-white/20 min-w-[250px]"
+                                                                        className="bg-white/10 text-white rounded-xl p-3 text-[15px] outline-none border border-white/20 min-w-62.5"
                                                                         value={editInput}
                                                                         onChange={(e) => setEditInput(e.target.value)}
                                                                         autoFocus
                                                                     />
                                                                     <div className="flex justify-end gap-3 text-sm">
                                                                         <button onClick={() => setEditingMessageId(null)} className="font-bold opacity-70 hover:opacity-100 transition-opacity">Cancel</button>
-                                                                        <button onClick={() => submitEdit(msg.id)} className="font-bold hover:text-teal-300 transition-colors">Save</button>
+                                                                        <button onClick={() => submitEdit(msg.id)} className="font-bold text-teal-100 hover:text-white transition-colors">Save</button>
                                                                     </div>
                                                                 </div>
                                                             ) : (
@@ -413,7 +331,7 @@ const ManagerChatPage = () => {
                 {/* Footer Input */}
                 <div className="p-6 bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.02)] z-10">
                     <div className="max-w-5xl mx-auto">
-                        <div className={`bg-gray-100 rounded-[2rem] px-3 py-2 flex items-center gap-2 border border-transparent transition-all relative shadow-inner ${currentContact ? 'focus-within:border-teal-500/20 focus-within:bg-gray-50 focus-within:shadow-md' : 'opacity-50 pointer-events-none'}`}>
+                        <div className={`bg-gray-100 rounded-4xl px-3 py-2 flex items-center gap-2 border border-transparent transition-all relative shadow-inner ${currentContact ? 'focus-within:border-teal-500/20 focus-within:bg-gray-50 focus-within:shadow-md' : 'opacity-50 pointer-events-none'}`}>
                             <input
                                 type="file"
                                 ref={fileInputRef}
@@ -457,7 +375,7 @@ const ManagerChatPage = () => {
                             <button
                                 onClick={handleSend}
                                 disabled={!chatInput.trim()}
-                                className="p-3.5 bg-teal-600 hover:bg-teal-700 text-white rounded-full transition-all disabled:opacity-50 disabled:scale-95 shadow-md flex items-center justify-center shrink-0"
+                                className="p-3.5 bg-teal-700 hover:bg-teal-800 text-white rounded-full transition-all disabled:opacity-50 disabled:scale-95 shadow-md flex items-center justify-center shrink-0"
                             >
                                 <Send size={20} className="ml-0.5" />
                             </button>
@@ -471,7 +389,7 @@ const ManagerChatPage = () => {
             {contextMenu.show && (
                 <div
                     ref={contextMenuRef}
-                    className="fixed z-[100] bg-white rounded-2xl shadow-2xl border border-gray-100 min-w-[160px] p-2 animate-in fade-in zoom-in-95 duration-200"
+                    className="fixed z-100 bg-white rounded-2xl shadow-2xl border border-gray-100 min-w-40 p-2 animate-in fade-in zoom-in-95 duration-200"
                     style={{ top: contextMenu.y, left: contextMenu.x }}
                     onClick={(e) => e.stopPropagation()}
                 >

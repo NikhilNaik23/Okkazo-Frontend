@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { 
   Search, 
   FileText, 
-  Bell, 
   Calendar, 
   TrendingUp, 
   ArrowUpRight, 
@@ -65,10 +64,6 @@ const AdminReports = () => {
           <button className="flex items-center gap-2 px-4 py-2 bg-[#28a785] text-white rounded-lg text-sm font-semibold hover:bg-[#218a6e] transition-all shadow-sm">
             <FileText size={16} />
             Export PDF
-          </button>
-          
-          <button className="p-2 text-[#64748b] hover:bg-[#f1f5f9] rounded-lg transition-colors relative">
-            <Bell size={18} />
           </button>
         </div>
       </div>
@@ -145,11 +140,11 @@ const AdminReports = () => {
             </div>
           </div>
           
-          <div className="h-[250px] w-full flex items-end justify-between px-4">
+          <div className="h-62.5 w-full flex items-end justify-between px-4">
             {[1, 2, 3, 4, 5].map((week) => (
-              <div key={week} className="flex flex-col items-center gap-4 group flex-1 max-w-[100px]">
+              <div key={week} className="flex flex-col items-center gap-4 group flex-1 max-w-25">
                 <span className="text-[10px] font-bold text-[#94a3b8] uppercase opacity-0 group-hover:opacity-100 transition-opacity italic">Week {week}</span>
-                <div className="w-full bg-[#f8fafc] rounded-t-lg relative h-[200px]">
+                <div className="w-full bg-[#f8fafc] rounded-t-lg relative h-50">
                   {/* Mock Chart Content */}
                 </div>
                 <span className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider">WEEK {week}</span>

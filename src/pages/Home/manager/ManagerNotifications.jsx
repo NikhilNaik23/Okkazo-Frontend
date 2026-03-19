@@ -6,10 +6,10 @@ import {
     MdVolumeOff,
     MdMoreHoriz
 } from 'react-icons/md';
-import { vendorNotificationsData } from '../../../data/vendorNotificationsData';
+import { notificationsData } from '../../../data/notificationsData';
 
 const ManagerNotifications = () => {
-    const [notifications, setNotifications] = useState(vendorNotificationsData);
+    const [notifications, setNotifications] = useState(notificationsData);
     const [activeTab, setActiveTab] = useState('all'); // all, unread, system
     const [searchTerm, setSearchTerm] = useState('');
 

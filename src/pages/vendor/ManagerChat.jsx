@@ -155,7 +155,7 @@ const ManagerChat = () => {
                 {activeMessageMenu === msg.id && (
                     <div
                         ref={messageMenuRef}
-                        className={`absolute z-[60] top-full ${isMe ? 'right-0' : 'left-0'} mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 min-w-[140px] p-2 animate-in fade-in zoom-in-95 duration-200`}
+                        className={`absolute z-60 top-full ${isMe ? 'right-0' : 'left-0'} mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 min-w-35 p-2 animate-in fade-in zoom-in-95 duration-200`}
                     >
                         {isEditable && (
                             <button
@@ -185,19 +185,19 @@ const ManagerChat = () => {
             <button
                 key={contact.id}
                 onClick={() => setActiveChannel(contact.id)}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${isActive ? 'bg-[#e7f7f5] border-l-4 border-teal-500 shadow-sm' : 'hover:bg-gray-50 border-l-4 border-transparent'}`}
+                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${isActive ? 'bg-[#0b2d49] text-[#d7a444] shadow-md shadow-[#0b2d49]/10 border-l-4 border-[#d7a444]' : 'hover:bg-gray-50 border-l-4 border-transparent'}`}
             >
-                <div className={`relative w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-white text-teal-600' : 'bg-gray-100 text-gray-500'}`}>
+                <div className={`relative w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-white/10 text-[#d7a444]' : 'bg-gray-100 text-gray-500'}`}>
                     {Icon ? <Icon size={18} /> : <span className="text-xs font-bold">{contact.name.substring(0, 2).toUpperCase()}</span>}
                     <div className={`absolute bottom-0 right-0 w-2.5 h-2.5 border-2 border-white rounded-full ${contact.online ? 'bg-green-500' : 'bg-gray-300'}`} />
                 </div>
 
                 <div className="flex-1 text-left min-w-0">
                     <div className="flex justify-between items-center">
-                        <p className={`text-sm font-bold truncate ${isActive ? 'text-teal-900' : 'text-gray-700'}`}>{contact.name}</p>
+                        <p className={`text-sm font-bold truncate ${isActive ? 'text-[#d7a444]' : 'text-gray-700'}`}>{contact.name}</p>
                         {unreadCount > 0 && <div className="w-2 h-2 bg-green-500 rounded-full shrink-0 shadow-sm animate-pulse"></div>}
                     </div>
-                    <p className={`text-xs truncate ${isActive ? 'text-teal-600 font-medium' : 'text-gray-400'}`}>
+                    <p className={`text-xs truncate ${isActive ? 'text-[#d7a444]/60 font-medium' : 'text-gray-400'}`}>
                         {contact.role || contact.lastSeen}
                     </p>
                 </div>
@@ -221,7 +221,7 @@ const ManagerChat = () => {
                         <input
                             type="text"
                             placeholder="Search contacts..."
-                            className="w-full bg-gray-50 border-none rounded-xl py-2.5 pl-10 pr-4 text-sm font-medium focus:ring-2 focus:ring-teal-500/10 text-gray-700 placeholder-gray-400"
+                            className="w-full bg-gray-50 border-none rounded-xl py-2.5 pl-10 pr-4 text-sm font-medium focus:ring-2 focus:ring-[#0b2d49]/10 text-gray-700 placeholder-gray-400"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -289,14 +289,14 @@ const ManagerChat = () => {
                                                             {editingMessageId === msg.id ? (
                                                                 <div className="flex flex-col gap-3">
                                                                     <textarea
-                                                                        className="bg-white/10 text-white rounded-xl p-3 text-[15px] outline-none border border-white/20 min-w-[250px]"
+                                                                        className="bg-white/10 text-white rounded-xl p-3 text-[15px] outline-none border border-white/20 min-w-62.5"
                                                                         value={editInput}
                                                                         onChange={(e) => setEditInput(e.target.value)}
                                                                         autoFocus
                                                                     />
                                                                     <div className="flex justify-end gap-3 text-sm">
                                                                         <button onClick={() => setEditingMessageId(null)} className="font-bold opacity-70 hover:opacity-100 transition-opacity">Cancel</button>
-                                                                        <button onClick={() => submitEdit(msg.id)} className="font-bold hover:text-teal-300 transition-colors">Save</button>
+                                                                        <button onClick={() => submitEdit(msg.id)} className="font-bold text-[#d7a444] hover:text-[#f3c15c] transition-colors">Save</button>
                                                                     </div>
                                                                 </div>
                                                             ) : (
@@ -347,7 +347,7 @@ const ManagerChat = () => {
                 {/* Footer Input */}
                 <div className="p-6 bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.02)] z-10">
                     <div className="max-w-5xl mx-auto">
-                        <div className={`bg-gray-100 rounded-[2rem] px-3 py-2 flex items-center gap-2 border border-transparent transition-all relative shadow-inner ${currentContact ? 'focus-within:border-[#0b2d49]/10 focus-within:bg-gray-50 focus-within:shadow-md' : 'opacity-50 pointer-events-none'}`}>
+                        <div className={`bg-gray-100 rounded-4xl px-3 py-2 flex items-center gap-2 border border-transparent transition-all relative shadow-inner ${currentContact ? 'focus-within:border-[#0b2d49]/10 focus-within:bg-gray-50 focus-within:shadow-md' : 'opacity-50 pointer-events-none'}`}>
                             <input
                                 type="file"
                                 ref={fileInputRef}
@@ -405,7 +405,7 @@ const ManagerChat = () => {
             {contextMenu.show && (
                 <div
                     ref={contextMenuRef}
-                    className="fixed z-[100] bg-white rounded-2xl shadow-2xl border border-gray-100 min-w-[160px] p-2 animate-in fade-in zoom-in-95 duration-200"
+                    className="fixed z-100 bg-white rounded-2xl shadow-2xl border border-gray-100 min-w-40 p-2 animate-in fade-in zoom-in-95 duration-200"
                     style={{ top: contextMenu.y, left: contextMenu.x }}
                     onClick={(e) => e.stopPropagation()}
                 >

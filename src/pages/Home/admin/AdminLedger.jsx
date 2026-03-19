@@ -2,8 +2,6 @@ import React, { useState } from "react";
 import { 
   Search, 
   Download, 
-  Bell, 
-  HelpCircle, 
   Filter, 
   Calendar, 
   Ticket, 
@@ -106,18 +104,6 @@ const AdminLedger = () => {
             <Download size={16} />
             Export CSV
           </button>
-          
-          <div className="h-6 w-px bg-[#f0f2f5] mx-1"></div>
-
-          <div className="flex items-center gap-1">
-            <button className="p-2 text-[#94a3b8] hover:bg-[#f1f5f9] hover:text-[#0b2d49] rounded-lg relative transition-all">
-              <Bell size={18} />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white shadow-sm"></span>
-            </button>
-            <button className="p-2 text-[#94a3b8] hover:bg-[#f1f5f9] hover:text-[#0b2d49] rounded-lg transition-all">
-              <HelpCircle size={18} />
-            </button>
-          </div>
         </div>
       </div>
 
@@ -233,7 +219,7 @@ const AdminLedger = () => {
                 <button 
                   key={i}
                   onClick={() => typeof p === 'number' && setActivePage(p)}
-                  className={`min-w-[40px] h-10 px-2 flex items-center justify-center rounded-xl text-sm font-black transition-all ${
+                  className={`min-w-10 h-10 px-2 flex items-center justify-center rounded-xl text-sm font-black transition-all ${
                     activePage === p 
                     ? "bg-[#28a785] text-white shadow-lg shadow-[#28a785]/20" 
                     : "bg-white border border-[#f0f2f5] text-[#64748b] hover:border-[#28a785]/30 hover:text-[#0b2d49] hover:shadow-md"

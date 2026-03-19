@@ -31,6 +31,7 @@ import ManagerEventDetails from "./pages/Home/manager/ManagerEventDetails";
 import ManagerVendors from "./pages/Home/manager/ManagerVendors";
 import ManagerAnalytics from "./pages/Home/manager/ManagerAnalytics";
 import ManagerChatPage from "./pages/Home/manager/ManagerChatPage";
+import ManagerNotifications from "./pages/Home/manager/ManagerNotifications";
 import ManagerReports from "./pages/Home/manager/ManagerReports";
 import ManagerProfile from "./pages/Home/manager/ManagerProfile";
 import ManagerLogout from "./pages/Home/manager/ManagerLogout";
@@ -296,6 +297,7 @@ const App = () => {
             <Route path="vendors" element={<ManagerVendors />} />
             <Route path="analytics" element={<ManagerAnalytics />} />
             <Route path="chat" element={<ManagerChatPage />} />
+            <Route path="notifications" element={<ManagerNotifications />} />
             <Route path="reports" element={<ManagerReports />} />
             <Route path="profile" element={<ManagerProfile />} />
             <Route path="logout" element={<ManagerLogout />} />
