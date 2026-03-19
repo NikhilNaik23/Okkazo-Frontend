@@ -92,6 +92,136 @@ export const updateVendorService = createAsyncThunk(
     }
 );
 
+export const uploadVenueServiceImages = createAsyncThunk(
+    'vendor/uploadVenueServiceImages',
+    async ({ id, files }, { dispatch, rejectWithValue }) => {
+        try {
+            if (!id) return rejectWithValue('Service ID is required');
+
+            const fileList = Array.isArray(files) ? files : Array.from(files || []);
+            if (fileList.length === 0) {
+                return rejectWithValue('At least one image file is required');
+            }
+
+            const formData = new FormData();
+            fileList.forEach((file) => {
+                formData.append('files', file);
+            });
+
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/vendor/services/${id}/images`,
+                {
+                    method: 'POST',
+                    body: formData,
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(response);
+
+            if (!response.ok || !data?.success) {
+                const msg =
+                    data?.error?.message ||
+                    data?.message ||
+                    `Failed to upload images (HTTP ${response.status})`;
+                return rejectWithValue(msg);
+            }
+
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error — could not upload images');
+        }
+    }
+);
+
+export const deleteVenueServiceImage = createAsyncThunk(
+    'vendor/deleteVenueServiceImage',
+    async ({ id, publicId }, { dispatch, rejectWithValue }) => {
+        try {
+            if (!id) return rejectWithValue('Service ID is required');
+            if (!publicId) return rejectWithValue('publicId is required');
+
+            const url = `${API_BASE_URL}/api/vendor/services/${id}/images?publicId=${encodeURIComponent(String(publicId))}`;
+            const response = await fetchWithAuth(url, { method: 'DELETE' }, { dispatch, refreshAction: refreshAccessToken });
+            const data = await safeJson(response);
+
+            if (!response.ok || !data?.success) {
+                const msg =
+                    data?.error?.message ||
+                    data?.message ||
+                    `Failed to delete image (HTTP ${response.status})`;
+                return rejectWithValue(msg);
+            }
+
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error — could not delete image');
+        }
+    }
+);
+
+export const setVenueServiceProfileImage = createAsyncThunk(
+    'vendor/setVenueServiceProfileImage',
+    async ({ id, publicId }, { dispatch, rejectWithValue }) => {
+        try {
+            if (!id) return rejectWithValue('Service ID is required');
+            if (!publicId) return rejectWithValue('publicId is required');
+
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/vendor/services/${id}/images/profile`,
+                {
+                    method: 'PATCH',
+                    body: JSON.stringify({ publicId: String(publicId) }),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(response);
+
+            if (!response.ok || !data?.success) {
+                const msg =
+                    data?.error?.message ||
+                    data?.message ||
+                    `Failed to set profile image (HTTP ${response.status})`;
+                return rejectWithValue(msg);
+            }
+
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error — could not set profile image');
+        }
+    }
+);
+
+export const resolveGoogleMapsUrl = createAsyncThunk(
+    'vendor/resolveGoogleMapsUrl',
+    async ({ url }, { dispatch, rejectWithValue }) => {
+        try {
+            if (!url) return rejectWithValue('url is required');
+
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/vendor/utils/resolve-maps-url?url=${encodeURIComponent(String(url))}`,
+                { method: 'GET' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(response);
+
+            if (!response.ok || !data?.success) {
+                const msg =
+                    data?.error?.message ||
+                    data?.message ||
+                    `Failed to resolve url (HTTP ${response.status})`;
+                return rejectWithValue(msg);
+            }
+
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error — could not resolve url');
+        }
+    }
+);
+
 export const deleteVendorService = createAsyncThunk(
     'vendor/deleteVendorService',
     async ({ id }, { dispatch, rejectWithValue }) => {
@@ -215,6 +345,28 @@ const vendorSlice = createSlice({
             .addCase(deleteVendorService.rejected, (state, action) => {
                 state.deleteServiceStatus = 'failed';
                 state.deleteServiceError = action.payload || action.error.message;
+            })
+            .addCase(uploadVenueServiceImages.fulfilled, (state, action) => {
+                // Treat image upload as a service update: backend returns updated service doc
+                const updated = action.payload;
+                const id = updated?._id || updated?.id;
+                if (!id) return;
+                const idx = state.myServices.findIndex((s) => String(s?._id) === String(id));
+                if (idx !== -1) state.myServices[idx] = updated;
+            })
+            .addCase(deleteVenueServiceImage.fulfilled, (state, action) => {
+                const updated = action.payload;
+                const id = updated?._id || updated?.id;
+                if (!id) return;
+                const idx = state.myServices.findIndex((s) => String(s?._id) === String(id));
+                if (idx !== -1) state.myServices[idx] = updated;
+            })
+            .addCase(setVenueServiceProfileImage.fulfilled, (state, action) => {
+                const updated = action.payload;
+                const id = updated?._id || updated?.id;
+                if (!id) return;
+                const idx = state.myServices.findIndex((s) => String(s?._id) === String(id));
+                if (idx !== -1) state.myServices[idx] = updated;
             });
     },
 });

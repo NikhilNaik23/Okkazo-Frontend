@@ -52,6 +52,11 @@ const buildPromoteFormData = (formData) => {
         eventDescription: formData.eventDescription || '',
         eventCategory: formData.category || 'Other',
         customCategory: formData.category === 'Other' ? (formData.customCategory || '') : undefined,
+        eventField: (typeof formData.eventField === 'string' && formData.eventField.trim())
+            ? formData.eventField.trim()
+            : ((Array.isArray(formData.interests) && typeof formData.interests[0] === 'string')
+                ? formData.interests[0].trim()
+                : undefined),
         tickets: {
             noOfTickets: Number(formData.totalCapacity || 0),
             ticketType,
