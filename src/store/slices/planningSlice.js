@@ -62,6 +62,9 @@ const toIso = (value) => {
  */
 const buildPrivatePayload = (formData, authState) => {
     const normalizedType = normalizeEventType(formData.listingType, formData.type);
+    const eventField = (typeof formData.eventField === 'string' && formData.eventField.trim())
+        ? formData.eventField.trim()
+        : (Array.isArray(formData.interests) && typeof formData.interests[0] === 'string' ? formData.interests[0].trim() : undefined);
     return {
         authId:
             authState?.user?.authId ||
@@ -73,6 +76,7 @@ const buildPrivatePayload = (formData, authState) => {
         category: 'private',
         eventTitle: formData.title,
         eventType: normalizedType,
+        ...(eventField ? { eventField } : {}),
         customEventType: normalizedType === 'Other' ? (formData.customType || formData.type || 'Other') : undefined,
         location: {
             name: formData.location,
@@ -94,6 +98,9 @@ const buildPrivatePayload = (formData, authState) => {
  */
 const buildPublicFormData = (formData, authState) => {
     const normalizedType = normalizeEventType('Public', formData.type);
+    const eventField = (typeof formData.eventField === 'string' && formData.eventField.trim())
+        ? formData.eventField.trim()
+        : (Array.isArray(formData.interests) && typeof formData.interests[0] === 'string' ? formData.interests[0].trim() : undefined);
     // Wizard flow uses: publicStartTime, publicEndTime, salesStartTime, salesEndTime
     // Promote flow uses: startDate, endDate, ticketReleaseDate, ticketSalesEndDate
     const scheduleStart = toIso(formData.publicStartTime || formData.startDate);
@@ -125,6 +132,7 @@ const buildPublicFormData = (formData, authState) => {
         category: 'public',
         eventTitle: formData.title,
         eventType: normalizedType,
+        ...(eventField ? { eventField } : {}),
         customEventType: normalizedType === 'Other' ? (formData.customType || formData.type || 'Other') : undefined,
         eventDescription: buildPublicDescription(formData),
         location: {
