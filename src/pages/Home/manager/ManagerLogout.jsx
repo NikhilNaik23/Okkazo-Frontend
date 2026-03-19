@@ -1,24 +1,18 @@
 import React, { useEffect } from 'react';
 import { useDispatch } from 'react-redux';
-import { Navigate } from 'react-router-dom';
-// Assuming there is an auth slice with logout action, but for now just a placeholder
-// import { logout } from '../../../store/slices/authSlice';
+import { useNavigate } from 'react-router-dom';
+import { logout } from '../../../store/slices/authSlice';
 
 const ManagerLogout = () => {
-    // const dispatch = useDispatch();
+    const dispatch = useDispatch();
+    const navigate = useNavigate();
 
     useEffect(() => {
-        // dispatch(logout());
-        console.log("Logging out...");
-    }, []);
+        dispatch(logout());
+        navigate('/', { replace: true });
+    }, [dispatch, navigate]);
 
-    return (
-        <div className="p-6">
-            <h1 className="text-2xl font-bold mb-4">Logging Out...</h1>
-            <p>You are being redirected.</p>
-            {/* Needs actual logout logic integration */}
-        </div>
-    );
+    return null;
 };
 
 export default ManagerLogout;

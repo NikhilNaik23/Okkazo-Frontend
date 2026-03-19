@@ -17,9 +17,12 @@ const VendorDetailsModal = ({
     guestCount = 0,
     attendeeCount: attendeeCountProp,
     attendeeLabel: attendeeLabelProp,
+    mode,
 }) => {
-    const [activeTab, setActiveTab] = React.useState('Services');
+    const [activeTab, setActiveTab] = React.useState('Overview');
     const [expandedPackageId, setExpandedPackageId] = React.useState(null);
+
+    const isVenueServiceMode = mode === 'venue-service';
 
     const attendeeCountRaw = Number(attendeeCountProp ?? guestCount ?? 0);
     const attendeeCount = Number.isFinite(attendeeCountRaw) ? attendeeCountRaw : 0;
@@ -46,16 +49,36 @@ const VendorDetailsModal = ({
     const priceMin = (vendor.priceMin || 0) * priceMultiplier;
     const priceMax = (vendor.priceMax || Math.round((vendor.priceMin || 0) * 1.5)) * priceMultiplier;
 
-    const isPerPlate =
+    const isPerPlate = !isVenueServiceMode && (
         String(vendor.category || '').toLowerCase().includes('catering') ||
-        String(vendor.categoryId || '').toLowerCase().includes('catering');
+        String(vendor.categoryId || '').toLowerCase().includes('catering')
+    );
+
+    const tabs = isVenueServiceMode ? ['Overview', 'Reviews'] : ['Overview', 'Services', 'Reviews'];
+
+    const formatDistance = (km) => {
+        const n = Number(km);
+        if (!Number.isFinite(n)) return null;
+        if (n < 1) return `${Math.round(n * 1000)} m`;
+        return `${n.toFixed(1)} km`;
+    };
+
+    const detailRows = isVenueServiceMode
+        ? [
+            { label: 'Package', value: vendor?.name || null },
+            { label: 'Capacity', value: vendor?.capacity ? `${vendor.capacity} guests` : null },
+            { label: 'Price', value: vendor?.unitPrice ? `₹${Number(vendor.unitPrice).toLocaleString()} / Event` : null },
+            { label: 'Distance', value: formatDistance(vendor?.distanceKm) },
+            { label: 'Provider', value: vendor?.vendorBusinessName || null },
+        ].filter((r) => r.value)
+        : [];
 
     return (
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center px-4 sm:px-6"
+            className="fixed inset-0 z-200 flex items-center justify-center px-4 sm:px-6"
         >
             <div className="absolute inset-0 bg-primary/20 backdrop-blur-md" onClick={onClose} />
             <motion.div
@@ -75,7 +98,7 @@ const VendorDetailsModal = ({
                 {/* Left Side - Image & Quick Info */}
                 <div className="w-full md:w-5/12 relative h-[30vh] md:h-auto">
                     <img src={vendor.image} className="absolute inset-0 w-full h-full object-cover" alt={vendor.name} />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-90" />
+                    <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent opacity-90" />
 
                     <div className="absolute inset-0 p-10 flex flex-col justify-end text-white">
                         <div className="flex items-center gap-3 mb-4">
@@ -130,7 +153,7 @@ const VendorDetailsModal = ({
                     {/* Fixed Tabs Header */}
                     <div className="px-10 pt-10 pb-0 shrink-0 bg-white z-20">
                         <div className="flex items-center gap-8 border-b border-gray-100 pb-0 overflow-x-auto">
-                            {['Overview', 'Services', 'Reviews'].map((tab) => (
+                            {tabs.map((tab) => (
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab)}
@@ -141,7 +164,7 @@ const VendorDetailsModal = ({
                                     {activeTab === tab && (
                                         <motion.div
                                             layoutId="activeTab"
-                                            className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary"
+                                            className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
                                         />
                                     )}
                                 </button>
@@ -161,6 +184,24 @@ const VendorDetailsModal = ({
                                     transition={{ duration: 0.2 }}
                                     className="absolute inset-0 overflow-y-auto p-10 space-y-10 scrollbar-thin scrollbar-thumb-gray-200"
                                 >
+                                    {isVenueServiceMode && detailRows.length > 0 && (
+                                        <section>
+                                            <h3 className="text-lg font-bold text-primary mb-5 uppercase tracking-widest text-[11px]">Details</h3>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                {detailRows.map((row) => (
+                                                    <div
+                                                        key={row.label}
+                                                        className="bg-surface rounded-2xl p-5 border border-primary/5"
+                                                    >
+                                                        <span className="text-[9px] font-bold uppercase tracking-widest text-primary/40 block mb-2">
+                                                            {row.label}
+                                                        </span>
+                                                        <span className="text-sm font-bold text-primary">{row.value}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </section>
+                                    )}
                                     <section>
                                         <h3 className="text-2xl font-serif-premium text-primary mb-4">About the Experience</h3>
                                         <p className="text-gray-500 leading-loose text-sm font-light">
@@ -188,7 +229,7 @@ const VendorDetailsModal = ({
                                     </section>
                                 </motion.div>
                             )}
-                            {activeTab === 'Services' && (
+                            {!isVenueServiceMode && activeTab === 'Services' && (
                                 <motion.div
                                     key="Services"
                                     initial={{ opacity: 0, y: 10 }}
@@ -339,6 +380,32 @@ const VendorDetailsModal = ({
                             )}
                         </AnimatePresence>
                     </div>
+
+                    {isVenueServiceMode && (
+                        <div className="shrink-0 px-10 py-8 border-t border-gray-100 bg-white">
+                            <button
+                                onClick={() => {
+                                    const unitPrice = Number(vendor?.unitPrice ?? vendor?.priceMin ?? 0) * priceMultiplier;
+                                    const updatedVendor = {
+                                        ...vendor,
+                                        pricingUnit: 'EVENT',
+                                        unitPrice,
+                                        priceMin: unitPrice,
+                                        priceMax: Math.round(unitPrice * MAX_PRICE_MULTIPLIER),
+                                        maxPriceMultiplier: MAX_PRICE_MULTIPLIER,
+                                    };
+                                    onSelect(updatedVendor);
+                                    onClose();
+                                }}
+                                className={`w-full py-4 rounded-2xl text-xs font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl
+                                ${isSelected
+                                        ? 'bg-secondary text-white shadow-secondary/20'
+                                        : 'bg-primary text-white hover:bg-secondary shadow-primary/20'}`}
+                            >
+                                {isSelected ? 'Selected' : 'Select This Venue'} <BsArrowRight />
+                            </button>
+                        </div>
+                    )}
 
 
                 </div>

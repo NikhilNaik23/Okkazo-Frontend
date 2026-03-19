@@ -155,6 +155,18 @@ const ServiceManagement = () => {
     const renderServiceCard = (item) => {
         const itemId = item?._id || item?.id;
 
+        const getVenueImageUrls = () => {
+            const raw = item?.details?.images;
+            if (!Array.isArray(raw)) return [];
+            return raw
+                .map((img) => {
+                    if (!img) return null;
+                    if (typeof img === 'string') return img;
+                    return img.url || img.fileUrl || null;
+                })
+                .filter(Boolean);
+        };
+
         // Common Menu Component
         const Menu = () => (
             <div className="absolute top-4 right-4 z-10">
@@ -239,74 +251,99 @@ const ServiceManagement = () => {
                 </div>
             );
         } else if (activeCategory === 'venues') {
-            return (
-                <div key={itemId} className="relative bg-white rounded-[2rem] border-2 border-[#e9eff1] overflow-hidden group hover:border-[#d7a444] transition-all duration-300 hover:shadow-xl flex flex-col">
-                    <Menu />
-                    <div className="p-8 flex flex-col h-full bg-white">
-                        {/* Top Section */}
-                        <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
-                            <img
-                                src={item.image || "https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&q=80&w=800"}
-                                alt={item.name}
-                                className="w-24 h-24 rounded-full object-cover shadow-md border-4 border-white"
-                            />
-                            <div className="flex-grow">
-                                <h3 className="text-3xl font-black text-[#0b2d49] mb-3">{item.name}</h3>
-                                <div className="flex flex-wrap items-center gap-6 text-[#708aa0] font-medium text-sm">
-                                    <span className="flex items-center gap-2">
-                                        <span className="w-2.5 h-2.5 rounded-full bg-[#d7a444]"></span>
-                                        ₹{item.price} / day
-                                    </span>
-                                    <span className="flex items-center gap-2">
-                                        <BsGeoAlt size={16} />
-                                        {item?.details?.location || item.location}
-                                    </span>
-                                    <span className="flex items-center gap-2">
-                                        <BsBriefcase size={16} />
-                                        {item?.details?.capacity || item.capacity} Guests
-                                    </span>
-                                </div>
-                            </div>
-                            {/* Edit button moved to menu */}
-                            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto mt-4 md:mt-0 pt-8 md:pt-0">
+            const VenueCard = () => {
+                const fallbackImage = "https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&q=80&w=800";
+                const images = getVenueImageUrls();
+                const profileImage = images[0] || fallbackImage;
 
-                            </div>
-                        </div>
+                const [slideIdx, setSlideIdx] = useState(0);
 
-                        <div className="h-px bg-gray-100 my-8"></div>
+                useEffect(() => {
+                    if (!Array.isArray(images) || images.length <= 1) return;
+                    const id = window.setInterval(() => {
+                        setSlideIdx((prev) => (prev + 1) % images.length);
+                    }, 3000);
+                    return () => window.clearInterval(id);
+                }, [images.length]);
 
-                        {/* Bottom Section */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                            {/* Statistics */}
-                            <div>
-                                <h4 className="text-lg font-black text-[#0b2d49] mb-6">Venue Statistics</h4>
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between p-5 bg-[#f8f9fa] rounded-2xl group-hover:bg-[#f0f4f8] transition-colors">
-                                        <span className="text-[#708aa0] font-bold text-sm">Seating Capacity</span>
-                                        <span className="text-[#0b2d49] font-black">{item?.details?.capacity || item.capacity} Guests</span>
-                                    </div>
-                                    <div className="flex items-center justify-between p-5 bg-[#f8f9fa] rounded-2xl group-hover:bg-[#f0f4f8] transition-colors">
-                                        <span className="text-[#708aa0] font-bold text-sm">Location</span>
-                                        <span className="text-[#0b2d49] font-black">{item?.details?.location || item.location}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between p-5 bg-[#f8f9fa] rounded-2xl group-hover:bg-[#f0f4f8] transition-colors">
-                                        <span className="text-[#708aa0] font-bold text-sm">Daily Rate</span>
-                                        <span className="text-[#0b2d49] font-black">₹{item.price}</span>
+                useEffect(() => {
+                    setSlideIdx(0);
+                }, [itemId]);
+
+                const galleryImage = images[slideIdx] || profileImage;
+
+                return (
+                    <div className="relative bg-white rounded-[2rem] border-2 border-[#e9eff1] overflow-hidden group hover:border-[#d7a444] transition-all duration-300 hover:shadow-xl flex flex-col">
+                        <Menu />
+                        <div className="p-8 flex flex-col h-full bg-white">
+                            {/* Top Section */}
+                            <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
+                                <img
+                                    src={profileImage}
+                                    alt={item.name}
+                                    className="w-24 h-24 rounded-full object-cover shadow-md border-4 border-white"
+                                />
+                                <div className="flex-grow">
+                                    <h3 className="text-3xl font-black text-[#0b2d49] mb-3">{item.name}</h3>
+                                    <div className="flex flex-wrap items-center gap-6 text-[#708aa0] font-medium text-sm">
+                                        <span className="flex items-center gap-2">
+                                            <span className="w-2.5 h-2.5 rounded-full bg-[#d7a444]"></span>
+                                            ₹{item.price} / day
+                                        </span>
+                                        <span className="flex items-center gap-2">
+                                            <BsGeoAlt size={16} />
+                                            {item?.details?.location || item.location}
+                                        </span>
+                                        <span className="flex items-center gap-2">
+                                            <BsBriefcase size={16} />
+                                            {item?.details?.capacity || item.capacity} Guests
+                                        </span>
                                     </div>
                                 </div>
+                                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto mt-4 md:mt-0 pt-8 md:pt-0"></div>
                             </div>
 
-                            {/* Gallery Preview */}
-                            <div>
-                                <h4 className="text-lg font-black text-[#0b2d49] mb-6">Gallery Preview</h4>
-                                <div className="rounded-2xl overflow-hidden h-64 border-4 border-white shadow-sm group-hover:shadow-md transition-all">
-                                    <img src={item.image || "https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&q=80&w=800"} alt="Gallery" className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700" />
+                            <div className="h-px bg-gray-100 my-8"></div>
+
+                            {/* Bottom Section */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                                {/* Statistics */}
+                                <div>
+                                    <h4 className="text-lg font-black text-[#0b2d49] mb-6">Venue Statistics</h4>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between p-5 bg-[#f8f9fa] rounded-2xl group-hover:bg-[#f0f4f8] transition-colors">
+                                            <span className="text-[#708aa0] font-bold text-sm">Seating Capacity</span>
+                                            <span className="text-[#0b2d49] font-black">{item?.details?.capacity || item.capacity} Guests</span>
+                                        </div>
+                                        <div className="flex items-center justify-between p-5 bg-[#f8f9fa] rounded-2xl group-hover:bg-[#f0f4f8] transition-colors">
+                                            <span className="text-[#708aa0] font-bold text-sm">Location</span>
+                                            <span className="text-[#0b2d49] font-black">{item?.details?.location || item.location}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between p-5 bg-[#f8f9fa] rounded-2xl group-hover:bg-[#f0f4f8] transition-colors">
+                                            <span className="text-[#708aa0] font-bold text-sm">Daily Rate</span>
+                                            <span className="text-[#0b2d49] font-black">₹{item.price}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Gallery Preview */}
+                                <div>
+                                    <h4 className="text-lg font-black text-[#0b2d49] mb-6">Gallery Preview</h4>
+                                    <div className="rounded-2xl overflow-hidden h-64 border-4 border-white shadow-sm group-hover:shadow-md transition-all">
+                                        <img
+                                            src={galleryImage}
+                                            alt="Gallery"
+                                            className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            );
+                );
+            };
+
+            return <VenueCard key={itemId} />;
         } else {
             // Generic Card for other services
             return (
