@@ -96,8 +96,6 @@ const ManagerEvents = () => {
         (state) => state.managerEvents
     );
 
-    const MotionDiv = motion.div;
-
     useEffect(() => {
         const POLL_MS = 10_000;
 
