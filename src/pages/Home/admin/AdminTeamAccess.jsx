@@ -9,7 +9,6 @@ import {
   Mail, 
     Lock,
     LockOpen,
-    Filter,
     MessageSquare,
     ChevronDown
 } from "lucide-react";
@@ -140,6 +139,15 @@ const AdminTeamAccess = () => {
                             className="w-64 pl-10 pr-4 py-2 bg-[#f1f5f9] border-none rounded-lg text-sm focus:ring-2 focus:ring-[#0b2d49]/10 focus:outline-none transition-all placeholder:text-[#94a3b8]"
                         />
                     </div>
+
+                    <button
+                        type="button"
+                        onClick={() => navigate("/admin/team-access/add")}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#28a785] text-white rounded-lg text-sm font-bold shadow-sm shadow-[#28a785]/20 hover:brightness-110 active:scale-95 transition-all"
+                    >
+                        <UserPlus size={16} />
+                        Add Manager
+                    </button>
                 </div>
             </div>
 
