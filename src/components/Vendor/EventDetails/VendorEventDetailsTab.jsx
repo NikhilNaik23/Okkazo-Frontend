@@ -9,6 +9,9 @@ const VendorEventDetailsTab = () => {
     const { event, handleAccept, handleReject, services } = useOutletContext();
     const navigate = useNavigate();
 
+    const primaryContactName = String(event?.client?.name || '').trim();
+    const primaryContactInitial = (primaryContactName[0] || 'M').toUpperCase();
+
     return (
         <div className="grid grid-cols-12 gap-8 animate-in slide-in-from-bottom-4 duration-700">
             {/* Full Width Hero: Event Details */}
@@ -124,7 +127,12 @@ const VendorEventDetailsTab = () => {
 
                     <div className="flex items-center gap-5 mb-8">
                         <div className="relative">
-                            <img src={event.client.avatar} alt={event.client.name} className="w-20 h-20 rounded-2xl object-cover border-4 border-white shadow-lg relative z-10" />
+                            <div
+                                className="w-20 h-20 rounded-2xl border-4 border-white shadow-lg relative z-10 bg-gradient-to-br from-[#0b2d49] to-[#12426e] flex items-center justify-center"
+                                aria-label={primaryContactName || 'Primary contact'}
+                            >
+                                <span className="text-3xl font-black text-white">{primaryContactInitial}</span>
+                            </div>
                             <div className="absolute inset-0 bg-[#d7a444] rounded-2xl blur-md opacity-30 transform translate-y-2"></div>
                         </div>
                         <div>
