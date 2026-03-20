@@ -118,7 +118,7 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
     const [activeStep,   setActiveStep]   = useState(null); // 'save'|'order'|'razor'|'verify'
     const [flowError,    setFlowError]    = useState(null);
 
-    const isSuccess = localSuccess || Boolean(formData.isPaid);
+    const isSuccess = localSuccess || Boolean(formData.platformFeePaid) || Boolean(formData.isPaid);
 
     useEffect(() => {
         if (feesStatus === 'idle') {
@@ -231,7 +231,7 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
 
                     // ── Success ───────────────────────────────────────────────
                     const txnId = verifyResult.payload.transactionId;
-                    handleChange('isPaid', true);
+                    handleChange('platformFeePaid', true);
                     handleChange('transactionId', txnId);
 
                     // Clear draft(s) once payment is successful

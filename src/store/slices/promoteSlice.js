@@ -287,6 +287,32 @@ export const updatePromotePlatformFee = createAsyncThunk(
     }
 );
 
+// ─── Promote: fetch a single promote by eventId ────────────────────────────
+
+export const fetchPromoteByEventId = createAsyncThunk(
+    'promote/fetchPromoteByEventId',
+    async (eventId, { dispatch, rejectWithValue }) => {
+        try {
+            if (!eventId) return rejectWithValue('Event ID is required');
+
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(eventId))}`,
+                { method: 'GET' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                return rejectWithValue(data?.message || 'Failed to load promote event');
+            }
+
+            return data?.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Failed to load promote event');
+        }
+    }
+);
+
 // ─── Slice ────────────────────────────────────────────────────────────────────
 
 const promoteSlice = createSlice({
@@ -316,6 +342,11 @@ const promoteSlice = createSlice({
         platformFee: null,
         platformFeeStatus: 'idle',
         platformFeeError: null,
+
+        // Single promote
+        selectedPromote: null,
+        selectedPromoteStatus: 'idle',
+        selectedPromoteError: null,
     },
     reducers: {
         resetPromoteCheckoutState: (state) => {
@@ -417,6 +448,21 @@ const promoteSlice = createSlice({
             .addCase(updatePromotePlatformFee.fulfilled, (state, action) => {
                 state.platformFee = action.payload?.platformFee ?? state.platformFee;
             });
+
+        // Single promote
+        builder
+            .addCase(fetchPromoteByEventId.pending, (state) => {
+                state.selectedPromoteStatus = 'loading';
+                state.selectedPromoteError = null;
+            })
+            .addCase(fetchPromoteByEventId.fulfilled, (state, action) => {
+                state.selectedPromoteStatus = 'succeeded';
+                state.selectedPromote = action.payload || null;
+            })
+            .addCase(fetchPromoteByEventId.rejected, (state, action) => {
+                state.selectedPromoteStatus = 'failed';
+                state.selectedPromoteError = action.payload || action.error.message;
+            });
     },
 });
 
@@ -429,5 +475,8 @@ export const selectMyPromotesStatus = (state) => state.promote.myPromotesStatus;
 export const selectPromotePlatformFee = (state) => state.promote.platformFee;
 export const selectPromotePlatformFeeStatus = (state) => state.promote.platformFeeStatus;
 export const selectPromotePlatformFeeError = (state) => state.promote.platformFeeError;
+export const selectSelectedPromote = (state) => state.promote.selectedPromote;
+export const selectSelectedPromoteStatus = (state) => state.promote.selectedPromoteStatus;
+export const selectSelectedPromoteError = (state) => state.promote.selectedPromoteError;
 
 export default promoteSlice.reducer;

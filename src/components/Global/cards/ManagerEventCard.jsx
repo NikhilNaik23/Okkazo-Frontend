@@ -38,6 +38,8 @@ const ManagerEventCard = ({
             case 'Paid': return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
             case 'Unpaid': return 'bg-red-50 text-red-700 border border-red-200';
             case 'Deposit Paid': return 'bg-orange-50 text-orange-700 border border-orange-200';
+            case 'Platform Fee Paid': return 'bg-teal-50 text-teal-700 border border-teal-200';
+            case 'Full Payment Paid': return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
             default: return 'bg-gray-50 text-gray-700 border border-gray-200';
         }
     };

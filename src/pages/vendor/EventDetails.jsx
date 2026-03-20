@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useParams, useNavigate, Outlet, useLocation, NavLink } from "react-router-dom";
+import { useDispatch, useSelector } from 'react-redux';
 import {
     BsArrowLeft,
     BsWallet2,
@@ -13,11 +14,28 @@ import {
     Volume2, Users, Briefcase
 } from 'lucide-react';
 import { toast } from "react-hot-toast";
+import {
+    acceptVendorEventRequest,
+    fetchVendorEventRequestDetails,
+    fetchVendorEventRequests,
+    rejectVendorEventRequest,
+    selectSelectedVendorEventRequest,
+    selectSelectedVendorEventRequestError,
+    selectSelectedVendorEventRequestStatus,
+} from '../../store/slices/vendorEventsSlice';
+
+const formatEventDateLabel = (value) => {
+    if (!value) return 'TBD';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return 'TBD';
+    return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+};
 
 const EventDetails = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
+    const dispatch = useDispatch();
 
     // Determine active tab based on current path
     // path format: /vendor/event/:id/:tab
@@ -27,6 +45,22 @@ const EventDetails = () => {
     const [activeChannel, setActiveChannel] = useState("vendors"); // Default to vendors to show broadcast
     const [chatInput, setChatInput] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
+
+    const selected = useSelector(selectSelectedVendorEventRequest);
+    const selectedStatus = useSelector(selectSelectedVendorEventRequestStatus);
+    const selectedError = useSelector(selectSelectedVendorEventRequestError);
+
+    React.useEffect(() => {
+        if (id) {
+            dispatch(fetchVendorEventRequestDetails({ eventId: id }));
+        }
+    }, [dispatch, id]);
+
+    React.useEffect(() => {
+        if (selectedStatus === 'failed' && selectedError) {
+            toast.error(String(selectedError));
+        }
+    }, [selectedStatus, selectedError]);
 
     const handleShareInvoice = () => {
         setActiveChannel("internal");
@@ -38,14 +72,30 @@ const EventDetails = () => {
         window.print();
     };
 
-    const handleAccept = () => {
-        setEvent(prev => ({ ...prev, status: "CONFIRMED" }));
-        toast.success("Event request accepted!");
-        navigate("details");
+    const handleAccept = async () => {
+        try {
+            await dispatch(acceptVendorEventRequest({ eventId: id })).unwrap();
+            toast.success("Event request accepted!");
+            dispatch(fetchVendorEventRequests());
+            dispatch(fetchVendorEventRequestDetails({ eventId: id }));
+            navigate("details");
+        } catch (e) {
+            toast.error(String(e || 'Failed to accept request'));
+        }
     };
 
-    const handleReject = () => {
-        toast.error("Event request rejected.");
+    const handleReject = async () => {
+        try {
+            const reason = window.prompt('Please mention the reason for rejection:');
+            if (!reason || !String(reason).trim()) return;
+            await dispatch(rejectVendorEventRequest({ eventId: id, reason: String(reason).trim() })).unwrap();
+            toast.error("Event request rejected.");
+            dispatch(fetchVendorEventRequests());
+            dispatch(fetchVendorEventRequestDetails({ eventId: id }));
+            navigate("details");
+        } catch (e) {
+            toast.error(String(e || 'Failed to reject request'));
+        }
     };
 
     // Mock data for a specific event
@@ -131,6 +181,63 @@ const EventDetails = () => {
     const [services, setServices] = useState(event.requestedServices);
     const [tempServices, setTempServices] = useState(event.requestedServices);
 
+    React.useEffect(() => {
+        if (!selected || String(selected.eventId || '') !== String(id || '')) return;
+
+        const planning = selected.planning || {};
+        const vendorItems = Array.isArray(selected.vendorItems) ? selected.vendorItems : [];
+        const summaryStatus = selected.summary?.summaryStatus;
+
+        const nextStatus = summaryStatus === 'ACCEPTED'
+            ? 'CONFIRMED'
+            : summaryStatus === 'REJECTED'
+                ? 'REJECTED'
+                : 'PENDING';
+
+        const manager = selected.managerProfile || null;
+
+        const nextRequestedServices = vendorItems.map((v, idx) => ({
+            id: idx + 1,
+            name: v?.service || 'Service',
+            details: v?.status === 'REJECTED'
+                ? `Rejected: ${v?.rejectionReason || 'No reason provided'}`
+                : 'Service request for this event.',
+            price: Number(v?.servicePrice?.max || 0),
+            qty: 1,
+        }));
+
+        setEvent((prev) => {
+            const nextEvent = {
+                ...prev,
+                id: selected.eventId || prev.id,
+                title: planning.eventTitle || prev.title,
+                status: nextStatus,
+                date: formatEventDateLabel(planning.eventDate || planning.schedule?.startAt) || prev.date,
+                time: planning.eventTime ? `${planning.eventTime} - TBD` : prev.time,
+                pax: planning.guestCount ?? prev.pax,
+                category: planning.eventType || planning.category || prev.category,
+                location: planning.location?.name || prev.location,
+                description: planning.eventDescription || prev.description,
+                requestedServices: nextRequestedServices.length > 0 ? nextRequestedServices : prev.requestedServices,
+                client: manager
+                    ? {
+                        name: manager?.name || manager?.username || 'Assigned Manager',
+                        org: 'Assigned Manager',
+                        email: manager?.email || '—',
+                        phone: manager?.phone || '—',
+                        avatar: manager?.avatar || 'https://i.pravatar.cc/150?u=manager'
+                    }
+                    : prev.client,
+            };
+
+            const nextServices = nextRequestedServices.length > 0 ? nextRequestedServices : nextEvent.requestedServices;
+            setServices(nextServices);
+            setTempServices(nextServices);
+
+            return nextEvent;
+        });
+    }, [selected, id]);
+
     const handleUpdateQuotes = () => {
         setServices([...tempServices]);
         toast.success("Quotes updated and applied to invoice!");
@@ -185,7 +292,7 @@ const EventDetails = () => {
             isBroadcast: false,
             badge: 'bg-teal-100 text-teal-700',
             status: 'read',
-            timestamp: Date.now() - 3600000
+            timestamp: 0
         },
         {
             id: 2,
@@ -197,7 +304,7 @@ const EventDetails = () => {
             isBroadcast: true,
             badge: 'bg-teal-100 text-teal-700',
             status: 'read',
-            timestamp: Date.now() - 3600000
+            timestamp: 0
         },
         {
             id: 3,
@@ -209,7 +316,7 @@ const EventDetails = () => {
             isBroadcast: false,
             badge: '',
             status: 'read',
-            timestamp: Date.now() - 3600000
+            timestamp: 0
         },
         {
             id: 4,
@@ -221,7 +328,7 @@ const EventDetails = () => {
             isBroadcast: false,
             badge: 'bg-teal-100 text-teal-700',
             status: 'read',
-            timestamp: Date.now() - 3600000
+            timestamp: 0
         }
     ]);
 
@@ -363,7 +470,12 @@ const EventDetails = () => {
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
-                    <span className={`px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase ${event.status === 'PENDING' ? 'bg-[#f3ddb1] text-[#d7a444]' : 'bg-green-50 text-green-600'}`}>
+                    <span className={`px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase ${event.status === 'PENDING'
+                        ? 'bg-[#f3ddb1] text-[#d7a444]'
+                        : event.status === 'REJECTED'
+                            ? 'bg-red-50 text-red-600'
+                            : 'bg-green-50 text-green-600'
+                        }`}>
                         {event.status}
                     </span>
                     <div className="p-2 bg-white rounded-xl shadow-sm text-[#708aa0]">

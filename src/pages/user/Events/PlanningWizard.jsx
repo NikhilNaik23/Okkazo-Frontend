@@ -51,7 +51,7 @@ const PlanningWizard = () => {
         guests: "",
         services: [], // Start with empty selection
         vendors: {}, // { 'Venue': vendorObj, 'Catering': vendorObj }
-        isPaid: false, // Payment status
+        platformFeePaid: false,
         tickets: [{ id: DEFAULT_TICKET_TIER_ID, name: "General Admission", price: null, quantity: "" }], // Prepopulate defaut tier
         totalCapacity: "",
         ticketType: "paid",
@@ -141,7 +141,7 @@ const PlanningWizard = () => {
                         guests: "",
                         services: [],
                         vendors: {},
-                        isPaid: false,
+                        platformFeePaid: false,
                         tickets: [{ id: DEFAULT_TICKET_TIER_ID, name: "General Admission", price: null, quantity: "" }],
                         totalCapacity: "",
                         ticketType: "paid",
@@ -166,7 +166,7 @@ const PlanningWizard = () => {
                     // If it is paid/Immediate Action, go to Vendor Selection
                     let targetStep = 1;
 
-                    if (mergedData.isPaid) {
+                    if (mergedData.platformFeePaid || mergedData.isPaid) {
                         targetStep = getStepIndex('vendor'); // Vendor Selection
                     } else if (mergedData.services && mergedData.services.length > 0) {
                         targetStep = getStepIndex('payment'); // Payment
@@ -230,7 +230,7 @@ const PlanningWizard = () => {
                     const foundDummy = myOrganizedEvents.find(e => e.id === Number(eventId) || e.id === eventId);
                     if (foundDummy && foundDummy.formData) {
                         const dummyData = { ...foundDummy.formData, id: foundDummy.id };
-                        if (foundDummy.status === 'Immediate Action') dummyData.isPaid = true;
+                        if (foundDummy.status === 'Immediate Action') dummyData.platformFeePaid = true;
                         handleStepLogic(dummyData);
                         return;
                     }
@@ -280,7 +280,7 @@ const PlanningWizard = () => {
                             salesEndTime: isPublic ? (p?.ticketAvailability?.endAt || '') : '',
 
                             services: Array.isArray(p?.selectedServices) ? p.selectedServices : [],
-                            isPaid: Boolean(p?.isPaid),
+                            platformFeePaid: Boolean(p?.platformFeePaid) || Boolean(p?.isPaid),
                             eventDescription: p?.eventDescription || '',
                             promotions: toPromotionFlags(p?.promotionType),
                         };

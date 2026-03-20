@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, MapPin, Edit, FileText, Users, Briefcase, MessageSquare,
@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-hot-toast';
+import { useDispatch } from 'react-redux';
 
 // UI Components
 import { Badge } from '../../../components/Manager/EventDetails/ui';
@@ -27,18 +28,56 @@ import {
 // import NewChatTab from '../../../components/Manager/EventDetails/tabs/NewChatTab';
 
 // Data
-import { mockEvent, tabs as tabsData } from '../../../data/managerEventDetailsData';
+import { tabs as tabsData } from '../../../data/managerEventDetailsData';
+import { fetchWithAuth } from '../../../utils/apiHandler';
+import { refreshAccessToken } from '../../../store/slices/authSlice';
+
+const API_BASE_URL = 'http://localhost:8080';
+
+const safeJson = async (response) => {
+    try {
+        return await response.json();
+    } catch {
+        return null;
+    }
+};
+
+const formatEventDate = (value) => {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
+};
+
+const getInitials = (name) => {
+    const n = String(name || '').trim();
+    if (!n) return 'NA';
+    const parts = n.split(/\s+/).filter(Boolean);
+    const first = parts[0]?.[0] || 'N';
+    const last = (parts.length > 1 ? parts[parts.length - 1]?.[0] : '') || '';
+    return `${first}${last}`.toUpperCase();
+};
 
 const ManagerEventDetails = () => {
     // Force HMR Update
     const { id } = useParams();
     const navigate = useNavigate();
+    const dispatch = useDispatch();
     const [activeTab, setActiveTab] = useState('overview');
     const [scrolled, setScrolled] = useState(false);
 
     // Modal States
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
+
+    const [eventType, setEventType] = useState(null); // 'planning' | 'promote'
+    const [rawEvent, setRawEvent] = useState(null);
+    const [client, setClient] = useState(null);
+    const [availableCoreStaff, setAvailableCoreStaff] = useState([]);
+    const [selectedTeamMembers, setSelectedTeamMembers] = useState([]);
+    const [staffRefreshKey, setStaffRefreshKey] = useState(0);
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
 
     // Scroll listener for sticky header
     useEffect(() => {
@@ -47,8 +86,291 @@ const ManagerEventDetails = () => {
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    // Event data
-    const event = { ...mockEvent, id: id || mockEvent.id };
+    useEffect(() => {
+        if (!id) return;
+        let cancelled = false;
+
+        const loadEvent = async () => {
+            setLoading(true);
+            setLoadError('');
+            try {
+                const planningRes = await fetchWithAuth(
+                    `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(id))}`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+                const planningJson = await safeJson(planningRes);
+
+                if (!cancelled && planningRes.ok && planningJson?.success) {
+                    setEventType('planning');
+                    setRawEvent(planningJson.data);
+                    return;
+                }
+
+                const promoteRes = await fetchWithAuth(
+                    `${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+                const promoteJson = await safeJson(promoteRes);
+
+                if (!cancelled && promoteRes.ok && promoteJson?.success) {
+                    setEventType('promote');
+                    setRawEvent(promoteJson.data);
+                    return;
+                }
+
+                throw new Error(promoteJson?.message || planningJson?.message || 'Event not found');
+            } catch (err) {
+                if (cancelled) return;
+                setEventType(null);
+                setRawEvent(null);
+                setClient(null);
+                setAvailableCoreStaff([]);
+                setLoadError(err?.message || 'Failed to load event details');
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+
+        loadEvent();
+        return () => {
+            cancelled = true;
+        };
+    }, [id, dispatch]);
+
+    useEffect(() => {
+        if (!rawEvent?.authId) {
+            setClient(null);
+            return;
+        }
+
+        let cancelled = false;
+        const loadClient = async () => {
+            try {
+                const res = await fetchWithAuth(
+                    `${API_BASE_URL}/api/users/auth/${encodeURIComponent(String(rawEvent.authId))}`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+                const json = await safeJson(res);
+                if (!cancelled && res.ok && json?.success) {
+                    setClient(json.data);
+                } else if (!cancelled) {
+                    setClient(null);
+                }
+            } catch {
+                if (!cancelled) setClient(null);
+            }
+        };
+
+        loadClient();
+        return () => {
+            cancelled = true;
+        };
+    }, [rawEvent?.authId, dispatch]);
+
+    useEffect(() => {
+        if (!id) return;
+        let cancelled = false;
+
+        const loadStaff = async () => {
+            try {
+                const res = await fetchWithAuth(
+                    `${API_BASE_URL}/api/events/staff/core/available?excludeEventId=${encodeURIComponent(String(id))}`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+                const json = await safeJson(res);
+                if (!cancelled && res.ok) {
+                    const staff = Array.isArray(json?.staff)
+                        ? json.staff
+                        : (Array.isArray(json?.data?.staff) ? json.data.staff : []);
+                    setAvailableCoreStaff(staff);
+                } else if (!cancelled) {
+                    setAvailableCoreStaff([]);
+                }
+            } catch {
+                if (!cancelled) setAvailableCoreStaff([]);
+            }
+        };
+
+        loadStaff();
+        return () => {
+            cancelled = true;
+        };
+    }, [id, dispatch, staffRefreshKey]);
+
+    useEffect(() => {
+        const coreStaffIds = Array.isArray(rawEvent?.coreStaffIds)
+            ? rawEvent.coreStaffIds.map((v) => String(v || '').trim()).filter(Boolean)
+            : [];
+
+        if (!coreStaffIds.length) {
+            setSelectedTeamMembers([]);
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadAssignedTeam = async () => {
+            try {
+                const results = await Promise.all(
+                    coreStaffIds.map(async (staffId) => {
+                        try {
+                            const res = await fetchWithAuth(
+                                `${API_BASE_URL}/api/users/${encodeURIComponent(String(staffId))}`,
+                                { method: 'GET' },
+                                { dispatch, refreshAction: refreshAccessToken }
+                            );
+                            const json = await safeJson(res);
+                            if (!res.ok || !json?.success) return null;
+                            return json.data;
+                        } catch {
+                            return null;
+                        }
+                    })
+                );
+
+                const team = results.filter(Boolean);
+                if (!cancelled) setSelectedTeamMembers(team);
+            } catch {
+                if (!cancelled) setSelectedTeamMembers([]);
+            }
+        };
+
+        loadAssignedTeam();
+        return () => {
+            cancelled = true;
+        };
+    }, [rawEvent?.coreStaffIds, dispatch]);
+
+    const event = useMemo(() => {
+        if (!rawEvent) return null;
+
+        if (eventType === 'planning') {
+            const startAt = rawEvent?.schedule?.startAt || rawEvent?.eventDate || null;
+            const endAt = rawEvent?.schedule?.endAt || rawEvent?.eventDate || null;
+            const expectedGuests = rawEvent?.guestCount ?? rawEvent?.noOfGuest ?? rawEvent?.noOfGuests ?? null;
+            return {
+                id: rawEvent.eventId || id,
+                type: 'planning',
+                status: rawEvent.status || '—',
+                title: rawEvent.eventTitle || 'Event',
+                description: rawEvent.eventDescription || '',
+                location: rawEvent?.location?.name || '—',
+                date: formatEventDate(startAt),
+                endDate: formatEventDate(endAt),
+                organizer: client?.name || client?.fullName || '—',
+                servicesOpted: Array.isArray(rawEvent?.selectedServices) ? rawEvent.selectedServices : [],
+                preferredLocation: rawEvent?.location?.name || '—',
+                expectedGuests,
+                client,
+                availableCoreStaff,
+                selectedTeamMembers,
+            };
+        }
+
+        if (eventType === 'promote') {
+            return {
+                id: rawEvent.eventId || id,
+                type: 'promote',
+                status: rawEvent.eventStatus || rawEvent.status || '—',
+                title: rawEvent.eventTitle || 'Event',
+                description: rawEvent.eventDescription || '',
+                location: rawEvent?.venue?.locationName || '—',
+                date: formatEventDate(rawEvent?.schedule?.startAt),
+                endDate: formatEventDate(rawEvent?.schedule?.endAt),
+                organizer: client?.name || client?.fullName || '—',
+                servicesOpted: Array.isArray(rawEvent?.promotion) ? rawEvent.promotion : [],
+                preferredLocation: rawEvent?.venue?.locationName || '—',
+                client,
+                availableCoreStaff,
+                selectedTeamMembers,
+            };
+        }
+
+        return null;
+    }, [rawEvent, eventType, id, client, availableCoreStaff, selectedTeamMembers]);
+
+    const handleSaveEdits = async ({ eventTitle, locationName, eventDescription }) => {
+        if (!eventType) throw new Error('Unknown event type');
+
+        const endpoint = eventType === 'planning'
+            ? `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(id))}`
+            : `${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}`;
+
+        const res = await fetchWithAuth(
+            endpoint,
+            {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    eventTitle,
+                    eventDescription,
+                    locationName,
+                }),
+            },
+            { dispatch, refreshAction: refreshAccessToken }
+        );
+
+        const json = await safeJson(res);
+        if (!res.ok || !json?.success) {
+            throw new Error(json?.message || 'Failed to update event');
+        }
+
+        setRawEvent(json.data);
+    };
+
+    const handleAddTeamMember = async (staffMember) => {
+        if (!eventType) throw new Error('Unknown event type');
+        const staffId = staffMember?.id || staffMember?._id;
+        if (!staffId) throw new Error('Invalid staff id');
+
+        const endpoint = eventType === 'planning'
+            ? `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(id))}/core-staff`
+            : `${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}/core-staff`;
+
+        const res = await fetchWithAuth(
+            endpoint,
+            {
+                method: 'POST',
+                body: JSON.stringify({ staffId: String(staffId) }),
+            },
+            { dispatch, refreshAction: refreshAccessToken }
+        );
+
+        const json = await safeJson(res);
+        if (!res.ok || !json?.success) {
+            throw new Error(json?.message || 'Failed to assign staff');
+        }
+
+        setRawEvent(json.data);
+        setStaffRefreshKey((v) => v + 1);
+    };
+
+    const handleRemoveTeamMember = async (staffMember) => {
+        if (!eventType) throw new Error('Unknown event type');
+        const staffId = staffMember?.id || staffMember?._id;
+        if (!staffId) throw new Error('Invalid staff id');
+
+        const endpoint = eventType === 'planning'
+            ? `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(id))}/core-staff/${encodeURIComponent(String(staffId))}`
+            : `${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}/core-staff/${encodeURIComponent(String(staffId))}`;
+
+        const res = await fetchWithAuth(
+            endpoint,
+            { method: 'DELETE' },
+            { dispatch, refreshAction: refreshAccessToken }
+        );
+
+        const json = await safeJson(res);
+        if (!res.ok || !json?.success) {
+            throw new Error(json?.message || 'Failed to remove staff');
+        }
+
+        setRawEvent(json.data);
+        setStaffRefreshKey((v) => v + 1);
+    };
 
     // Icon mapping for tabs
     const iconMap = {
@@ -80,7 +402,14 @@ const ManagerEventDetails = () => {
     return (
         <div className="min-h-screen bg-gray-50/50 pb-20">
             {/* Modals */}
-            <EditEventModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} event={event} />
+            {event ? (
+                <EditEventModal
+                    isOpen={isEditModalOpen}
+                    onClose={() => setIsEditModalOpen(false)}
+                    event={event}
+                    onSave={handleSaveEdits}
+                />
+            ) : null}
             <AddGuestModal isOpen={isGuestModalOpen} onClose={() => setIsGuestModalOpen(false)} />
 
             {/* 1. Immersive Hero Section */}
@@ -109,13 +438,19 @@ const ManagerEventDetails = () => {
                     <div className="max-w-[1920px] mx-auto flex flex-col lg:flex-row lg:items-end justify-between gap-6">
                         <div>
                             <div className="flex items-center gap-3 mb-3">
-                                <Badge color="teal" icon={CheckCircle}>{event.status}</Badge>
+                                <Badge color="teal" icon={CheckCircle}>{event?.status || (loading ? 'LOADING' : '—')}</Badge>
                                 <span className="text-gray-400 font-medium text-sm flex items-center gap-1">
-                                    <MapPin className="w-3.5 h-3.5" /> {event.location}
+                                    <MapPin className="w-3.5 h-3.5" /> {event?.location || '—'}
                                 </span>
                             </div>
-                            <h1 className="text-4xl lg:text-5xl font-extrabold text-white tracking-tight mb-2 shadow-sm">{event.title}</h1>
-                            <p className="text-gray-300 font-medium max-w-2xl text-lg opacity-90">{event.description.substring(0, 100)}...</p>
+                            <h1 className="text-4xl lg:text-5xl font-extrabold text-white tracking-tight mb-2 shadow-sm">
+                                {loading ? 'Loading...' : (event?.title || (loadError ? 'Event not found' : '—'))}
+                            </h1>
+                            <p className="text-gray-300 font-medium max-w-2xl text-lg opacity-90">
+                                {event?.description
+                                    ? `${String(event.description).substring(0, 100)}...`
+                                    : (loadError ? String(loadError) : '—')}
+                            </p>
                         </div>
 
                         {/* Hero Actions */}
@@ -126,7 +461,11 @@ const ManagerEventDetails = () => {
                             <button onClick={handlePrint} className="h-10 w-10 flex items-center justify-center bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl text-white border border-white/10 transition-colors" title="Print Event Summary">
                                 <Printer className="w-5 h-5" />
                             </button>
-                            <button onClick={() => setIsEditModalOpen(true)} className="px-6 py-2.5 bg-white text-gray-900 hover:bg-gray-100 rounded-xl font-bold transition-colors shadow-lg shadow-black/10 flex items-center gap-2">
+                            <button
+                                onClick={() => setIsEditModalOpen(true)}
+                                disabled={!event}
+                                className="px-6 py-2.5 bg-white text-gray-900 hover:bg-gray-100 rounded-xl font-bold transition-colors shadow-lg shadow-black/10 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                            >
                                 <Edit className="w-4 h-4" /> Edit Event
                             </button>
                         </div>
@@ -174,13 +513,28 @@ const ManagerEventDetails = () => {
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.2 }}
                     >
-                        {activeTab === 'overview' && <OverviewTab event={event} />}
+                        {activeTab === 'overview' && (
+                            event ? (
+                                <OverviewTab
+                                    event={event}
+                                    onAddTeamMember={handleAddTeamMember}
+                                    onRemoveTeamMember={handleRemoveTeamMember}
+                                    getInitials={getInitials}
+                                />
+                            ) : (
+                                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                                    <div className="text-sm font-bold text-gray-600">
+                                        {loading ? 'Loading event details...' : (loadError || 'Event not found')}
+                                    </div>
+                                </div>
+                            )
+                        )}
                         {activeTab === 'guests' && <GuestsTab onAddClick={() => setIsGuestModalOpen(true)} />}
                         {activeTab === 'vendors' && <VendorsTab />}
                         {activeTab === 'chat' && <ChatTab />}
                         {activeTab === 'todo' && <ToDoTab />}
                         {activeTab === 'schedule' && <ScheduleTab />}
-                        {activeTab === 'financials' && <FinancialsTab event={event} />}
+                        {activeTab === 'financials' && event && <FinancialsTab event={event} />}
                         {activeTab === 'documents' && <DocumentsTab />}
                     </motion.div>
                 </AnimatePresence>
