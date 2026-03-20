@@ -1,142 +1,71 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Search, ChevronDown, Filter, Calendar as CalendarIcon, LayoutGrid, List, Kanban as KanbanIcon, MoreHorizontal, X, Plus, Users, DollarSign, Calendar, Archive, Download, CheckSquare, BarChart3, Bell } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ManagerEventCard from '../../../components/Global/cards/ManagerEventCard';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+    fetchManagerPlanningApplications,
+    fetchManagerPlanningEvents,
+    fetchManagerPromoteEvents,
+} from '../../../store/slices/managerEventsSlice';
 
-// Enriched Mock Data with new fields
-const EVENTS_DATA = [
-    {
-        id: 1,
-        image: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?q=80&w=1000&auto=format&fit=crop',
-        status: 'Planning',
-        category: 'CONFERENCE',
-        payStatus: 'Paid',
-        title: 'Alpha Tech Conf',
-        date: 'Oct 24, 2023',
-        time: '09:00 AM',
-        location: 'San Francisco, CA',
-        metricLabel: "Ticket Sales",
-        metricValue: 850,
-        metricTotal: 1200,
-        revenueData: [{ value: 400 }, { value: 300 }, { value: 500 }, { value: 700 }, { value: 600 }],
-        team: ['https://i.pravatar.cc/150?u=1', 'https://i.pravatar.cc/150?u=2']
-    },
-    {
-        id: 2,
-        image: 'https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=1000&auto=format&fit=crop',
-        status: 'Finalizing',
-        category: 'WEDDING',
-        payStatus: 'Deposit Paid',
-        title: 'Johnson Wedding',
-        date: 'Nov 12, 2023',
-        time: '02:00 PM',
-        location: 'Austin, TX',
-        metricLabel: "Guest List",
-        metricValue: 120,
-        metricTotal: 150,
-        revenueData: null,
-        team: ['https://i.pravatar.cc/150?u=3']
-    },
-    {
-        id: 3,
-        image: 'https://images.unsplash.com/photo-1459749411177-287ce371c015?q=80&w=1000&auto=format&fit=crop',
-        status: 'Live Now',
-        category: 'FESTIVAL',
-        payStatus: 'Paid',
-        title: 'Neon Music Fest',
-        date: 'Oct 24-26',
-        time: 'All Day',
-        location: 'Miami, FL',
-        metricLabel: "Tickets Sold",
-        metricValue: 4500,
-        metricTotal: 5000,
-        revenueData: [{ value: 2000 }, { value: 3500 }, { value: 4500 }, { value: 4800 }, { value: 5000 }],
-        team: ['https://i.pravatar.cc/150?u=4', 'https://i.pravatar.cc/150?u=5', 'https://i.pravatar.cc/150?u=6']
-    },
-    {
-        id: 4,
-        image: 'https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1000&auto=format&fit=crop',
-        status: 'Review',
-        category: 'CORPORATE',
-        payStatus: 'Unpaid',
-        title: 'Global Summit',
-        date: 'Dec 05, 2023',
-        time: '10:00 AM',
-        location: 'London, UK',
-        metricLabel: "Attending",
-        metricValue: 280,
-        metricTotal: 300,
-        revenueData: null,
-        team: ['https://i.pravatar.cc/150?u=1']
-    },
-    {
-        id: 5,
-        image: 'https://images.unsplash.com/photo-1505373877841-8d43f703fb8f?q=80&w=1000&auto=format&fit=crop',
-        status: 'Planning',
-        category: 'WORKSHOP',
-        payStatus: 'Paid',
-        title: 'DevOps Connect',
-        date: 'Dec 10, 2023',
-        time: '11:00 AM',
-        location: 'Seattle, WA',
-        metricLabel: "Seats",
-        metricValue: 45,
-        metricTotal: 100,
-        revenueData: [{ value: 20 }, { value: 30 }, { value: 25 }, { value: 40 }, { value: 45 }],
-        team: ['https://i.pravatar.cc/150?u=7']
-    },
-    {
-        id: 6,
-        image: 'https://images.unsplash.com/photo-1519225421980-715cb0202128?q=80&w=1000&auto=format&fit=crop',
-        status: 'Finalizing',
-        category: 'GALA',
-        payStatus: 'Deposit Paid',
-        title: 'Winter Gala',
-        date: 'Dec 15, 2023',
-        time: '07:00 PM',
-        location: 'New York, NY',
-        metricLabel: "Donations (₹)",
-        metricValue: 15400,
-        metricTotal: 20000,
-        revenueData: [{ value: 200 }, { value: 250 }, { value: 280 }, { value: 290 }, { value: 300 }],
-        team: ['https://i.pravatar.cc/150?u=8', 'https://i.pravatar.cc/150?u=9']
-    },
-    {
-        id: 7,
-        image: 'https://images.unsplash.com/photo-1470229722913-7ea0510d9238?q=80&w=1000&auto=format&fit=crop',
-        status: 'Live Now',
-        category: 'CONCERT',
-        payStatus: 'Paid',
-        title: 'Indie Rock Expo',
-        date: 'Oct 25, 2023',
-        time: '06:00 PM',
-        location: 'Austin, TX',
-        metricLabel: "Sold",
-        metricValue: 1800,
-        metricTotal: 2000,
-        revenueData: [{ value: 1000 }, { value: 1200 }, { value: 1500 }, { value: 1700 }, { value: 1800 }],
-        team: ['https://i.pravatar.cc/150?u=10']
-    },
-    {
-        id: 8,
-        image: 'https://images.unsplash.com/photo-1523580494863-6f3031224c94?q=80&w=1000&auto=format&fit=crop',
-        status: 'Review',
-        category: 'RETREAT',
-        payStatus: 'Unpaid',
-        title: 'Tech Leaders Retreat',
-        date: 'Jan 10, 2024',
-        time: 'All Day',
-        location: 'Denver, CO',
-        metricLabel: "Capacity",
-        metricValue: 15,
-        metricTotal: 50,
-        revenueData: null,
-        team: ['https://i.pravatar.cc/150?u=2', 'https://i.pravatar.cc/150?u=3']
+const DEFAULT_EVENT_IMAGE = 'https://images.unsplash.com/photo-1505373877841-8d43f703fb8f?q=80&w=1000&auto=format&fit=crop';
+
+const formatShortDate = (value) => {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
+};
+
+const normalizeUpper = (value) => String(value || '').toUpperCase().replace(/_/g, ' ').trim();
+
+const mapPlanningStatusToCardStatus = (status) => {
+    const s = normalizeUpper(status);
+    if (s === 'PAYMENT PENDING') return 'Payment';
+    if (s === 'PENDING APPROVAL') return 'Review';
+    if (s === 'APPROVED') return 'Finalizing';
+    if (s === 'CONFIRMED') return 'Confirmed';
+    if (s === 'IMMEDIATE ACTION') return 'Planning';
+    if (s === 'COMPLETED') return 'Completed';
+    if (s === 'REJECTED') return 'Rejected';
+    return s ? s[0] + s.slice(1).toLowerCase() : 'Planning';
+};
+
+const mapPromoteStatusToCardStatus = (eventStatus) => {
+    const s = normalizeUpper(eventStatus);
+    if (s === 'LIVE') return 'Live Now';
+    if (s === 'IN REVIEW') return 'Review';
+    if (s === 'PAYMENT REQUIRED') return 'Planning';
+    if (s === 'MANAGER UNASSIGNED') return 'Planning';
+    if (s === 'COMPLETE') return 'Completed';
+    return s ? s[0] + s.slice(1).toLowerCase() : 'Planning';
+};
+
+const getPlanningPayStatusLabel = (planning) => {
+    if (!planning) return 'Unpaid';
+
+    if (planning?.fullPaymentPaid) return 'Full Payment Paid';
+    if (planning?.depositPaid && !planning?.fullPaymentPaid) return 'Deposit Paid';
+    if (planning?.platformFeePaid || planning?.isPaid) return 'Platform Fee Paid';
+    return 'Unpaid';
+};
+
+const isActiveEvent = (item) => {
+    if (!item) return false;
+    if (item.type === 'planning') {
+        const s = normalizeUpper(item.status);
+        return s !== 'COMPLETED' && s !== 'REJECTED';
     }
-];
+    if (item.type === 'promote') {
+        const s = normalizeUpper(item.eventStatus);
+        return s !== 'COMPLETE';
+    }
+    return false;
+};
 
 const Tabs = ({ activeTab, onTabChange }) => {
-    const tabs = ['All Events', 'Active', 'Drafts', 'Archived'];
+    const tabs = ['All Events', 'Active', 'Planning', 'Promote'];
     return (
         <div className="flex bg-white/50 backdrop-blur-sm p-1 rounded-xl border border-gray-100 w-fit">
             {tabs.map(tab => (
@@ -157,32 +86,119 @@ const Tabs = ({ activeTab, onTabChange }) => {
 
 const ManagerEvents = () => {
     const navigate = useNavigate();
+    const dispatch = useDispatch();
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState('grid');
-    const [statusFilter, setStatusFilter] = useState('All');
     const [activeTab, setActiveTab] = useState('All Events');
     const [selectedEvents, setSelectedEvents] = useState([]);
 
+    const { planningEvents, promoteEvents, planningApplications, error } = useSelector(
+        (state) => state.managerEvents
+    );
+
+    useEffect(() => {
+        const POLL_MS = 10_000;
+
+        const poll = () => {
+            dispatch(fetchManagerPlanningEvents({ limit: 200 }));
+            dispatch(fetchManagerPromoteEvents({ limit: 200 }));
+            dispatch(fetchManagerPlanningApplications({ limit: 200 }));
+        };
+
+        poll();
+        const intervalId = setInterval(poll, POLL_MS);
+
+        return () => clearInterval(intervalId);
+    }, [dispatch]);
+
+    const mixedEvents = useMemo(() => {
+        const plannings = (planningEvents || []).map((p) => ({ ...p, type: 'planning' }));
+        const promotes = (promoteEvents || []).map((p) => ({ ...p, type: 'promote' }));
+        return [...plannings, ...promotes].sort((a, b) => {
+            const ta = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const tb = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return tb - ta;
+        });
+    }, [planningEvents, promoteEvents]);
+
+    const cards = useMemo(() => {
+        return mixedEvents.map((e) => {
+            if (e.type === 'planning') {
+                const scheduleDate = e?.schedule?.startAt || e?.eventDate || null;
+                const selectedServicesCount = Array.isArray(e?.selectedServices) ? e.selectedServices.length : 0;
+                const selectedVendorsCount = Array.isArray(e?.selectedVendors) ? e.selectedVendors.length : 0;
+                return {
+                    id: e.eventId,
+                    type: 'planning',
+                    image: e?.eventBanner?.url || DEFAULT_EVENT_IMAGE,
+                    status: mapPlanningStatusToCardStatus(e?.status),
+                    category: String(e?.eventType || e?.category || 'EVENT').toUpperCase(),
+                    payStatus: getPlanningPayStatusLabel(e),
+                    title: e?.eventTitle || 'Event',
+                    date: formatShortDate(scheduleDate),
+                    time: '—',
+                    location: e?.location?.name || '—',
+                    metricLabel: 'Vendors Selected',
+                    metricValue: selectedVendorsCount,
+                    metricTotal: Math.max(selectedServicesCount, selectedVendorsCount),
+                    revenueData: null,
+                    team: [],
+                    raw: e,
+                };
+            }
+
+            const scheduleDate = e?.schedule?.startAt || null;
+            const noOfTickets = Number(e?.tickets?.noOfTickets || 0);
+            const sold = Number(e?.ticketAnalytics?.ticketsSold || 0);
+            return {
+                id: e.eventId,
+                type: 'promote',
+                image: e?.eventBanner?.url || DEFAULT_EVENT_IMAGE,
+                status: mapPromoteStatusToCardStatus(e?.eventStatus),
+                category: String(e?.eventCategory || 'EVENT').toUpperCase(),
+                payStatus: e?.platformFeePaid ? 'Paid' : 'Unpaid',
+                title: e?.eventTitle || 'Event',
+                date: formatShortDate(scheduleDate),
+                time: '—',
+                location: e?.venue?.locationName || '—',
+                metricLabel: 'Tickets Sold',
+                metricValue: sold,
+                metricTotal: noOfTickets,
+                revenueData: null,
+                team: [],
+                raw: e,
+            };
+        });
+    }, [mixedEvents]);
+
     // Filter Logic
     const filteredEvents = useMemo(() => {
-        return EVENTS_DATA.filter(event => {
-            const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                event.location.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesStatus = statusFilter === 'All' || event.status === statusFilter;
+        return (cards || []).filter((event) => {
+            const title = String(event?.title || '').toLowerCase();
+            const location = String(event?.location || '').toLowerCase();
+            const q = String(searchQuery || '').toLowerCase();
 
-            // Mock tab logic
+            const matchesSearch = !q || title.includes(q) || location.includes(q);
+            const matchesStatus = true;
+
             let matchesTab = true;
-            if (activeTab === 'Active') matchesTab = ['Planning', 'Finalizing', 'Live Now'].includes(event.status);
-            if (activeTab === 'Drafts') matchesTab = false; // Mock
-            if (activeTab === 'Archived') matchesTab = false; // Mock
+            if (activeTab === 'Active') matchesTab = isActiveEvent(event?.raw);
+            if (activeTab === 'Planning') matchesTab = event.type === 'planning';
+            if (activeTab === 'Promote') matchesTab = event.type === 'promote';
 
             return matchesSearch && matchesStatus && matchesTab;
         });
-    }, [searchQuery, statusFilter, activeTab]);
+    }, [cards, searchQuery, activeTab]);
 
     const handleManage = (id) => {
         navigate(`/manager/events/${id}`);
     };
+
+    const activeCount = useMemo(() => {
+        return mixedEvents.filter(isActiveEvent).length;
+    }, [mixedEvents]);
+
+    const applicationsCount = Array.isArray(planningApplications) ? planningApplications.length : 0;
 
     const toggleSelect = (id) => {
         if (selectedEvents.includes(id)) {
@@ -193,7 +209,7 @@ const ManagerEvents = () => {
     };
 
     return (
-        <div className="p-8 max-w-[1920px] mx-auto min-h-screen space-y-8">
+        <div className="p-8 max-w-480 mx-auto min-h-screen space-y-8">
 
             {/* Top Bar: Title + Stats Row */}
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
@@ -206,28 +222,24 @@ const ManagerEvents = () => {
                 </div>
 
                 {/* Stats Row */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full lg:w-auto">
-                    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center min-w-[140px]">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 w-full lg:w-auto">
+                    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center min-w-35">
                         <span className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1"><Calendar className="w-3 h-3" /> Active</span>
-                        <span className="text-2xl font-extrabold text-gray-800">24</span>
+                        <span className="text-2xl font-extrabold text-gray-800">{activeCount}</span>
                     </div>
-                    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center min-w-[140px]">
-                        <span className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1"><Users className="w-3 h-3" /> Attendees</span>
-                        <span className="text-2xl font-extrabold text-gray-800">5.2k</span>
-                    </div>
-                    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center min-w-[140px]">
+                    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center min-w-35">
                         <span className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1"><DollarSign className="w-3 h-3" /> Revenue</span>
                         <span className="text-2xl font-extrabold text-teal-600">₹1.28L</span>
                     </div>
-                    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center min-w-[140px]">
-                        <span className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1"><Bell className="w-3 h-3" /> Notifications</span>
-                        <span className="text-2xl font-extrabold text-rose-500">3 New</span>
+                    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center min-w-35">
+                        <span className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1"><Bell className="w-3 h-3" /> Applications</span>
+                        <span className="text-2xl font-extrabold text-rose-500">{applicationsCount}</span>
                     </div>
                 </div>
             </div>
 
             {/* Main Workspace */}
-            <div className="bg-white border border-gray-100 shadow-sm rounded-3xl overflow-hidden min-h-[600px] flex flex-col">
+            <div className="bg-white border border-gray-100 shadow-sm rounded-3xl overflow-hidden min-h-150 flex flex-col">
                 {/* Control Bar */}
                 <div className="p-4 border-b border-gray-100 bg-gray-50/30 flex flex-col xl:flex-row gap-4 items-center justify-between">
 
@@ -250,7 +262,7 @@ const ManagerEvents = () => {
                             )}
                         </>
 
-                        <div className="relative flex-1 min-w-[200px]">
+                        <div className="relative flex-1 min-w-50">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                             <input
                                 type="text"

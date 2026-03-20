@@ -350,6 +350,33 @@ export const fetchPlanningByEventId = createAsyncThunk(
     }
 );
 
+// ─── Planning: fetch vendor selection by eventId ───────────────────────────
+
+export const fetchPlanningVendorSelectionByEventId = createAsyncThunk(
+    'planning/fetchPlanningVendorSelectionByEventId',
+    async (eventId, { dispatch, rejectWithValue }) => {
+        try {
+            if (!eventId) return rejectWithValue('Event ID is required');
+
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(eventId))}?includeVendors=true`,
+                { method: 'GET' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                const msg = data?.message || 'Failed to load vendor selection';
+                return rejectWithValue(msg);
+            }
+
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Failed to load vendor selection');
+        }
+    }
+);
+
 // ─── Planning: confirm (Finalized Selection → Finish) ─────────────────────
 
 export const confirmPlanning = createAsyncThunk(
@@ -399,6 +426,10 @@ const planningSlice = createSlice({
         confirmStatus: 'idle', // idle | loading | succeeded | failed
         confirmedPlanning: null,
         confirmError: null,
+
+        vendorSelectionStatus: 'idle', // idle | loading | succeeded | failed
+        vendorSelectionByEventId: {},
+        vendorSelectionError: null,
 
         error: null,
     },
@@ -494,8 +525,31 @@ const planningSlice = createSlice({
                 state.confirmStatus = 'failed';
                 state.confirmError = action.payload || action.error.message;
             });
+
+        // Vendor selection
+        builder
+            .addCase(fetchPlanningVendorSelectionByEventId.pending, (state) => {
+                state.vendorSelectionStatus = 'loading';
+                state.vendorSelectionError = null;
+            })
+            .addCase(fetchPlanningVendorSelectionByEventId.fulfilled, (state, action) => {
+                state.vendorSelectionStatus = 'succeeded';
+                const key = String(action.meta.arg || '').trim();
+                if (key) state.vendorSelectionByEventId[key] = action.payload || null;
+            })
+            .addCase(fetchPlanningVendorSelectionByEventId.rejected, (state, action) => {
+                state.vendorSelectionStatus = 'failed';
+                state.vendorSelectionError = action.payload || action.error.message;
+            });
     },
 });
 
 export const { resetPlanningCheckoutState, clearPlanningError } = planningSlice.actions;
+
+// Selectors
+export const selectPlanningVendorSelectionByEventId = (state, eventId) => {
+    const key = String(eventId || '').trim();
+    return key ? (state?.planning?.vendorSelectionByEventId?.[key] ?? null) : null;
+};
+
 export default planningSlice.reducer;

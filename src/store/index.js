@@ -3,8 +3,10 @@ import authReducer from './slices/authSlice';
 import adminReducer from './slices/adminSlice';
 import planningReducer from './slices/planningSlice';
 import vendorReducer from './slices/vendorSlice';
+import vendorEventsReducer from './slices/vendorEventsSlice';
 import promoteReducer from './slices/promoteSlice';
 import feesReducer from './slices/feesSlice';
+import managerEventsReducer from './slices/managerEventsSlice';
 
 export const store = configureStore({
     reducer: {
@@ -12,8 +14,10 @@ export const store = configureStore({
         admin: adminReducer,
         planning: planningReducer,
         vendor: vendorReducer,
+        vendorEvents: vendorEventsReducer,
         promote: promoteReducer,
         fees: feesReducer,
+        managerEvents: managerEventsReducer,
     },
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({

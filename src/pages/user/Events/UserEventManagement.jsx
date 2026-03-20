@@ -3,8 +3,9 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { BsArrowLeft, BsChatDots, BsCheckCircleFill, BsClock, BsSend, BsFileEarmarkZip, BsDownload, BsCircle, BsTicketPerforated } from "react-icons/bs";
 import { myOrganizedEvents } from "../../../data/myEventsData";
 import { toast, Toaster } from "react-hot-toast";
-import { useDispatch } from "react-redux";
-import { fetchPlanningByEventId } from "../../../store/slices/planningSlice";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchPlanningByEventId, fetchPlanningVendorSelectionByEventId, selectPlanningVendorSelectionByEventId } from "../../../store/slices/planningSlice";
+import { fetchPromoteByEventId } from "../../../store/slices/promoteSlice";
 
 const UserEventManagement = () => {
     const { eventId } = useParams();
@@ -36,8 +37,16 @@ const UserEventManagement = () => {
                     const result = await dispatch(fetchPlanningByEventId(String(eventId).trim()));
                     if (result.meta?.requestStatus === 'fulfilled' && result.payload) {
                         const p = result.payload;
+                        const selectedServices = Array.isArray(p?.selectedServices) ? p.selectedServices : [];
+                        const selectedVendors = Array.isArray(p?.selectedVendors) ? p.selectedVendors : [];
+                        const planningEventId = p?.eventId || eventId;
+                        if (planningEventId) {
+                            dispatch(fetchPlanningVendorSelectionByEventId(planningEventId));
+                        }
+
                         const mapped = {
-                            id: p?.eventId || eventId,
+                            kind: 'PLANNING',
+                            id: planningEventId,
                             title: p?.eventTitle || 'Event',
                             location: p?.location?.name || 'Location TBD',
                             image: p?.eventBanner || p?.banner || null,
@@ -46,6 +55,10 @@ const UserEventManagement = () => {
                             assignedManagerId: p?.assignedManagerId || null,
                             guestCount: typeof p?.guestCount === 'number' ? p.guestCount : null,
                             ticketTiers: Array.isArray(p?.tickets?.tiers) ? p.tickets.tiers : [],
+                            eventDescription: typeof p?.eventDescription === 'string' ? p.eventDescription : null,
+                            selectedServices,
+                            selectedVendors,
+                            vendorSelectionVendors: [],
                         };
 
                         if (!cancelled) setEvent(mapped);
@@ -53,7 +66,33 @@ const UserEventManagement = () => {
                     }
                 }
 
-                // 2) Fallback to legacy dummy/local data
+                // 2) Try Promote event by eventId
+                if (eventId && String(eventId).trim()) {
+                    const result = await dispatch(fetchPromoteByEventId(String(eventId).trim()));
+                    if (result.meta?.requestStatus === 'fulfilled' && result.payload) {
+                        const pr = result.payload;
+                        const mapped = {
+                            kind: 'PROMOTE',
+                            id: pr?.eventId || eventId,
+                            title: pr?.eventTitle || 'Event',
+                            location: pr?.venue?.locationName || 'Location TBD',
+                            image: pr?.eventBanner?.url || null,
+                            status: toDisplayStatus(pr?.adminDecision?.status || pr?.eventStatus || 'PENDING'),
+                            listingType: 'Public',
+                            assignedManagerId: pr?.assignedManagerId || null,
+                            guestCount: null,
+                            ticketTiers: Array.isArray(pr?.tickets?.tiers) ? pr.tickets.tiers : [],
+                            eventDescription: typeof pr?.eventDescription === 'string' ? pr.eventDescription : null,
+                            selectedServices: [],
+                            selectedVendors: [],
+                        };
+
+                        if (!cancelled) setEvent(mapped);
+                        return;
+                    }
+                }
+
+                // 3) Fallback to legacy dummy/local data
                 const parsed = Number.isFinite(Number(eventId)) ? parseInt(eventId, 10) : null;
                 const foundEvent = myOrganizedEvents.find((e) => e.id === parsed || e.id === eventId);
                 if (foundEvent) {
@@ -73,6 +112,39 @@ const UserEventManagement = () => {
             cancelled = true;
         };
     }, [dispatch, eventId, navigate]);
+
+    const planningVendorSelection = useSelector((state) => {
+        if (!event || String(event?.kind || '').toUpperCase() !== 'PLANNING') return null;
+        return selectPlanningVendorSelectionByEventId(state, event?.id);
+    });
+
+    useEffect(() => {
+        if (!planningVendorSelection) return;
+        setEvent((prev) => {
+            if (!prev || String(prev?.kind || '').toUpperCase() !== 'PLANNING') return prev;
+            const selectedServices = Array.isArray(planningVendorSelection?.selectedServices)
+                ? planningVendorSelection.selectedServices
+                : prev.selectedServices;
+            const vendors = Array.isArray(planningVendorSelection?.vendors)
+                ? planningVendorSelection.vendors
+                : prev.vendorSelectionVendors;
+
+            const sameServices = Array.isArray(prev.selectedServices) && Array.isArray(selectedServices)
+                ? prev.selectedServices.length === selectedServices.length && prev.selectedServices.every((v, i) => v === selectedServices[i])
+                : prev.selectedServices === selectedServices;
+            const sameVendors = Array.isArray(prev.vendorSelectionVendors) && Array.isArray(vendors)
+                ? prev.vendorSelectionVendors.length === vendors.length
+                : prev.vendorSelectionVendors === vendors;
+
+            if (sameServices && sameVendors) return prev;
+
+            return {
+                ...prev,
+                selectedServices,
+                vendorSelectionVendors: vendors,
+            };
+        });
+    }, [planningVendorSelection]);
 
     const handleSendMessage = (e) => {
         e.preventDefault();
@@ -97,6 +169,25 @@ const UserEventManagement = () => {
     }
 
     if (!event) return null;
+
+    const isPromote = String(event?.kind || '').toUpperCase() === 'PROMOTE';
+    const isPublicListing = isPromote || String(event?.listingType || '').toLowerCase() === 'public';
+    const isPrivateListing = !isPromote && String(event?.listingType || '').toLowerCase() === 'private';
+
+    const selectedServices = Array.isArray(event?.selectedServices) ? event.selectedServices : [];
+    const selectedVendors = Array.isArray(event?.selectedVendors) ? event.selectedVendors : [];
+    const vendorByService = new Map(selectedVendors.map((v) => [String(v?.service || '').trim(), v]));
+
+    const vendorSelectionVendors = Array.isArray(event?.vendorSelectionVendors) ? event.vendorSelectionVendors : [];
+    const vendorSelectionByService = new Map(vendorSelectionVendors.map((v) => [String(v?.service || '').trim(), v]));
+
+    const toVendorStatus = (raw) => {
+        const s = String(raw || '').trim().toUpperCase();
+        if (s === 'ACCEPTED') return { key: 'accepted', label: 'accepted', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+        if (s === 'REJECTED') return { key: 'reject', label: 'reject', badge: 'bg-rose-50 text-rose-700 border-rose-200' };
+        // Backend uses YET_TO_SELECT; UI requirement says yet_to_accept.
+        return { key: 'yet_to_accept', label: 'yet_to_accept', badge: 'bg-amber-50 text-amber-700 border-amber-200' };
+    };
 
     // Roadmap Status Logic
     const normalizedStatus = String(event?.status || '').toUpperCase().replace(/_/g, ' ').trim();
@@ -229,9 +320,9 @@ const UserEventManagement = () => {
 
                             {/* Left Content */}
                             <div className="lg:col-span-2 space-y-8">
-                                {/* Asset Preview */}
+                                {/* Event Details */}
                                 <div className="bg-white rounded-4xl p-8 shadow-sm border border-primary/5">
-                                    <h3 className="text-sm font-serif-premium text-primary mb-6">Asset Preview</h3>
+                                    <h3 className="text-sm font-serif-premium text-primary mb-6">Event Details</h3>
 
                                     <div className="relative h-64 rounded-2xl overflow-hidden bg-gray-100 mb-8 border border-gray-100 group">
                                         <div className="absolute top-4 left-4 z-20 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">Minimal Banner</div>
@@ -243,22 +334,27 @@ const UserEventManagement = () => {
                                     </div>
 
                                     <div className="prose prose-sm max-w-none text-[#0b2d49]/70 leading-relaxed text-xs">
-                                        <h4 className="font-bold text-primary uppercase tracking-widest text-[10px] mb-2">Event Synopsis</h4>
-                                        <p>
-                                            The {event.title} is a bespoke experience bringing together the finest artistic and digital innovations.
-                                            This event features live workshops, immersive galleries, and a curated set of interactive panels.
-                                        </p>
+                                        <h4 className="font-bold text-primary uppercase tracking-widest text-[10px] mb-2">Overview</h4>
+                                        {isPublicListing && typeof event?.eventDescription === 'string' && event.eventDescription.trim() ? (
+                                            <p>{event.eventDescription.trim()}</p>
+                                        ) : (!isPublicListing ? (
+                                            <p className="text-[#0b2d49]/60">
+                                                This is a private planning event. Details will be coordinated with your manager.
+                                            </p>
+                                        ) : null)}
                                         <div className="flex items-center gap-6 mt-6 pt-6 border-t border-gray-100">
-                                            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-primary">
-                                                <div className="w-2 h-2 rounded-full bg-green-400" /> Ticket Sales Active
-                                            </div>
+                                            {isPublicListing && (
+                                                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-primary">
+                                                    <div className="w-2 h-2 rounded-full bg-green-400" /> Ticket Sales Active
+                                                </div>
+                                            )}
                                             <div className="text-[10px] font-bold text-gray-400">ID: #{event.id}</div>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Ticket Inventory */}
-                                {String(event?.listingType || '').toLowerCase() === 'private' ? (
+                                {isPrivateListing ? (
                                     <div className="bg-white rounded-4xl p-8 shadow-sm border border-primary/5 overflow-hidden relative">
                                         <div className="flex justify-between items-center mb-6">
                                             <h3 className="text-sm font-serif-premium text-primary">Guest Count</h3>
@@ -352,36 +448,72 @@ const UserEventManagement = () => {
                                     </button>
                                 </div>
 
-                                {/* Promotion Assets */}
-                                <div className="bg-white rounded-4xl p-8 shadow-sm border border-primary/5">
-                                    <h3 className="text-sm font-serif-premium text-primary mb-6">Promotion Assets</h3>
+                                {isPromote ? (
+                                    <div className="bg-white rounded-4xl p-8 shadow-sm border border-primary/5">
+                                        <h3 className="text-sm font-serif-premium text-primary mb-6">Promotion Assets</h3>
 
-                                    <div className="space-y-3">
-                                        {[
-                                            { name: "Media_Kit_2024.zip", size: "24 MB" },
-                                            { name: "Social_Banners.zip", size: "12 MB" },
-                                            { name: "Event_Logos.ai", size: "4 MB" }
-                                        ].map((file, i) => (
-                                            <div key={i} className="group flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-primary/20 hover:bg-surface/50 transition-all cursor-pointer">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-xl bg-surface text-primary flex items-center justify-center group-hover:bg-white group-hover:shadow-sm transition-all">
-                                                        <BsFileEarmarkZip size={18} />
+                                        <div className="space-y-3">
+                                            {[
+                                                { name: "Media_Kit_2024.zip", size: "24 MB" },
+                                                { name: "Social_Banners.zip", size: "12 MB" },
+                                                { name: "Event_Logos.ai", size: "4 MB" }
+                                            ].map((file, i) => (
+                                                <div key={i} className="group flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-primary/20 hover:bg-surface/50 transition-all cursor-pointer">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 rounded-xl bg-surface text-primary flex items-center justify-center group-hover:bg-white group-hover:shadow-sm transition-all">
+                                                            <BsFileEarmarkZip size={18} />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-bold text-[#0b2d49]">{file.name}</p>
+                                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{file.size}</p>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p className="text-xs font-bold text-[#0b2d49]">{file.name}</p>
-                                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{file.size}</p>
-                                                    </div>
+                                                    <button className="text-primary/40 group-hover:text-primary transition-colors">
+                                                        <BsDownload size={14} />
+                                                    </button>
                                                 </div>
-                                                <button className="text-primary/40 group-hover:text-primary transition-colors">
-                                                    <BsDownload size={14} />
-                                                </button>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
+                                        <button className="w-full mt-6 py-3 border border-dashed border-primary/30 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary/60 hover:text-primary hover:border-primary transition-colors">
+                                            Request New Asset
+                                        </button>
                                     </div>
-                                    <button className="w-full mt-6 py-3 border border-dashed border-primary/30 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary/60 hover:text-primary hover:border-primary transition-colors">
-                                        Request New Asset
-                                    </button>
-                                </div>
+                                ) : (
+                                    <div className="bg-white rounded-4xl p-8 shadow-sm border border-primary/5">
+                                        <h3 className="text-sm font-serif-premium text-primary mb-6">Services & Vendors</h3>
+
+                                        {selectedServices.length === 0 ? (
+                                            <div className="bg-surface rounded-xl p-6 text-sm text-[#0b2d49]/70">
+                                                No services selected yet.
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {selectedServices.map((serviceName, i) => {
+                                                    const key = String(serviceName || '').trim();
+                                                    const vendor = vendorByService.get(key);
+                                                    const vendorSel = vendorSelectionByService.get(key);
+                                                    const vendorStatusRaw = vendorSel?.status || (vendor?.vendorAuthId ? 'ACCEPTED' : 'YET_TO_SELECT');
+                                                    const vendorStatus = toVendorStatus(vendorStatusRaw);
+                                                    const vendorAuthId = vendorSel?.vendorAuthId || vendor?.vendorAuthId || null;
+
+                                                    return (
+                                                        <div key={`${key}-${i}`} className="flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-primary/20 hover:bg-surface/50 transition-all">
+                                                            <div>
+                                                                <p className="text-xs font-bold text-[#0b2d49]">{key || 'Service'}</p>
+                                                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                                                                    Vendor: {vendorAuthId ? String(vendorAuthId).slice(0, 10) + '…' : 'Not selected'}
+                                                                </p>
+                                                            </div>
+                                                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${vendorStatus.badge}`}>
+                                                                {vendorStatus.label}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

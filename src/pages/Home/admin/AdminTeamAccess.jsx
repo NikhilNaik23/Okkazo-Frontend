@@ -14,7 +14,7 @@ import {
     ChevronDown
 } from "lucide-react";
 
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
 import { blockTeamMember, fetchTeamAccess, unblockTeamMember } from "../../../store/slices/adminSlice";
@@ -22,6 +22,7 @@ import { blockTeamMember, fetchTeamAccess, unblockTeamMember } from "../../../st
 const AdminTeamAccess = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const [searchParams] = useSearchParams();
     const [searchTerm, setSearchTerm] = useState("");
     const [openActionMenuAuthId, setOpenActionMenuAuthId] = useState(null);
     
@@ -38,6 +39,13 @@ const AdminTeamAccess = () => {
     const rowOptions = [5, 10, 20, 50];
     
     const { teamMembers, teamStats, teamPagination, teamLoading, teamError, submitting } = useSelector((state) => state.admin);
+
+    useEffect(() => {
+        const initialSearch = (searchParams.get('search') || '').trim();
+        if (initialSearch && initialSearch !== searchTerm) {
+            setSearchTerm(initialSearch);
+        }
+    }, [searchParams, searchTerm]);
 
     useEffect(() => {
         const timeoutId = setTimeout(() => {
@@ -198,7 +206,7 @@ const AdminTeamAccess = () => {
                                 <tr className="bg-[#fcfdfe] text-[10px] font-bold text-[#cbd5e1] uppercase tracking-[0.15em] border-b border-[#f0f2f5]">
                                     <th className="px-6 py-4">Identity</th>
                                     <th className="px-6 py-4">System Role</th>
-                                    <th className="px-6 py-4">Access Scope</th>
+                                    <th className="px-6 py-4">Assigned Role</th>
                                     <th className="px-6 py-4">Status</th>
                                     <th className="px-6 py-4">Last Activity</th>
                                     <th className="px-6 py-4 text-right">Actions</th>
@@ -247,7 +255,7 @@ const AdminTeamAccess = () => {
                                         </td>
                                         <td className="px-6 py-5">
                                             <span className="px-2 py-1 bg-[#f1f5f9] text-[#64748b] text-[10px] font-bold rounded-lg uppercase">
-                                                {member.access}
+                                                {member.assignedRole || member.role}
                                             </span>
                                         </td>
                                         <td className="px-6 py-5">
