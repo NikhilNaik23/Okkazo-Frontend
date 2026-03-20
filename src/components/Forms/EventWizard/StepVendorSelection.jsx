@@ -34,6 +34,50 @@ const safeJson = async (response) => {
     }
 };
 
+const DEFAULT_MAX_PRICE_MULTIPLIER = 1.5;
+
+const normalizeSelectedVendorPricing = (vendor, priceMultiplier) => {
+    const v = vendor && typeof vendor === 'object' ? vendor : {};
+    const prevMultiplierRaw = Number(v?.priceMultiplier);
+    const prevMultiplier = Number.isFinite(prevMultiplierRaw) && prevMultiplierRaw > 0 ? prevMultiplierRaw : 1;
+
+    const nextMultiplierRaw = Number(priceMultiplier);
+    const nextMultiplier = Number.isFinite(nextMultiplierRaw) && nextMultiplierRaw > 0 ? nextMultiplierRaw : 1;
+
+    const unitPriceRaw = Number(v?.unitPrice ?? v?.priceMin ?? 0);
+    const derivedBaseUnitPrice = Number.isFinite(unitPriceRaw) && unitPriceRaw > 0 ? unitPriceRaw / prevMultiplier : 0;
+    const baseUnitPriceRaw = Number(v?.baseUnitPrice ?? derivedBaseUnitPrice);
+    const baseUnitPrice = Number.isFinite(baseUnitPriceRaw) && baseUnitPriceRaw > 0 ? baseUnitPriceRaw : 0;
+
+    const priceMinRaw = Number(v?.priceMin ?? baseUnitPrice ?? 0);
+    const derivedBaseMin = Number.isFinite(priceMinRaw) && priceMinRaw > 0 ? priceMinRaw / prevMultiplier : 0;
+    const basePriceMinRaw = Number(v?.basePriceMin ?? derivedBaseMin ?? baseUnitPrice ?? 0);
+    const basePriceMin = Number.isFinite(basePriceMinRaw) && basePriceMinRaw > 0 ? basePriceMinRaw : 0;
+
+    const explicitMaxMultiplierRaw = Number(v?.maxPriceMultiplier);
+    const maxPriceMultiplier = Number.isFinite(explicitMaxMultiplierRaw) && explicitMaxMultiplierRaw > 0
+        ? explicitMaxMultiplierRaw
+        : DEFAULT_MAX_PRICE_MULTIPLIER;
+
+    const priceMaxRaw = Number(v?.priceMax);
+    const derivedBaseMax = Number.isFinite(priceMaxRaw) && priceMaxRaw > 0 ? priceMaxRaw / prevMultiplier : 0;
+    const basePriceMaxFallback = Math.round(basePriceMin * maxPriceMultiplier);
+    const basePriceMaxRaw = Number(v?.basePriceMax ?? derivedBaseMax ?? basePriceMaxFallback);
+    const basePriceMax = Number.isFinite(basePriceMaxRaw) && basePriceMaxRaw > 0 ? basePriceMaxRaw : basePriceMaxFallback;
+
+    return {
+        ...v,
+        baseUnitPrice,
+        basePriceMin,
+        basePriceMax,
+        maxPriceMultiplier,
+        priceMultiplier: nextMultiplier,
+        unitPrice: Math.round(baseUnitPrice * nextMultiplier),
+        priceMin: Math.round(basePriceMin * nextMultiplier),
+        priceMax: Math.round(basePriceMax * nextMultiplier),
+    };
+};
+
 const pickFallbackImage = (category, index = 0) => {
     const list = dummyVendors?.[category];
     if (Array.isArray(list) && list.length > 0) {
@@ -111,7 +155,8 @@ const mapBackendVenueServiceToCard = ({ vendor, service, index = 0, eventLat, ev
         pricingUnit: 'EVENT',
         unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
         priceMin: Number.isFinite(unitPrice) ? unitPrice : 0,
-        priceMax: Math.round((Number.isFinite(unitPrice) ? unitPrice : 0) * 1.25),
+        priceMax: Math.round((Number.isFinite(unitPrice) ? unitPrice : 0) * DEFAULT_MAX_PRICE_MULTIPLIER),
+        maxPriceMultiplier: DEFAULT_MAX_PRICE_MULTIPLIER,
 
         details,
         services: Array.isArray(vendor?.services) ? vendor.services : [],
@@ -215,6 +260,35 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     const isHighDemand = isDateHighDemand(formData.date);
     const priceMultiplier = isHighDemand ? 1.5 : 1;
 
+    const prevPriceMultiplierRef = useRef(priceMultiplier);
+    useEffect(() => {
+        const prevMultiplier = prevPriceMultiplierRef.current;
+        if (prevMultiplier === priceMultiplier) return;
+        prevPriceMultiplierRef.current = priceMultiplier;
+
+        const chosen = formData?.vendors && typeof formData.vendors === 'object' ? formData.vendors : {};
+        const categories = Object.keys(chosen);
+        if (categories.length === 0) return;
+
+        const nextVendors = { ...chosen };
+        categories.forEach((category) => {
+            nextVendors[category] = normalizeSelectedVendorPricing(chosen[category], priceMultiplier);
+        });
+
+        handleChange('vendors', nextVendors);
+
+        if (!eventId) return;
+        Promise.all(
+            categories.map(async (category) => {
+                try {
+                    await persistVendorSelection({ category, vendor: nextVendors[category] });
+                } catch (e) {
+                    console.error('Failed to persist repriced vendor selection:', e);
+                }
+            })
+        ).catch(() => undefined);
+    }, [eventId, formData?.vendors, handleChange, priceMultiplier]);
+
     const persistVendorSelection = async ({ category, vendor }) => {
         if (!eventId || !category || !vendor) return true;
 
@@ -225,12 +299,12 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         const pricingUnit = vendor?.pricingUnit
             || (String(category || '').toLowerCase().includes('catering') ? 'PER_PLATE' : 'EVENT');
         const unitPrice = Number(vendor?.unitPrice ?? vendor?.priceMin ?? 0);
-        const maxMultiplier = Number(vendor?.maxPriceMultiplier || 1.25);
+        const maxMultiplier = Number(vendor?.maxPriceMultiplier || DEFAULT_MAX_PRICE_MULTIPLIER);
 
         const lineMin = pricingUnit === 'PER_PLATE'
             ? Math.round(unitPrice * attendeeCountForPricing)
             : Math.round(unitPrice);
-        const lineMax = Math.round(lineMin * (Number.isFinite(maxMultiplier) && maxMultiplier > 0 ? maxMultiplier : 1.25));
+        const lineMax = Math.round(lineMin * (Number.isFinite(maxMultiplier) && maxMultiplier > 0 ? maxMultiplier : DEFAULT_MAX_PRICE_MULTIPLIER));
 
         const response = await fetchWithAuth(
             `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(eventId))}/vendors`,
@@ -260,23 +334,22 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     };
 
     const handleSelectVendorWrapper = async (category, vendor) => {
-        const MAX_PRICE_MULTIPLIER = 1.25;
         const hasExplicitUnitPricing = vendor?.unitPrice != null;
 
-        const adjustedVendor = hasExplicitUnitPricing
+        const baseVendor = hasExplicitUnitPricing
             ? {
                 ...vendor,
                 priceMin: vendor.priceMin != null ? vendor.priceMin : Number(vendor.unitPrice || 0),
-                priceMax: vendor.priceMax != null ? vendor.priceMax : Math.round(Number(vendor.unitPrice || 0) * MAX_PRICE_MULTIPLIER),
-                maxPriceMultiplier: vendor.maxPriceMultiplier || MAX_PRICE_MULTIPLIER,
-                priceMultiplier: priceMultiplier,
+                priceMax: vendor.priceMax != null ? vendor.priceMax : Math.round(Number(vendor.unitPrice || 0) * DEFAULT_MAX_PRICE_MULTIPLIER),
+                maxPriceMultiplier: vendor.maxPriceMultiplier || DEFAULT_MAX_PRICE_MULTIPLIER,
             }
             : {
                 ...vendor,
-                priceMin: (vendor.priceMin || 0) * priceMultiplier,
-                priceMax: (vendor.priceMax || Math.round((vendor.priceMin || 0) * 1.5)) * priceMultiplier,
-                priceMultiplier: priceMultiplier,
+                priceMax: vendor.priceMax || Math.round((vendor.priceMin || 0) * DEFAULT_MAX_PRICE_MULTIPLIER),
+                maxPriceMultiplier: vendor.maxPriceMultiplier || DEFAULT_MAX_PRICE_MULTIPLIER,
             };
+
+        const adjustedVendor = normalizeSelectedVendorPricing(baseVendor, priceMultiplier);
 
         try {
             await persistVendorSelection({ category, vendor: adjustedVendor });
@@ -547,7 +620,6 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     const paginatedVendors = filteredVendors.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
     const allServicesSelected = formData.services?.every(service => formData.vendors[service]);
-    const MAX_PRICE_MULTIPLIER = 1.25;
     const attendeeCountForPricing = Math.max(1, attendeeInfo.attendeeCount || 0);
 
     const getVendorLineMin = (v) => {
@@ -563,7 +635,11 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
 
     const estimatedTotal = Object.values(formData.vendors).reduce((acc, v) => acc + getVendorLineMin(v), 0);
     const estimatedMax = Object.values(formData.vendors).reduce(
-        (acc, v) => acc + Math.round(getVendorLineMin(v) * MAX_PRICE_MULTIPLIER),
+        (acc, v) => {
+            const maxMultiplier = Number(v?.maxPriceMultiplier || DEFAULT_MAX_PRICE_MULTIPLIER);
+            const safeMultiplier = Number.isFinite(maxMultiplier) && maxMultiplier > 0 ? maxMultiplier : DEFAULT_MAX_PRICE_MULTIPLIER;
+            return acc + Math.round(getVendorLineMin(v) * safeMultiplier);
+        },
         0
     );
 

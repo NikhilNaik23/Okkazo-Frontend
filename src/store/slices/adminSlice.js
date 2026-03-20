@@ -346,6 +346,38 @@ export const rejectDocument = createAsyncThunk(
     }
 );
 
+// Admin/Manager: fetch a vendor's services by authId
+export const fetchVendorServicesByAuthId = createAsyncThunk(
+    'admin/fetchVendorServicesByAuthId',
+    async ({ vendorAuthId, limit = 100, skip = 0 } = {}, { rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+            if (!vendorAuthId) return rejectWithValue('vendorAuthId is required');
+
+            const params = new URLSearchParams();
+            if (limit != null) params.append('limit', String(limit));
+            if (skip != null) params.append('skip', String(skip));
+
+            const url = `${API_BASE_URL}/api/vendor/services/vendor/${encodeURIComponent(String(vendorAuthId))}${params.toString() ? `?${params.toString()}` : ''}`;
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+
+            const data = await response.json();
+            if (!response.ok) return rejectWithValue(data?.message || 'Failed to fetch vendor services');
+
+            return { vendorAuthId: String(vendorAuthId), result: data.data };
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
 const initialState = {
     // Team access
     teamMembers: [],
@@ -367,6 +399,11 @@ const initialState = {
     vendorApplications: [],
     selectedVendorApplication: null,
     vendorApplicationsTotal: 0,
+
+    // Vendor services (by vendor authId)
+    vendorServicesByAuthId: {},
+    vendorServicesLoadingByAuthId: {},
+    vendorServicesErrorByAuthId: {},
 
     // Manager creation
     createManagerSuccess: false,
@@ -551,6 +588,27 @@ const adminSlice = createSlice({
             .addCase(rejectDocument.rejected, (state, action) => {
                 state.submitting = false;
                 state.submitError = action.payload;
+            })
+
+            // Vendor services (by authId)
+            .addCase(fetchVendorServicesByAuthId.pending, (state, action) => {
+                const vendorAuthId = action.meta?.arg?.vendorAuthId;
+                if (!vendorAuthId) return;
+                state.vendorServicesLoadingByAuthId[vendorAuthId] = true;
+                state.vendorServicesErrorByAuthId[vendorAuthId] = null;
+            })
+            .addCase(fetchVendorServicesByAuthId.fulfilled, (state, action) => {
+                const vendorAuthId = action.payload?.vendorAuthId;
+                if (!vendorAuthId) return;
+                state.vendorServicesLoadingByAuthId[vendorAuthId] = false;
+                state.vendorServicesErrorByAuthId[vendorAuthId] = null;
+                state.vendorServicesByAuthId[vendorAuthId] = action.payload?.result || { services: [], total: 0 };
+            })
+            .addCase(fetchVendorServicesByAuthId.rejected, (state, action) => {
+                const vendorAuthId = action.meta?.arg?.vendorAuthId;
+                if (!vendorAuthId) return;
+                state.vendorServicesLoadingByAuthId[vendorAuthId] = false;
+                state.vendorServicesErrorByAuthId[vendorAuthId] = action.payload;
             })
             // Create manager
             .addCase(createManager.pending, (state) => {

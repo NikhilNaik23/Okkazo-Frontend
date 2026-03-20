@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchVendorApplications, approveVendorApplication, rejectVendorApplication, requestVendorDocuments, verifyDocument, rejectDocument } from "../../../store/slices/adminSlice";
+import { fetchVendorApplications, approveVendorApplication, rejectVendorApplication, requestVendorDocuments, verifyDocument, rejectDocument, fetchVendorServicesByAuthId } from "../../../store/slices/adminSlice";
 import { 
   Building2, 
   MapPin, 
@@ -67,7 +67,15 @@ const VendorDetails = () => {
   const [requestedDocs, setRequestedDocs] = useState("");
   const [docRejectReason, setDocRejectReason] = useState("");
 
-  const { vendorApplications, loading, error, submitting } = useSelector((state) => state.admin);
+  const {
+    vendorApplications,
+    loading,
+    error,
+    submitting,
+    vendorServicesByAuthId,
+    vendorServicesLoadingByAuthId,
+    vendorServicesErrorByAuthId,
+  } = useSelector((state) => state.admin);
 
   useEffect(() => {
     if (vendorApplications.length === 0) {
@@ -77,6 +85,29 @@ const VendorDetails = () => {
 
   // Find the vendor from the fetched applications
   const vendor = vendorApplications.find(v => v.applicationId === id);
+
+  const isVerifiedVendor = vendor?.status === "APPROVED";
+
+  const vendorAuthId = vendor?.authId;
+  const vendorServicesResult = vendorAuthId ? vendorServicesByAuthId?.[vendorAuthId] : null;
+  const vendorServicesLoading = vendorAuthId ? Boolean(vendorServicesLoadingByAuthId?.[vendorAuthId]) : false;
+  const vendorServicesError = vendorAuthId ? vendorServicesErrorByAuthId?.[vendorAuthId] : null;
+
+  useEffect(() => {
+    if (!isVerifiedVendor) return;
+    if (activeTab !== 'services') return;
+    if (!vendorAuthId) return;
+    if (vendorServicesResult || vendorServicesLoading) return;
+
+    dispatch(fetchVendorServicesByAuthId({ vendorAuthId, limit: 100, skip: 0 }));
+  }, [activeTab, dispatch, isVerifiedVendor, vendorAuthId, vendorServicesLoading, vendorServicesResult]);
+
+  useEffect(() => {
+    // Prevent access to Services/Pricing while vendor is unverified
+    if (!isVerifiedVendor && activeTab === "services") {
+      setActiveTab("overview");
+    }
+  }, [activeTab, isVerifiedVendor]);
 
   if (loading) {
     return (
@@ -225,8 +256,8 @@ const VendorDetails = () => {
   const tabs = [
     { id: "overview", label: "Overview", icon: Info },
     { id: "documents", label: "Documents", icon: FileText },
-    { id: "services", label: "Services & Pricing", icon: Briefcase },
-    ...(vendor?.status === "APPROVED" ? [{ id: "history", label: "Activity Logs", icon: Clock }] : []),
+    ...(isVerifiedVendor ? [{ id: "services", label: "Services & Pricing", icon: Briefcase }] : []),
+    ...(isVerifiedVendor ? [{ id: "history", label: "Activity Logs", icon: Clock }] : []),
   ];
 
   return (
@@ -563,36 +594,88 @@ const VendorDetails = () => {
              </div>
            )}
 
-           {activeTab === "services" && (
+             {isVerifiedVendor && activeTab === "services" && (
              <div className="bg-white rounded-[2.5rem] border border-[#e9eff1] p-10 shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="flex items-center justify-between mb-10">
                    <h3 className="text-2xl font-black text-[#0b2d49]">Service Catalog Preview</h3>
                    <div className="flex items-center gap-2 px-6 py-2 bg-[#f8fafc] rounded-full border border-[#e9eff1] text-xs font-bold text-[#0b2d49]">
-                      Total Services: 12
+                        Total Services: {vendorServicesResult?.total ?? vendorServicesResult?.services?.length ?? 0}
                    </div>
                 </div>
-                <div className="space-y-4">
-                   {[1,2,3,4].map(i => (
-                     <div key={i} className="flex items-center justify-between p-6 bg-[#f8fafc] rounded-2xl hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-[#e9eff1] group cursor-pointer">
-                        <div className="flex items-center gap-6">
-                           <div className="w-16 h-16 bg-white border border-[#e9eff1] rounded-xl flex items-center justify-center text-[#d7a444]">
-                              <Briefcase size={24} />
-                           </div>
-                           <div>
-                              <h5 className="font-black text-[#0b2d49] text-lg group-hover:text-[#d7a444] transition-colors line-clamp-1">Premium Event Catering {i}</h5>
-                              <p className="text-xs font-bold text-[#708aa0] uppercase tracking-widest mt-1">Tier: Diamond Plus</p>
-                           </div>
+                  {vendorServicesLoading ? (
+                    <div className="flex items-center justify-center py-16">
+                      <Loader2 size={28} className="animate-spin text-[#d7a444]" />
+                    </div>
+                  ) : vendorServicesError ? (
+                    <div className="py-16 flex flex-col items-center justify-center text-center">
+                      <p className="text-sm font-bold text-red-500">Failed to load services</p>
+                      <p className="text-xs text-[#708aa0] mt-2 font-medium">{vendorServicesError}</p>
+                      {vendorAuthId && (
+                        <button
+                          type="button"
+                          onClick={() => dispatch(fetchVendorServicesByAuthId({ vendorAuthId, limit: 100, skip: 0 }))}
+                          className="mt-6 text-[#d7a444] font-black uppercase tracking-widest text-[10px] hover:underline"
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {(Array.isArray(vendorServicesResult?.services) ? vendorServicesResult.services : []).length > 0 ? (
+                        (vendorServicesResult.services || []).map((svc) => {
+                          const svcId = svc?._id || svc?.id;
+                          const price = Number(svc?.price ?? 0);
+                          const formattedPrice = Number.isFinite(price) ? price.toLocaleString() : '0';
+
+                          return (
+                            <div
+                              key={svcId || `${svc?.name}-${svc?.createdAt}`}
+                              className="flex items-center justify-between p-6 bg-[#f8fafc] rounded-2xl hover:bg-white hover:shadow-md transition-all border border-transparent hover:border-[#e9eff1]"
+                            >
+                              <div className="flex items-center gap-6">
+                                <div className="w-16 h-16 bg-white border border-[#e9eff1] rounded-xl flex items-center justify-center text-[#d7a444]">
+                                  <Briefcase size={24} />
+                                </div>
+                                <div>
+                                  <h5 className="font-black text-[#0b2d49] text-lg line-clamp-1">{svc?.name || 'Service'}</h5>
+                                  <div className="flex items-center gap-3 mt-1">
+                                    {svc?.tier ? (
+                                      <p className="text-xs font-bold text-[#708aa0] uppercase tracking-widest">Tier: {svc.tier}</p>
+                                    ) : (
+                                      <p className="text-xs font-bold text-[#708aa0] uppercase tracking-widest">Category: {svc?.serviceCategory || vendor?.serviceCategory || '—'}</p>
+                                    )}
+                                    {svc?.status ? (
+                                      <>
+                                        <span className="w-1 h-1 bg-[#e9eff1] rounded-full" />
+                                        <p className="text-xs font-bold text-[#708aa0] uppercase tracking-widest">{svc.status}</p>
+                                      </>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-10">
+                                <div className="text-right">
+                                  <p className="text-[10px] font-black text-[#708aa0] uppercase tracking-widest mb-1">Base Price</p>
+                                  <p className="text-xl font-black text-[#0b2d49] flex items-center justify-end gap-1">
+                                    <IndianRupee size={18} /> {formattedPrice}
+                                  </p>
+                                </div>
+                                <ChevronRight size={20} className="text-[#e9eff1]" />
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="py-20 flex flex-col items-center justify-center text-center text-[#708aa0] bg-white rounded-[2.5rem] border-2 border-dashed border-[#e9eff1]">
+                          <Briefcase size={40} className="mb-4 opacity-10" />
+                          <p className="text-xl font-bold text-[#0b2d49]">No services found</p>
+                          <p className="text-sm text-[#708aa0] mt-2 font-medium">This vendor has not created any services yet.</p>
                         </div>
-                        <div className="flex items-center gap-10">
-                           <div className="text-right">
-                              <p className="text-[10px] font-black text-[#708aa0] uppercase tracking-widest mb-1">Base Price</p>
-                              <p className="text-xl font-black text-[#0b2d49] flex items-center justify-end gap-1"><IndianRupee size={18} /> 45,000</p>
-                           </div>
-                           <ChevronRight size={20} className="text-[#e9eff1] group-hover:text-[#d7a444] transition-all" />
-                        </div>
-                     </div>
-                   ))}
-                </div>
+                      )}
+                    </div>
+                  )}
              </div>
            )}
         </div>

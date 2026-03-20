@@ -72,7 +72,7 @@ const PlanningWizard = () => {
     const currentComponentId = steps[currentStep - 1]?.componentId || 'manifest';
     const isImmersiveStep = ['manifest', 'category', 'payment'].includes(currentComponentId);
 
-    const MAX_PRICE_MULTIPLIER = 1.25;
+    const DEFAULT_MAX_PRICE_MULTIPLIER = 1.5;
     const computeTotals = React.useMemo(() => {
         const listingType = String(formData?.listingType || 'Private');
         const attendeeCountRaw = listingType === 'Public'
@@ -95,7 +95,11 @@ const PlanningWizard = () => {
         };
 
         const totalMin = vendors.reduce((acc, v) => acc + getVendorLineMin(v), 0);
-        const totalMax = vendors.reduce((acc, v) => acc + Math.round(getVendorLineMin(v) * MAX_PRICE_MULTIPLIER), 0);
+        const totalMax = vendors.reduce((acc, v) => {
+            const maxMultiplier = Number(v?.maxPriceMultiplier || DEFAULT_MAX_PRICE_MULTIPLIER);
+            const safeMultiplier = Number.isFinite(maxMultiplier) && maxMultiplier > 0 ? maxMultiplier : DEFAULT_MAX_PRICE_MULTIPLIER;
+            return acc + Math.round(getVendorLineMin(v) * safeMultiplier);
+        }, 0);
         return { totalMin, totalMax };
     }, [formData?.guests, formData?.listingType, formData?.totalCapacity, formData?.vendors]);
 

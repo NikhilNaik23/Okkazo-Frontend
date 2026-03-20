@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { BsStars, BsX, BsTagFill, BsArrowRight } from "react-icons/bs";
 
 const StepReview = ({ formData, onRemoveVendor }) => {
-    const MAX_PRICE_MULTIPLIER = 1.25;
+    const DEFAULT_MAX_PRICE_MULTIPLIER = 1.5;
 
     const getVendorBanner = (vendor) => {
         return (
@@ -51,7 +51,11 @@ const StepReview = ({ formData, onRemoveVendor }) => {
 
     const totalMin = Object.values(formData.vendors).reduce((acc, v) => acc + getVendorLineMin(v), 0);
     const totalMax = Object.values(formData.vendors).reduce(
-        (acc, v) => acc + Math.round(getVendorLineMin(v) * MAX_PRICE_MULTIPLIER),
+        (acc, v) => {
+            const maxMultiplier = Number(v?.maxPriceMultiplier || DEFAULT_MAX_PRICE_MULTIPLIER);
+            const safeMultiplier = Number.isFinite(maxMultiplier) && maxMultiplier > 0 ? maxMultiplier : DEFAULT_MAX_PRICE_MULTIPLIER;
+            return acc + Math.round(getVendorLineMin(v) * safeMultiplier);
+        },
         0
     );
 
