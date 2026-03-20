@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { Search, ChevronDown, Filter, Calendar as CalendarIcon, LayoutGrid, List, Kanban as KanbanIcon, MoreHorizontal, X, Plus, Users, DollarSign, Calendar, Archive, Download, CheckSquare, BarChart3, Bell } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import ManagerEventCard from '../../../components/Global/cards/ManagerEventCard';
 
@@ -238,21 +237,18 @@ const ManagerEvents = () => {
                     {/* Right: Actions */}
                     <div className="flex gap-3 w-full xl:w-auto overflow-x-auto">
                         {/* Bulk Actions (visible when selected) */}
-                        <AnimatePresence>
+                        <>
                             {selectedEvents.length > 0 && (
-                                <motion.div
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -10 }}
+                                <div
                                     className="flex items-center gap-2 bg-teal-50 px-3 py-2 rounded-xl text-teal-800 font-bold text-sm mr-2"
                                 >
                                     <CheckSquare className="w-4 h-4" /> {selectedEvents.length} Selected
                                     <div className="h-4 w-px bg-teal-200 mx-2" />
                                     <button className="hover:text-teal-900 flex items-center gap-1"><Download className="w-3 h-3" /> Export</button>
                                     <button className="hover:text-teal-900 flex items-center gap-1"><Archive className="w-3 h-3" /> Archive</button>
-                                </motion.div>
+                                </div>
                             )}
-                        </AnimatePresence>
+                        </>
 
                         <div className="relative flex-1 min-w-[200px]">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -278,13 +274,10 @@ const ManagerEvents = () => {
 
                 {/* Content */}
                 <div className="p-6 bg-gray-50/50 flex-grow">
-                    <AnimatePresence mode="wait">
+                    <>
                         {viewMode === 'grid' && (
-                            <motion.div
+                            <div
                                 key="grid"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
                                 className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6"
                             >
                                 {filteredEvents.map((event) => (
@@ -304,15 +297,12 @@ const ManagerEvents = () => {
                                         />
                                     </div>
                                 ))}
-                            </motion.div>
+                            </div>
                         )}
 
                         {viewMode === 'list' && (
-                            <motion.div
+                            <div
                                 key="list"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
                                 className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden"
                             >
                                 <table className="w-full text-left">
@@ -358,11 +348,11 @@ const ManagerEvents = () => {
                                         ))}
                                     </tbody>
                                 </table>
-                            </motion.div>
+                            </div>
                         )}
                         {/* Kanban placeholder for brevity, reusing logic from before but wrapped in new layout */}
                         {viewMode === 'kanban' && <div className="text-center p-10 text-gray-400">Kanban View Available</div>}
-                    </AnimatePresence>
+                    </>
                 </div>
 
                 {/* Footer Pagination */}

@@ -10,7 +10,8 @@ import {
     Lock,
     LockOpen,
     Filter,
-    MessageSquare
+    MessageSquare,
+    ChevronDown
 } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
@@ -23,7 +24,19 @@ const AdminTeamAccess = () => {
     const dispatch = useDispatch();
     const [searchTerm, setSearchTerm] = useState("");
     const [openActionMenuAuthId, setOpenActionMenuAuthId] = useState(null);
+    
+    // Custom Filter Role Dropdown State
     const [filterRole, setFilterRole] = useState("ALL");
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
+    
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    
+    // Custom Rows Per Page Dropdown State
+    const [rowsPerPage, setRowsPerPage] = useState(10);
+    const [isRowsOpen, setIsRowsOpen] = useState(false);
+    const rowOptions = [5, 10, 20, 50];
+    
     const { teamMembers, teamStats, teamPagination, teamLoading, teamError, submitting } = useSelector((state) => state.admin);
 
     useEffect(() => {
@@ -89,6 +102,16 @@ const AdminTeamAccess = () => {
         ? teamMembers 
         : teamMembers.filter(m => (m.assignedRole || m.role) === filterRole);
 
+    // Pagination Logic
+    const totalPages = Math.ceil(filteredMembers.length / rowsPerPage);
+    if (currentPage > totalPages && totalPages > 0) {
+        setCurrentPage(totalPages);
+    }
+    const currentMembers = filteredMembers.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+    const prevPage = () => { if (currentPage > 1) setCurrentPage(currentPage - 1); };
+    const nextPage = () => { if (currentPage < totalPages) setCurrentPage(currentPage + 1); };
+
     return (
         <div className="flex flex-col h-full bg-[#fcfdfe] overflow-hidden">
             {/* Header */}
@@ -109,13 +132,6 @@ const AdminTeamAccess = () => {
                             className="w-64 pl-10 pr-4 py-2 bg-[#f1f5f9] border-none rounded-lg text-sm focus:ring-2 focus:ring-[#0b2d49]/10 focus:outline-none transition-all placeholder:text-[#94a3b8]"
                         />
                     </div>
-                    <button 
-                        onClick={() => navigate("add")}
-                        className="flex items-center gap-2 px-4 py-2 bg-[#0b2d49] text-white rounded-lg text-sm font-semibold hover:bg-[#1a4b70] transition-all shadow-md active:scale-95"
-                    >
-                        <UserPlus size={16} />
-                        Add Manager
-                    </button>
                 </div>
             </div>
 
@@ -142,21 +158,41 @@ const AdminTeamAccess = () => {
                             <h3 className="text-sm font-bold text-[#1a1c1e]">Team Roster</h3>
                             <span className="px-2 py-0.5 bg-[#f1f5f9] text-[#94a3b8] text-[10px] font-bold rounded-full">{teamPagination.total || 0} total</span>
                         </div>
-                        <div className="flex items-center gap-2 bg-[#f1f5f9] px-3 py-1.5 rounded-lg border border-[#e2e8f0]">
-                            <Filter size={14} className="text-[#64748b]" />
-                            <select
-                                value={filterRole}
-                                onChange={(e) => setFilterRole(e.target.value)}
-                                className="text-xs font-bold text-[#0b2d49] bg-transparent border-none focus:ring-0 cursor-pointer outline-none w-32 truncate"
-                            >
-                                {uniqueRoles.map(role => (
-                                    <option key={role} value={role}>{role === "ALL" ? "All Roles" : role}</option>
-                                ))}
-                            </select>
+                        <div className="flex items-center gap-2">
+                            <label className="text-sm font-medium text-[#6b7280]">Role:</label>
+                            <div className="relative flex items-center">
+                                <button 
+                                    onClick={() => setIsFilterOpen(!isFilterOpen)}
+                                    className="flex items-center justify-between w-32 bg-[#f8f9fa] border border-[#d1d5db] hover:border-gray-400 rounded-md py-1.5 px-3 text-sm font-medium text-[#111827] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
+                                >
+                                    <span>{filterRole === "ALL" ? "All" : filterRole}</span>
+                                    <ChevronDown size={16} className="text-[#6b7280]" strokeWidth={2.5} />
+                                </button>
+                                {isFilterOpen && (
+                                    <>
+                                        <div className="fixed inset-0 z-40 cursor-default" onClick={() => setIsFilterOpen(false)}></div>
+                                        <div className="absolute top-full right-0 mt-1 w-full bg-white border border-[#d1d5db] shadow-xl z-50 rounded-b-md overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-100">
+                                            {uniqueRoles.map(role => (
+                                                <button
+                                                    key={role}
+                                                    onClick={() => {
+                                                        setFilterRole(role);
+                                                        setCurrentPage(1);
+                                                        setIsFilterOpen(false);
+                                                    }}
+                                                    className={`w-full text-left px-3 py-2 text-sm font-medium ${filterRole === role ? 'bg-[#1a73e8] text-white' : 'text-[#111827] hover:bg-gray-100'} transition-colors whitespace-nowrap`}
+                                                >
+                                                    {role === "ALL" ? "All" : role}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
 
-                    <div className="overflow-visible">
+                    <div className="overflow-visible min-h-[400px]">
                         <table className="w-full text-left rounded-b-2xl">
                             <thead>
                                 <tr className="bg-[#fcfdfe] text-[10px] font-bold text-[#cbd5e1] uppercase tracking-[0.15em] border-b border-[#f0f2f5]">
@@ -181,13 +217,13 @@ const AdminTeamAccess = () => {
                                     </tr>
                                 )}
 
-                                {!teamLoading && !teamError && filteredMembers.length === 0 && (
+                                {!teamLoading && !teamError && currentMembers.length === 0 && (
                                     <tr>
-                                        <td colSpan={6} className="px-6 py-10 text-center text-sm font-medium text-[#94a3b8]">No team members found matching the filter.</td>
+                                        <td colSpan={6} className="px-6 py-10 text-center text-sm font-medium text-[#94a3b8]">No team members found.</td>
                                     </tr>
                                 )}
 
-                                {!teamLoading && !teamError && filteredMembers.map((member, idx) => {
+                                {!teamLoading && !teamError && currentMembers.map((member, idx) => {
                                     const statusStyles = getStatusStyles(member.status);
 
                                     return (
@@ -195,7 +231,7 @@ const AdminTeamAccess = () => {
                                         <td className="px-6 py-5">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 rounded-full bg-[#0b2d49]/10 text-[#0b2d49] flex items-center justify-center font-bold text-xs ring-2 ring-white shadow-sm">
-                                                    {member.avatar}
+                                                    {member.avatar || member.name.substring(0,2).toUpperCase()}
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-bold text-[#1a1c1e] group-hover:text-[#0b2d49] transition-colors">{member.name}</p>
@@ -234,33 +270,36 @@ const AdminTeamAccess = () => {
                                                 </button>
 
                                                 {openActionMenuAuthId === member.authId && (
-                                                    <div className="absolute right-0 top-10 z-20 min-w-44 rounded-xl border border-[#f0f2f5] bg-white shadow-xl py-1 transform origin-top-right transition-all animate-in fade-in zoom-in-95 duration-200">
-                                                        <button 
-                                                            onClick={() => {
-                                                                setOpenActionMenuAuthId(null);
-                                                                navigate(`/admin/chat`, { state: { selectedUser: member } });
-                                                            }}
-                                                            className="w-full px-4 py-2.5 text-left text-[13px] font-semibold text-[#1a1c1e] hover:bg-[#f8fafc] flex items-center gap-3 transition-colors border-b border-[#f0f2f5]"
-                                                        >
-                                                            <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
-                                                                <MessageSquare size={14} />
-                                                            </div>
-                                                            <span>Send Message</span>
-                                                        </button>
-                                                        
-                                                        <button
-                                                            onClick={() => handleToggleBlock(member)}
-                                                            disabled={submitting}
-                                                            className="w-full px-4 py-2.5 text-left text-[13px] font-semibold text-[#1a1c1e] hover:bg-[#f8fafc] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 transition-colors"
-                                                        >
-                                                            <div className={`p-1.5 rounded-lg ${member.isActive ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-[#28a785]'}`}>
-                                                                {member.isActive ? <Lock size={14} /> : <LockOpen size={14} />}
-                                                            </div>
-                                                            <span>
-                                                                {member.isActive ? "Block Account" : "Unblock Account"}
-                                                            </span>
-                                                        </button>
-                                                    </div>
+                                                    <>
+                                                        <div className="fixed inset-0 z-50 cursor-default" onClick={() => setOpenActionMenuAuthId(null)}></div>
+                                                        <div className="absolute right-0 top-10 z-[60] min-w-44 rounded-xl border border-[#f0f2f5] bg-white shadow-xl py-1 transform origin-top-right transition-all animate-in fade-in zoom-in-95 duration-200">
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setOpenActionMenuAuthId(null);
+                                                                    navigate(`/admin/chat`, { state: { selectedUser: member } });
+                                                                }}
+                                                                className="w-full px-4 py-2.5 text-left text-[13px] font-semibold text-[#1a1c1e] hover:bg-[#f8fafc] flex items-center gap-3 transition-colors border-b border-[#f0f2f5]"
+                                                            >
+                                                                <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
+                                                                    <MessageSquare size={14} />
+                                                                </div>
+                                                                <span>Send Message</span>
+                                                            </button>
+                                                            
+                                                            <button
+                                                                onClick={() => handleToggleBlock(member)}
+                                                                disabled={submitting}
+                                                                className="w-full px-4 py-2.5 text-left text-[13px] font-semibold text-[#1a1c1e] hover:bg-[#f8fafc] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3 transition-colors"
+                                                            >
+                                                                <div className={`p-1.5 rounded-lg ${member.isActive ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-[#28a785]'}`}>
+                                                                    {member.isActive ? <Lock size={14} /> : <LockOpen size={14} />}
+                                                                </div>
+                                                                <span>
+                                                                    {member.isActive ? "Block Account" : "Unblock Account"}
+                                                                </span>
+                                                            </button>
+                                                        </div>
+                                                    </>
                                                 )}
                                             </div>
                                         </td>
@@ -269,16 +308,61 @@ const AdminTeamAccess = () => {
                             </tbody>
                         </table>
                     </div>
-                </div>
-
-                {/* Footer Info */}
-                <div className="flex items-center gap-3 p-4 bg-white/50 rounded-xl border border-dashed border-[#e9eff1]">
-                    <div className="p-2 bg-white rounded-lg shadow-sm border border-[#f0f2f5]">
-                        <Shield className="text-[#d7a444]" size={16} />
+                    
+                    {/* Pagination Footer */}
+                    <div className="p-6 border-t border-[#f0f2f5] flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-center gap-2">
+                            <label className="text-sm font-medium text-[#6b7280]">Rows per page:</label>
+                            <div className="relative flex items-center">
+                                <button 
+                                    onClick={() => setIsRowsOpen(!isRowsOpen)}
+                                    className="flex items-center justify-between w-16 bg-[#f8f9fa] border border-[#d1d5db] hover:border-gray-400 rounded-md py-1 px-2 text-sm font-medium text-[#111827] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
+                                >
+                                    <span>{rowsPerPage}</span>
+                                    <ChevronDown size={14} className="text-[#6b7280]" strokeWidth={2.5} />
+                                </button>
+                                {isRowsOpen && (
+                                    <>
+                                        <div className="fixed inset-0 z-40 cursor-default" onClick={() => setIsRowsOpen(false)}></div>
+                                        <div className="absolute bottom-full left-0 mb-1 w-full bg-white border border-[#d1d5db] shadow-xl z-50 rounded-sm overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-100">
+                                            {rowOptions.map(option => (
+                                                <button
+                                                    key={option}
+                                                    onClick={() => {
+                                                        setRowsPerPage(option);
+                                                        setCurrentPage(1);
+                                                        setIsRowsOpen(false);
+                                                    }}
+                                                    className={`w-full text-center px-1 py-1.5 text-sm font-medium ${rowsPerPage === option ? 'bg-[#1a73e8] text-white' : 'text-[#111827] hover:bg-gray-100'} transition-colors`}
+                                                >
+                                                    {option}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <span className="px-4 py-2 text-xs font-semibold text-[#6b7280]">
+                                {((currentPage - 1) * rowsPerPage) + (currentMembers.length > 0 ? 1 : 0)}-{((currentPage - 1) * rowsPerPage) + currentMembers.length} of {filteredMembers.length}
+                            </span>
+                            <button 
+                                onClick={prevPage}
+                                disabled={currentPage === 1}
+                                className="px-3 py-1 text-xs font-bold text-[#00182d] border border-[#d1d5db] rounded-md hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                            >
+                                Prev
+                            </button>
+                            <button 
+                                onClick={nextPage}
+                                disabled={currentPage === totalPages || totalPages === 0}
+                                className="px-3 py-1 text-xs font-bold text-[#00182d] border border-[#d1d5db] rounded-md hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                            >
+                                Next
+                            </button>
+                        </div>
                     </div>
-                    <p className="text-xs text-[#94a3b8] font-medium">
-                        <span className="font-bold text-[#1a1c1e]">Admin Tip:</span> Only Super Admins can manage role permissions and Invite/Deactivate team members.
-                    </p>
                 </div>
             </div>
         </div>

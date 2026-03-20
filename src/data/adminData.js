@@ -1,4 +1,4 @@
-import { MdDashboard, MdEvent, MdStorefront, MdBarChart, MdAccountBalanceWallet, MdSecurity, MdSettings, MdPerson, MdNotifications, MdChat } from "react-icons/md";
+import { MdDashboard, MdEvent, MdStorefront, MdBarChart, MdAccountBalanceWallet, MdSecurity, MdSettings, MdPerson, MdNotifications, MdChat, MdPeople, MdManageAccounts } from "react-icons/md";
 
 export const adminMenuSections = [
   {
@@ -21,6 +21,7 @@ export const adminMenuSections = [
     title: "System",
     items: [
       { path: "/admin/team-access", label: "Team Access", icon: MdSecurity },
+      { path: "/admin/users", label: "Platform Users", icon: MdManageAccounts },
       { path: "/admin/settings", label: "Settings", icon: MdSettings }
     ]
   }

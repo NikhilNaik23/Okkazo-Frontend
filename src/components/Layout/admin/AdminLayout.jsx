@@ -17,6 +17,7 @@ import TransactionDetails from "../../../pages/Home/admin/TransactionDetails";
 import AdminNotifications from "../../../pages/Home/admin/AdminNotifications";
 import AdminChat from "../../../pages/Home/admin/AdminChat";
 import AdminNotificationsPanel from "../../Admin/Notifications/AdminNotificationsPanel";
+import AdminUserManagement from "../../../pages/Home/admin/AdminUserManagement";
 
 const AdminLayout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -56,6 +57,7 @@ const AdminLayout = () => {
                 <Route path="ledger" element={<AdminLedger />} />
                 <Route path="ledger/:id" element={<TransactionDetails />} />
                                 <Route path="notifications" element={<AdminNotifications />} />
+                <Route path="users" element={<AdminUserManagement />} />
                 <Route path="team-access" element={<AdminTeamAccess />} />
                 <Route path="team-access/add" element={<AdminManager />} />
                 <Route path="settings" element={<AdminSettings />} />
