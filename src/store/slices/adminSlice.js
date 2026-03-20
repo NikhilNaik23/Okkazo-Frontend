@@ -378,6 +378,399 @@ export const fetchVendorServicesByAuthId = createAsyncThunk(
     }
 );
 
+// ─── Admin Event (Promote) workflow ─────────────────────────────────────────
+
+export const fetchAdminEventDashboard = createAsyncThunk(
+    'admin/fetchAdminEventDashboard',
+    async ({ limit = 200 } = {}, { rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const params = new URLSearchParams();
+            if (limit) params.append('limit', limit);
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+            };
+
+            const [promoteRes, planningRes] = await Promise.all([
+                fetch(`${API_BASE_URL}/api/events/promote/admin/dashboard?${params.toString()}`, { method: 'GET', headers }),
+                fetch(`${API_BASE_URL}/api/events/planning/admin/dashboard?${params.toString()}`, { method: 'GET', headers }),
+            ]);
+
+            const [promoteJson, planningJson] = await Promise.all([
+                promoteRes.json().catch(() => ({})),
+                planningRes.json().catch(() => ({})),
+            ]);
+
+            if (!promoteRes.ok) {
+                return rejectWithValue(promoteJson.message || 'Failed to fetch promote dashboard');
+            }
+
+            // Planning dashboard is best-effort; keep admin page usable even if planning endpoint is missing.
+            const planningData = planningRes.ok ? planningJson.data : { assigned: [], applications: [], rejected: [] };
+            const promoteData = promoteJson.data;
+
+            const tag = (items, requestType) => (Array.isArray(items) ? items.map((i) => ({ ...i, requestType })) : []);
+
+            return {
+                assigned: [...tag(promoteData?.assigned, 'PROMOTE'), ...tag(planningData?.assigned, 'PLANNING')],
+                applications: [...tag(promoteData?.applications, 'PROMOTE'), ...tag(planningData?.applications, 'PLANNING')],
+                rejected: [...tag(promoteData?.rejected, 'PROMOTE'), ...tag(planningData?.rejected, 'PLANNING')],
+            };
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+// ─── Manager auto-assign toggle (Admin only) ───────────────────────────────
+
+export const fetchManagerAutoAssignConfig = createAsyncThunk(
+    'admin/fetchManagerAutoAssignConfig',
+    async (_, { rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/events/config/manager-autoassign`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to fetch auto-assign config');
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const setManagerAutoAssignEnabled = createAsyncThunk(
+    'admin/setManagerAutoAssignEnabled',
+    async ({ enabled }, { rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/events/config/manager-autoassign`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({ enabled: Boolean(enabled) }),
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to update auto-assign config');
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const fetchAdminEventRequestById = createAsyncThunk(
+    'admin/fetchAdminEventRequestById',
+    async (eventId, { rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+            };
+
+            const promoteRes = await fetch(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}`, {
+                method: 'GET',
+                headers,
+            });
+
+            const promoteJson = await promoteRes.json().catch(() => ({}));
+            if (promoteRes.ok) return { requestType: 'PROMOTE', request: promoteJson.data };
+
+            if (promoteRes.status !== 404) {
+                return rejectWithValue(promoteJson.message || 'Failed to fetch event request');
+            }
+
+            const planningRes = await fetch(`${API_BASE_URL}/api/events/planning/${encodeURIComponent(eventId)}`, {
+                method: 'GET',
+                headers,
+            });
+
+            const planningJson = await planningRes.json().catch(() => ({}));
+            if (!planningRes.ok) return rejectWithValue(planningJson.message || 'Failed to fetch planning request');
+
+            return { requestType: 'PLANNING', request: planningJson.data };
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const fetchPromoteEventRequestById = createAsyncThunk(
+    'admin/fetchPromoteEventRequestById',
+    async (eventId, { rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+
+            const data = await response.json();
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to fetch event request');
+
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const decidePromoteEventRequest = createAsyncThunk(
+    'admin/decidePromoteEventRequest',
+    async ({ eventId, decision, rejectionReason, managerId }, { dispatch, rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}/decision`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({ decision, rejectionReason, managerId }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to update decision');
+
+            dispatch(fetchAdminEventDashboard());
+            dispatch(fetchPromoteEventRequestById(eventId));
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const assignPromoteEventManager = createAsyncThunk(
+    'admin/assignPromoteEventManager',
+    async ({ eventId, managerId }, { dispatch, rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}/assign`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({ managerId }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to assign manager');
+
+            dispatch(fetchAdminEventDashboard());
+            dispatch(fetchUnavailableEventManagers());
+            dispatch(fetchPromoteEventRequestById(eventId));
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const assignPlanningEventManager = createAsyncThunk(
+    'admin/assignPlanningEventManager',
+    async ({ eventId, managerId }, { dispatch, rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/events/planning/${encodeURIComponent(eventId)}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({ assignedManagerId: managerId }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to assign manager');
+
+            dispatch(fetchAdminEventDashboard());
+            dispatch(fetchUnavailableEventManagers());
+            dispatch(fetchAdminEventRequestById(eventId));
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const unassignPromoteEventManager = createAsyncThunk(
+    'admin/unassignPromoteEventManager',
+    async ({ eventId }, { dispatch, rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+            if (!eventId) return rejectWithValue('Event ID is required');
+
+            const response = await fetch(
+                `${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}/unassign-manager`,
+                {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
+                }
+            );
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to unassign manager');
+
+            dispatch(fetchAdminEventDashboard());
+            dispatch(fetchUnavailableEventManagers());
+            dispatch(fetchAdminEventRequestById(eventId));
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const unassignPlanningEventManager = createAsyncThunk(
+    'admin/unassignPlanningEventManager',
+    async ({ eventId }, { dispatch, rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+            if (!eventId) return rejectWithValue('Event ID is required');
+
+            const response = await fetch(
+                `${API_BASE_URL}/api/events/planning/${encodeURIComponent(eventId)}/unassign-manager`,
+                {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
+                }
+            );
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to unassign manager');
+
+            dispatch(fetchAdminEventDashboard());
+            dispatch(fetchUnavailableEventManagers());
+            dispatch(fetchAdminEventRequestById(eventId));
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const fetchUnavailableEventManagers = createAsyncThunk(
+    'admin/fetchUnavailableEventManagers',
+    async (_, { rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetch(`${API_BASE_URL}/api/events/promote/admin/unavailable-managers`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+
+            const data = await response.json();
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to fetch unavailable managers');
+
+            return data.data?.managerIds || [];
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const fetchEventVendorSelection = createAsyncThunk(
+    'admin/fetchEventVendorSelection',
+    async (eventId, { rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+            if (!eventId) return rejectWithValue('Event ID is required');
+
+            const response = await fetch(
+                `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(eventId)}?includeVendors=true`,
+                {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
+                }
+            );
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to fetch vendor selection');
+
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const fetchEventTransactionsForAdmin = createAsyncThunk(
+    'admin/fetchEventTransactionsForAdmin',
+    async (eventId, { rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+            if (!eventId) return rejectWithValue('Event ID is required');
+
+            const response = await fetch(`${API_BASE_URL}/api/orders/admin/${encodeURIComponent(eventId)}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to fetch transactions');
+
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
 const initialState = {
     // Team access
     teamMembers: [],
@@ -407,18 +800,50 @@ const initialState = {
 
     // Manager creation
     createManagerSuccess: false,
+
+    // Admin event requests (Promote)
+    eventDashboard: {
+        assigned: [],
+        applications: [],
+        rejected: [],
+    },
+    selectedEventRequest: null,
+    selectedEventRequestType: null,
+    selectedEventVendorSelection: null,
+    selectedEventTransactions: null,
+    unavailableManagerIds: [],
     
     // Loading states
     teamLoading: false,
     loading: false,
     loadingDetails: false,
     submitting: false,
+
+    eventDashboardLoading: false,
+    eventRequestLoading: false,
+    unavailableManagersLoading: false,
+
+    eventVendorSelectionLoading: false,
+    eventTransactionsLoading: false,
+
+    managerAutoAssignLoading: false,
+    managerAutoAssignUpdating: false,
     
     // Error states
     teamError: null,
     error: null,
     detailsError: null,
     submitError: null,
+
+    eventDashboardError: null,
+    eventRequestError: null,
+    unavailableManagersError: null,
+
+    eventVendorSelectionError: null,
+    eventTransactionsError: null,
+
+    managerAutoAssignError: null,
+    managerAutoAssignConfig: null,
 };
 
 const adminSlice = createSlice({
@@ -437,6 +862,15 @@ const adminSlice = createSlice({
         resetCreateManager: (state) => {
             state.createManagerSuccess = false;
             state.submitError = null;
+        },
+        clearSelectedEventRequest: (state) => {
+            state.selectedEventRequest = null;
+            state.selectedEventRequestType = null;
+            state.selectedEventVendorSelection = null;
+            state.selectedEventTransactions = null;
+            state.eventRequestError = null;
+            state.eventVendorSelectionError = null;
+            state.eventTransactionsError = null;
         },
     },
     extraReducers: (builder) => {
@@ -651,9 +1085,183 @@ const adminSlice = createSlice({
             .addCase(createManager.rejected, (state, action) => {
                 state.submitting = false;
                 state.submitError = action.payload;
+            })
+
+            // Admin event dashboard
+            .addCase(fetchAdminEventDashboard.pending, (state) => {
+                state.eventDashboardLoading = true;
+                state.eventDashboardError = null;
+            })
+            .addCase(fetchAdminEventDashboard.fulfilled, (state, action) => {
+                state.eventDashboardLoading = false;
+                state.eventDashboard = action.payload || state.eventDashboard;
+            })
+            .addCase(fetchAdminEventDashboard.rejected, (state, action) => {
+                state.eventDashboardLoading = false;
+                state.eventDashboardError = action.payload;
+            })
+
+            // Manager auto-assign config
+            .addCase(fetchManagerAutoAssignConfig.pending, (state) => {
+                state.managerAutoAssignLoading = true;
+                state.managerAutoAssignError = null;
+            })
+            .addCase(fetchManagerAutoAssignConfig.fulfilled, (state, action) => {
+                state.managerAutoAssignLoading = false;
+                state.managerAutoAssignConfig = action.payload || null;
+            })
+            .addCase(fetchManagerAutoAssignConfig.rejected, (state, action) => {
+                state.managerAutoAssignLoading = false;
+                state.managerAutoAssignError = action.payload;
+            })
+            .addCase(setManagerAutoAssignEnabled.pending, (state) => {
+                state.managerAutoAssignUpdating = true;
+                state.managerAutoAssignError = null;
+            })
+            .addCase(setManagerAutoAssignEnabled.fulfilled, (state, action) => {
+                state.managerAutoAssignUpdating = false;
+                state.managerAutoAssignConfig = action.payload || state.managerAutoAssignConfig;
+            })
+            .addCase(setManagerAutoAssignEnabled.rejected, (state, action) => {
+                state.managerAutoAssignUpdating = false;
+                state.managerAutoAssignError = action.payload;
+            })
+
+            // Single event request
+            .addCase(fetchAdminEventRequestById.pending, (state) => {
+                state.eventRequestLoading = true;
+                state.eventRequestError = null;
+                state.selectedEventVendorSelection = null;
+                state.selectedEventTransactions = null;
+                state.eventVendorSelectionError = null;
+                state.eventTransactionsError = null;
+            })
+            .addCase(fetchAdminEventRequestById.fulfilled, (state, action) => {
+                state.eventRequestLoading = false;
+                state.selectedEventRequest = action.payload?.request || null;
+                state.selectedEventRequestType = action.payload?.requestType || null;
+            })
+            .addCase(fetchAdminEventRequestById.rejected, (state, action) => {
+                state.eventRequestLoading = false;
+                state.eventRequestError = action.payload;
+            })
+            .addCase(fetchPromoteEventRequestById.pending, (state) => {
+                state.eventRequestLoading = true;
+                state.eventRequestError = null;
+            })
+            .addCase(fetchPromoteEventRequestById.fulfilled, (state, action) => {
+                state.eventRequestLoading = false;
+                state.selectedEventRequest = action.payload;
+                state.selectedEventRequestType = 'PROMOTE';
+            })
+            .addCase(fetchPromoteEventRequestById.rejected, (state, action) => {
+                state.eventRequestLoading = false;
+                state.eventRequestError = action.payload;
+            })
+
+            // Decide / assign manager
+            .addCase(decidePromoteEventRequest.pending, (state) => {
+                state.submitting = true;
+                state.submitError = null;
+            })
+            .addCase(decidePromoteEventRequest.fulfilled, (state) => {
+                state.submitting = false;
+            })
+            .addCase(decidePromoteEventRequest.rejected, (state, action) => {
+                state.submitting = false;
+                state.submitError = action.payload;
+            })
+            .addCase(assignPromoteEventManager.pending, (state) => {
+                state.submitting = true;
+                state.submitError = null;
+            })
+            .addCase(assignPromoteEventManager.fulfilled, (state) => {
+                state.submitting = false;
+            })
+            .addCase(assignPromoteEventManager.rejected, (state, action) => {
+                state.submitting = false;
+                state.submitError = action.payload;
+            })
+
+            .addCase(assignPlanningEventManager.pending, (state) => {
+                state.submitting = true;
+                state.submitError = null;
+            })
+            .addCase(assignPlanningEventManager.fulfilled, (state) => {
+                state.submitting = false;
+            })
+            .addCase(assignPlanningEventManager.rejected, (state, action) => {
+                state.submitting = false;
+                state.submitError = action.payload;
+            })
+
+            .addCase(unassignPromoteEventManager.pending, (state) => {
+                state.submitting = true;
+                state.submitError = null;
+            })
+            .addCase(unassignPromoteEventManager.fulfilled, (state) => {
+                state.submitting = false;
+            })
+            .addCase(unassignPromoteEventManager.rejected, (state, action) => {
+                state.submitting = false;
+                state.submitError = action.payload;
+            })
+
+            .addCase(unassignPlanningEventManager.pending, (state) => {
+                state.submitting = true;
+                state.submitError = null;
+            })
+            .addCase(unassignPlanningEventManager.fulfilled, (state) => {
+                state.submitting = false;
+            })
+            .addCase(unassignPlanningEventManager.rejected, (state, action) => {
+                state.submitting = false;
+                state.submitError = action.payload;
+            })
+
+            // Unavailable managers
+            .addCase(fetchUnavailableEventManagers.pending, (state) => {
+                state.unavailableManagersLoading = true;
+                state.unavailableManagersError = null;
+            })
+            .addCase(fetchUnavailableEventManagers.fulfilled, (state, action) => {
+                state.unavailableManagersLoading = false;
+                state.unavailableManagerIds = action.payload || [];
+            })
+            .addCase(fetchUnavailableEventManagers.rejected, (state, action) => {
+                state.unavailableManagersLoading = false;
+                state.unavailableManagersError = action.payload;
+            })
+
+            // Vendor selection (planning)
+            .addCase(fetchEventVendorSelection.pending, (state) => {
+                state.eventVendorSelectionLoading = true;
+                state.eventVendorSelectionError = null;
+            })
+            .addCase(fetchEventVendorSelection.fulfilled, (state, action) => {
+                state.eventVendorSelectionLoading = false;
+                state.selectedEventVendorSelection = action.payload || null;
+            })
+            .addCase(fetchEventVendorSelection.rejected, (state, action) => {
+                state.eventVendorSelectionLoading = false;
+                state.eventVendorSelectionError = action.payload;
+            })
+
+            // Transactions (admin)
+            .addCase(fetchEventTransactionsForAdmin.pending, (state) => {
+                state.eventTransactionsLoading = true;
+                state.eventTransactionsError = null;
+            })
+            .addCase(fetchEventTransactionsForAdmin.fulfilled, (state, action) => {
+                state.eventTransactionsLoading = false;
+                state.selectedEventTransactions = action.payload || null;
+            })
+            .addCase(fetchEventTransactionsForAdmin.rejected, (state, action) => {
+                state.eventTransactionsLoading = false;
+                state.eventTransactionsError = action.payload;
             });
     },
 });
 
-export const { clearSelectedVendorApplication, clearAdminError, resetCreateManager } = adminSlice.actions;
+export const { clearSelectedVendorApplication, clearAdminError, resetCreateManager, clearSelectedEventRequest } = adminSlice.actions;
 export default adminSlice.reducer;

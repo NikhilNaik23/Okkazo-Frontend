@@ -121,8 +121,10 @@ const mapPlanningToCardEvent = (planning, idx) => {
     const rawStatus = String(planning?.status || '').trim().toUpperCase();
 
     const status = (() => {
+        if (rawStatus === 'PAYMENT PENDING' || rawStatus === 'PAYMENT_PENDING') return 'Payment Pending';
         if (rawStatus === 'IMMEDIATE ACTION') return 'Immediate Action';
         if (rawStatus === 'PENDING APPROVAL') return 'Pending Approval';
+        if (rawStatus === 'CONFIRMED') return 'Confirmed';
         if (rawStatus === 'REJECTED') return 'Rejected';
         if (rawStatus === 'COMPLETED') return 'Live';
         if (rawStatus === 'APPROVED') return isPublic ? 'Live' : 'Approved';
@@ -175,6 +177,11 @@ const MyEvents = () => {
 
                 if (raw === 'IMMEDIATE ACTION') {
                     navigate(`/user/planning-wizard?eventId=${eventId}&step=4&returnTo=my-events`);
+                    return;
+                }
+
+                if (raw === 'PAYMENT PENDING' || raw === 'PAYMENT_PENDING') {
+                    navigate(`/user/planning-wizard?eventId=${eventId}&step=3&returnTo=my-events`);
                     return;
                 }
 

@@ -4,6 +4,8 @@ import { useParams, Link } from 'react-router-dom';
 import { BsArrowLeft, BsFileEarmarkPdf, BsDownload, BsCheckCircleFill, BsPersonCheckFill, BsFillChatSquareTextFill, BsGraphUp, BsWallet2, BsPersonVcardFill, BsThreeDotsVertical, BsSendFill, BsClockHistory, BsCalendarEvent, BsGeoAlt } from 'react-icons/bs';
 import { promotedCampaigns } from '../../../data/myEventsDashboardData';
 
+const API_BASE_URL = 'http://localhost:8080';
+
 const EventCommandCenter = () => {
     const { id } = useParams();
     const [campaign, setCampaign] = useState(null);
@@ -22,34 +24,107 @@ const EventCommandCenter = () => {
     });
 
     useEffect(() => {
-        // Find campaign from local storage or static data
-        const storedCampaigns = JSON.parse(localStorage.getItem('promoted_campaigns') || '[]');
-        const found = storedCampaigns.find(c => c.id === id) || promotedCampaigns.find(c => c.id === id);
+        let cancelled = false;
 
-        // Mock data extension
-        if (found) {
-            setCampaign({
-                ...found,
-                ticketsSold: found.ticketsSold !== undefined ? found.ticketsSold : 142,
-                totalTickets: found.totalTickets !== undefined ? found.totalTickets : 500,
-                revenueGenerated: found.revenueGenerated !== undefined ? found.revenueGenerated : (found.revenue === '-' ? 0 : 213000),
-                cost: found.cost !== undefined ? found.cost : 15000,
-                daysLeft: found.daysLeft !== undefined ? found.daysLeft : 12,
-                roadmap: found.roadmap || [
-                    { step: 1, label: "Application Received", status: "completed", date: "Feb 18, 2026" },
-                    { step: 2, label: "Manager Assigned", status: "completed", date: "Feb 19, 2026" },
-                    { step: 3, label: "Application In Review", status: "in_progress", date: "Today" },
-                    { step: 4, label: "Success / Live", status: "pending", date: "Estimation: Feb 20" }
-                ],
-                documents: found.documents || [
-                    { name: "Venue_Permission_Letter.pdf", type: "application/pdf", size: "2.4 MB" },
-                    { name: "Organizer_ID_Proof.jpg", type: "image/jpeg", size: "1.1 MB" }
-                ],
-                description: found.description || "Join us for an evening of innovation and networking as we explore the future of corporate strategies.",
-                location: found.location || "Business Park Conference Room, Mumbai",
-                date: found.date || "March 5, 2026 • 10:00 AM"
+        const toDisplayStatus = (status) => String(status || '').trim() || 'PENDING';
+        const toDateTimeLabel = (schedule) => {
+            const startAt = schedule?.startAt ? new Date(schedule.startAt) : null;
+            if (!startAt || Number.isNaN(startAt.getTime())) return '—';
+            return `${startAt.toLocaleDateString()} • ${startAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        };
+
+        const load = async () => {
+            // 1) Try local storage / static (legacy)
+            const storedCampaigns = JSON.parse(localStorage.getItem('promoted_campaigns') || '[]');
+            const found = storedCampaigns.find((c) => c.id === id) || promotedCampaigns.find((c) => c.id === id);
+
+            if (found) {
+                if (!cancelled) {
+                    setCampaign({
+                        ...found,
+                        ticketsSold: found.ticketsSold !== undefined ? found.ticketsSold : 142,
+                        totalTickets: found.totalTickets !== undefined ? found.totalTickets : 500,
+                        revenueGenerated: found.revenueGenerated !== undefined ? found.revenueGenerated : (found.revenue === '-' ? 0 : 213000),
+                        cost: found.cost !== undefined ? found.cost : 15000,
+                        daysLeft: found.daysLeft !== undefined ? found.daysLeft : 12,
+                        roadmap: found.roadmap || [
+                            { step: 1, label: "Application Received", status: "completed", date: "Feb 18, 2026" },
+                            { step: 2, label: "Manager Assigned", status: "completed", date: "Feb 19, 2026" },
+                            { step: 3, label: "Application In Review", status: "in_progress", date: "Today" },
+                            { step: 4, label: "Success / Live", status: "pending", date: "Estimation: Feb 20" }
+                        ],
+                        documents: found.documents || [
+                            { name: "Venue_Permission_Letter.pdf", type: "application/pdf", size: "2.4 MB" },
+                            { name: "Organizer_ID_Proof.jpg", type: "image/jpeg", size: "1.1 MB" }
+                        ],
+                        description: found.description || "Join us for an evening of innovation and networking as we explore the future of corporate strategies.",
+                        location: found.location || "Business Park Conference Room, Mumbai",
+                        date: found.date || "March 5, 2026 • 10:00 AM"
+                    });
+                }
+                return;
+            }
+
+            // 2) Fetch from backend promote API by eventId
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) {
+                toast.error('Please log in to view promote event details');
+                return;
+            }
+
+            const res = await fetch(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
             });
-        }
+
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok || !json?.data) {
+                toast.error(json?.message || 'Failed to load promote event');
+                return;
+            }
+
+            const pr = json.data;
+
+            const ticketType = String(pr?.tickets?.ticketType || '').toLowerCase();
+            const isFreeEvent = ticketType === 'free';
+            const totalTickets = typeof pr?.tickets?.noOfTickets === 'number' ? pr.tickets.noOfTickets : 0;
+
+            const mapped = {
+                id: pr?.eventId || String(id),
+                title: pr?.eventTitle || 'Promote Event',
+                status: toDisplayStatus(pr?.adminDecision?.status || pr?.eventStatus),
+                location: pr?.venue?.locationName || 'Location TBD',
+                date: toDateTimeLabel(pr?.schedule),
+                description: pr?.eventDescription || '',
+                revenue: isFreeEvent ? '-' : (typeof pr?.totalAmount === 'number' ? pr.totalAmount : '-'),
+                cost: typeof pr?.platformFee === 'number' ? pr.platformFee : 0,
+                revenueGenerated: typeof pr?.totalAmount === 'number' ? pr.totalAmount : 0,
+                ticketsSold: typeof pr?.ticketAnalytics?.sold === 'number' ? pr.ticketAnalytics.sold : 0,
+                totalTickets: totalTickets,
+                roadmap: [
+                    { step: 1, label: "Application Received", status: "completed", date: pr?.createdAt ? new Date(pr.createdAt).toLocaleDateString() : '—' },
+                    { step: 2, label: "Manager Assigned", status: pr?.assignedManagerId ? 'completed' : 'pending', date: pr?.managerAssignment?.assignedAt ? new Date(pr.managerAssignment.assignedAt).toLocaleDateString() : '—' },
+                    { step: 3, label: "Application In Review", status: String(pr?.adminDecision?.status || '').toUpperCase() === 'APPROVED' ? 'completed' : 'in_progress', date: pr?.adminDecision?.decidedAt ? new Date(pr.adminDecision.decidedAt).toLocaleDateString() : 'Today' },
+                    { step: 4, label: "Success / Live", status: String(pr?.eventStatus || '').toUpperCase() === 'LIVE' ? 'completed' : 'pending', date: '—' },
+                ],
+                documents: Array.isArray(pr?.authenticityProofs)
+                    ? pr.authenticityProofs
+                        .filter((p) => p?.url)
+                        .map((p) => ({ name: p.publicId || 'auth-proof', type: p.mimeType || 'image/*', size: p.sizeBytes ? `${Math.round(p.sizeBytes / (1024 * 1024) * 10) / 10} MB` : '—' }))
+                    : [],
+                bannerUrl: pr?.eventBanner?.url || null,
+            };
+
+            if (!cancelled) setCampaign(mapped);
+        };
+
+        load();
+        return () => {
+            cancelled = true;
+        };
     }, [id]);
 
     const handleSendMessage = (e) => {
@@ -145,7 +220,7 @@ const EventCommandCenter = () => {
                             <div className="lg:col-span-2 bg-white rounded-[2.5rem] p-8 shadow-sm border border-[#09637E]/5 relative overflow-hidden group">
                                 <div className="absolute inset-0 bg-gradient-to-t from-[#09637E] via-transparent to-transparent opacity-60 z-10" />
                                 <img
-                                    src="https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&q=80"
+                                    src={campaign.bannerUrl || "https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&q=80"}
                                     className="absolute inset-0 w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700"
                                     alt="Event Banner"
                                 />

@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { mockAdminEvents } from "../../../data/adminData";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchAdminEventDashboard, fetchManagerAutoAssignConfig, setManagerAutoAssignEnabled } from "../../../store/slices/adminSlice";
 
 import InternalEventCard from "../../../components/Global/cards/InternalEventCard";
 import { 
@@ -18,7 +19,99 @@ import {
   FileSearch
 } from "lucide-react";
 
-const MOCK_EVENTS = mockAdminEvents;
+const formatEventDate = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' });
+};
+
+const formatSubmittedAt = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+};
+
+const getNextAutoAssignTime = (after) => {
+    const base = new Date(after);
+    if (Number.isNaN(base.getTime())) return null;
+
+    const y = base.getFullYear();
+    const m = base.getMonth();
+    const d = base.getDate();
+
+    const slotMorning = new Date(y, m, d, 9, 0, 0, 0);
+    const slotEvening = new Date(y, m, d, 21, 0, 0, 0);
+
+    if (base < slotMorning) return slotMorning;
+    if (base < slotEvening) return slotEvening;
+    return new Date(y, m, d + 1, 9, 0, 0, 0);
+};
+
+const deriveUiStatus = (request) => {
+    const requestType = request?.requestType;
+
+    if (requestType === 'PLANNING') {
+        if (String(request?.status || '').toUpperCase() === 'REJECTED') return 'REJECTED';
+        if (request?.assignedManagerId) return 'VERIFIED';
+        if (request?.isUrgent) return 'URGENT';
+        return 'PENDING';
+    }
+
+    const decision = request?.adminDecision?.status;
+    if (decision === 'REJECTED') return 'REJECTED';
+    if (request?.assignedManagerId) return 'VERIFIED';
+    if (decision === 'APPROVED') {
+        const decidedAt = request?.adminDecision?.decidedAt;
+        if (decidedAt) {
+            const nextSlot = getNextAutoAssignTime(decidedAt);
+            if (nextSlot) {
+                const graceMs = 15 * 60 * 1000;
+                if (Date.now() >= nextSlot.getTime() + graceMs) return 'URGENT';
+            }
+        }
+        return 'REVIEWING';
+    }
+    return 'PENDING';
+};
+
+const mapRequestToUiEvent = (request) => {
+    const requestType = request?.requestType;
+
+    if (requestType === 'PLANNING') {
+        const dateIso = request?.category === 'public' ? request?.schedule?.startAt : request?.eventDate;
+        const typeLabel = request?.eventType === 'Other' ? (request?.customEventType || 'Other') : request?.eventType;
+
+        return {
+            id: request?.eventId,
+            title: request?.eventTitle || 'Untitled Event',
+            organizer: request?.authId || 'Organizer',
+            date: formatEventDate(dateIso),
+            submitted: formatSubmittedAt(request?.createdAt),
+            category: (typeLabel || 'PLANNING').toUpperCase(),
+            status: deriveUiStatus(request),
+            image: request?.eventBanner?.url,
+            raw: request,
+            requestType,
+        };
+    }
+
+    const eventCategory = request?.eventCategory === 'Other' ? (request?.customCategory || 'Other') : request?.eventCategory;
+
+    return {
+        id: request?.eventId,
+        title: request?.eventTitle || 'Untitled Event',
+        organizer: request?.authId || 'Organizer',
+        date: formatEventDate(request?.schedule?.startAt),
+        submitted: formatSubmittedAt(request?.createdAt),
+        category: eventCategory || 'EVENT',
+        status: deriveUiStatus(request),
+        image: request?.eventBanner?.url,
+        raw: request,
+        requestType: requestType || 'PROMOTE',
+    };
+};
 
 /*const MOCK_EVENTS_OLD = [
   {
@@ -81,39 +174,51 @@ const ManualEntryCard = () => {
 
 const AdminEvents = () => {
     const navigate = useNavigate();
+    const dispatch = useDispatch();
     const [activeTab, setActiveTab] = useState("Events");
     const [searchQuery, setSearchQuery] = useState("");
     const [showApplicationsModal, setShowApplicationsModal] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
+    const { eventDashboard, managerAutoAssignConfig, managerAutoAssignLoading, managerAutoAssignUpdating } = useSelector((state) => state.admin);
+
+    useEffect(() => {
+        dispatch(fetchAdminEventDashboard());
+        dispatch(fetchManagerAutoAssignConfig());
+    }, [dispatch]);
+
+    const autoAssignEnabled = typeof managerAutoAssignConfig?.enabled === 'boolean' ? managerAutoAssignConfig.enabled : null;
+    const toggleAutoAssign = () => {
+        if (autoAssignEnabled === null) return;
+        dispatch(setManagerAutoAssignEnabled({ enabled: !autoAssignEnabled }));
+    };
+
     const handleRefresh = () => {
         setIsRefreshing(true);
         setSearchQuery("");
         setActiveTab("Events");
-        
-        // Mock refresh delay
-        setTimeout(() => {
-            setIsRefreshing(false);
-        }, 600);
+
+        dispatch(fetchAdminEventDashboard())
+            .finally(() => setIsRefreshing(false));
     };
 
-    const filteredEvents = MOCK_EVENTS.filter(event => {
-        // Tab Filtering
-        if (activeTab === "Rejected") return event.status === "REJECTED";
-        if (activeTab === "Events") {
-            if (event.status !== "VERIFIED") return false;
-        }
+    const assignedEvents = useMemo(() => (eventDashboard?.assigned || []).map(mapRequestToUiEvent), [eventDashboard]);
+    const rejectedEvents = useMemo(() => (eventDashboard?.rejected || []).map(mapRequestToUiEvent), [eventDashboard]);
+    const pendingApplications = useMemo(() => (eventDashboard?.applications || []).map(mapRequestToUiEvent), [eventDashboard]);
 
-        // Search Filtering
+    const filteredEvents = useMemo(() => {
+        const list = activeTab === 'Rejected' ? rejectedEvents : assignedEvents;
         const query = searchQuery.toLowerCase();
-        return event.title.toLowerCase().includes(query) || 
-               event.organizer.toLowerCase().includes(query) ||
-               event.id.toString().includes(query);
-    });
-    
-    const pendingApplications = MOCK_EVENTS.filter(v => 
-        v.status === "PENDING" || v.status === "REVIEWING" || v.status === "URGENT"
-    );
+
+        return list.filter((event) => {
+            if (!query) return true;
+            return (
+                (event.title || '').toLowerCase().includes(query) ||
+                (event.organizer || '').toLowerCase().includes(query) ||
+                String(event.id || '').toLowerCase().includes(query)
+            );
+        });
+    }, [activeTab, assignedEvents, rejectedEvents, searchQuery]);
 
     return (
         <div className="h-full flex flex-col">
@@ -135,6 +240,19 @@ const AdminEvents = () => {
                                 Applications
                                 {pendingApplications.length > 0 && (
                                     <span className="ml-1 px-1.5 py-0.5 bg-[#d7a444] text-white rounded-md text-[8px]">{pendingApplications.length}</span>
+                                )}
+                            </button>
+
+                            <button
+                                onClick={toggleAutoAssign}
+                                disabled={managerAutoAssignLoading || managerAutoAssignUpdating || autoAssignEnabled === null}
+                                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md transition-all whitespace-nowrap active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed
+                                ${autoAssignEnabled ? 'bg-[#d7a444] text-white shadow-[#d7a444]/10 hover:bg-[#0b2d49]' : 'bg-[#0b2d49] text-white shadow-[#0b2d49]/10 hover:bg-[#d7a444]'}`}
+                            >
+                                <Clock size={14} />
+                                Auto Assign
+                                {autoAssignEnabled !== null && (
+                                    <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[8px] ${autoAssignEnabled ? 'bg-white/20 text-white' : 'bg-[#d7a444] text-white'}`}>{autoAssignEnabled ? 'ON' : 'OFF'}</span>
                                 )}
                             </button>
                         </div>

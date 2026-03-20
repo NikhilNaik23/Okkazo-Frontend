@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from 'react-redux';
 import {
   BsCalendarEvent,
   BsGeoAlt,
@@ -15,7 +16,30 @@ import {
 } from "react-icons/bs";
 import { RiCloseLine } from "react-icons/ri";
 import { toast } from "react-hot-toast";
-import { initialBookedEvents } from "../../data/bookedEventsData";
+import {
+  acceptVendorEventRequest,
+  fetchVendorEventRequests,
+  rejectVendorEventRequest,
+  selectVendorEventRequests,
+  selectVendorEventRequestsError,
+  selectVendorEventRequestsStatus,
+} from '../../store/slices/vendorEventsSlice';
+
+const formatDayMonth = (value) => {
+  if (!value) return { day: '--', month: '---' };
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return { day: '--', month: '---' };
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = d.toLocaleString(undefined, { month: 'short' });
+  return { day, month };
+};
+
+const summarizeServiceLabel = (vendorItems = []) => {
+  const services = (Array.isArray(vendorItems) ? vendorItems : [])
+    .map((v) => v?.service)
+    .filter(Boolean);
+  return services.length > 0 ? services.join(', ') : 'Service';
+};
 
 const EventRequestsModal = ({ isOpen, onClose, requests, onAccept, onReject }) => {
   const navigate = useNavigate();
@@ -141,39 +165,79 @@ const EventRequestsModal = ({ isOpen, onClose, requests, onAccept, onReject }) =
 
 const BookedEvents = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const [searchQuery, setSearchQuery] = useState("");
   const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
-  const [bookedEventsData, setBookedEventsData] = useState(initialBookedEvents);
+
+  const requests = useSelector(selectVendorEventRequests);
+  const requestsStatus = useSelector(selectVendorEventRequestsStatus);
+  const requestsError = useSelector(selectVendorEventRequestsError);
+
+  React.useEffect(() => {
+    dispatch(fetchVendorEventRequests());
+  }, [dispatch]);
+
+  React.useEffect(() => {
+    if (requestsStatus === 'failed' && requestsError) {
+      toast.error(String(requestsError));
+    }
+  }, [requestsStatus, requestsError]);
+
+  const uiRequests = (Array.isArray(requests) ? requests : []).map((row) => {
+    const { day, month } = formatDayMonth(row?.eventDate);
+    const hasRejected = (row?.vendorItems || []).some((v) => v?.status === 'REJECTED');
+    const isPending = (row?.vendorItems || []).some((v) => v?.status === 'YET_TO_SELECT');
+
+    return {
+      id: row?.eventId,
+      title: row?.eventTitle || 'Event',
+      status: hasRejected ? 'REJECTED' : (isPending ? 'PENDING' : 'CONFIRMED'),
+      date: day,
+      month,
+      category: row?.eventType || row?.category || 'Event',
+      location: row?.locationName || 'TBA',
+      service: summarizeServiceLabel(row?.vendorItems),
+      image: row?.eventBannerUrl || '/vendor_hero.png',
+      managerUnreadCount: 0,
+    };
+  });
 
   const stats = {
-    pending: bookedEventsData.filter(e => e.status === "PENDING").length,
-    confirmed: bookedEventsData.filter(e => e.status === "CONFIRMED").length
+    pending: uiRequests.filter(e => e.status === "PENDING").length,
+    confirmed: uiRequests.filter(e => e.status === "CONFIRMED").length
   };
 
-  const filteredEvents = bookedEventsData.filter(event => {
+  const filteredEvents = uiRequests.filter(event => {
     const isConfirmed = event.status === "CONFIRMED";
     const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       event.location.toLowerCase().includes(searchQuery.toLowerCase());
     return isConfirmed && matchesSearch;
   });
 
-  const pendingRequests = bookedEventsData.filter(e => e.status === "PENDING");
+  const pendingRequests = uiRequests.filter(e => e.status === "PENDING");
 
-  const handleAccept = (eventId) => {
-    setBookedEventsData(prev => prev.map(event =>
-      event.id === eventId ? { ...event, status: "CONFIRMED" } : event
-    ));
-    toast.success("Event request accepted successfully!", {
-      style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' }
-    });
+  const handleAccept = async (eventId) => {
+    try {
+      await dispatch(acceptVendorEventRequest({ eventId })).unwrap();
+      toast.success("Event request accepted successfully!", {
+        style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' }
+      });
+      dispatch(fetchVendorEventRequests());
+    } catch (e) {
+      toast.error(String(e || 'Failed to accept request'));
+    }
   };
 
-  const handleReject = (eventId, reason) => {
-    setBookedEventsData(prev => prev.filter(event => event.id !== eventId));
-    toast.error("Event request rejected. Reason: " + reason, {
-      icon: '🚫',
-      style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' }
-    });
+  const handleReject = async (eventId, reason) => {
+    try {
+      await dispatch(rejectVendorEventRequest({ eventId, reason })).unwrap();
+      toast.error("Event request rejected. Reason: " + reason, {
+        style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' }
+      });
+      dispatch(fetchVendorEventRequests());
+    } catch (e) {
+      toast.error(String(e || 'Failed to reject request'));
+    }
   };
 
   return (
