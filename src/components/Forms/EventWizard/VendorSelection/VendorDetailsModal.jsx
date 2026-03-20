@@ -6,7 +6,7 @@ import { MdLocationOn } from 'react-icons/md';
 import ReviewsTab from './ReviewsTab';
 import { vendorHighlights } from '../../../../data/vendorSelectionData';
 
-const MAX_PRICE_MULTIPLIER = 1.25;
+const MAX_PRICE_MULTIPLIER = 1.5;
 
 const VendorDetailsModal = ({
     vendor,
@@ -47,7 +47,7 @@ const VendorDetailsModal = ({
     if (!vendor) return null;
 
     const priceMin = (vendor.priceMin || 0) * priceMultiplier;
-    const priceMax = (vendor.priceMax || Math.round((vendor.priceMin || 0) * 1.5)) * priceMultiplier;
+    const priceMax = (vendor.priceMax || Math.round((vendor.priceMin || 0) * MAX_PRICE_MULTIPLIER)) * priceMultiplier;
 
     const isPerPlate = !isVenueServiceMode && (
         String(vendor.category || '').toLowerCase().includes('catering') ||
