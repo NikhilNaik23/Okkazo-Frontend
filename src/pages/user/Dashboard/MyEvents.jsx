@@ -127,7 +127,7 @@ const mapPlanningToCardEvent = (planning, idx) => {
         if (rawStatus === 'CONFIRMED') return 'Confirmed';
         if (rawStatus === 'REJECTED') return 'Rejected';
         if (rawStatus === 'COMPLETED') return 'Live';
-        if (rawStatus === 'APPROVED') return isPublic ? 'Live' : 'Approved';
+        if (rawStatus === 'APPROVED') return 'Approved';
         return rawStatus ? rawStatus[0] + rawStatus.slice(1).toLowerCase() : 'Pending Approval';
     })();
 

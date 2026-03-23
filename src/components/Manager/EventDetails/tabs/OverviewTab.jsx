@@ -8,10 +8,51 @@ import { Badge } from '../ui';
 import { pipelineStages } from '../../../../data/managerEventDetailsData';
 import { CircleDot, ShieldCheck } from 'lucide-react';
 
-const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials }) => {
+const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, onMessageClient }) => {
     const [addingTeam, setAddingTeam] = useState(false);
     const [pickedStaffKey, setPickedStaffKey] = useState('');
     const [savingTeam, setSavingTeam] = useState(false);
+
+    const pipeline = useMemo(() => {
+        const normalizeStatus = (value) => {
+            const s = String(value || '').trim();
+            if (!s) return '';
+            return s
+                .toUpperCase()
+                .replace(/_/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        };
+
+        const status = normalizeStatus(event?.status);
+
+        // Mapping requested:
+        // - Pending_Approval -> Vendor Confirmation
+        // - Approved -> Client Review
+        // - Confirmed -> Confirmed
+        const activeStageId = (() => {
+            if (status === 'PENDING APPROVAL') return 'vendor_confirm';
+            if (status === 'APPROVED') return 'client_review';
+            if (status === 'CONFIRMED') return 'confirmed';
+
+            // Sensible fallbacks for other known statuses
+            if (status === 'DRAFT') return 'draft';
+            if (status === 'PLANNING') return 'planning';
+            if (status === 'IN REVIEW') return 'vendor_confirm';
+            if (status === 'LIVE') return 'live';
+            if (status === 'COMPLETED') return 'completed';
+
+            return 'planning';
+        })();
+
+        const activeIndex = Math.max(0, pipelineStages.findIndex((s) => s?.id === activeStageId));
+
+        return pipelineStages.map((stage, i) => ({
+            ...stage,
+            done: i < activeIndex,
+            active: i === activeIndex,
+        }));
+    }, [event?.status]);
 
     const servicesOpted = useMemo(() => {
         return Array.isArray(event?.servicesOpted) ? event.servicesOpted : [];
@@ -78,7 +119,7 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials }
                     <CircleDot className="w-5 h-5 text-teal-600" /> Event Pipeline
                 </h3>
                 <div className="flex items-center gap-0 overflow-x-auto pb-2">
-                    {pipelineStages.map((stage, i) => (
+                    {pipeline.map((stage, i) => (
                         <div key={stage.id} className="flex items-center shrink-0">
                             <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all cursor-pointer
                             ${stage.done ? 'bg-teal-50 border-teal-200 text-teal-700' :
@@ -89,7 +130,7 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials }
                                 {stage.done ? <CheckCircle className="w-4 h-4" /> : stage.active ? <Clock className="w-4 h-4 animate-pulse" /> : <div className="w-4 h-4 rounded-full border-2 border-current" />}
                                 {stage.label}
                             </div>
-                            {i < pipelineStages.length - 1 && (
+                            {i < pipeline.length - 1 && (
                                 <ChevronRight className={`w-5 h-5 mx-1 shrink-0 ${stage.done ? 'text-teal-400' : 'text-gray-300'}`} />
                             )}
                         </div>
@@ -326,7 +367,16 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials }
                             <div className="flex items-center gap-2 text-gray-600"><Mail className="w-3.5 h-3.5 text-gray-400" /> {clientEmail}</div>
                             <div className="flex items-center gap-2 text-gray-600"><Phone className="w-3.5 h-3.5 text-gray-400" /> {clientPhone}</div>
                         </div>
-                        <button onClick={() => toast.success("Opening client chat...")} className="w-full mt-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-800 transition-colors flex items-center justify-center gap-2">
+                        <button
+                            onClick={() => {
+                                if (typeof onMessageClient === 'function') {
+                                    onMessageClient();
+                                    return;
+                                }
+                                toast.success('Opening client chat...');
+                            }}
+                            className="w-full mt-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
+                        >
                             <MessageSquare className="w-4 h-4" /> Message Client
                         </button>
                     </div>

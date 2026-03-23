@@ -17,7 +17,7 @@ import StepPayment from "../../../components/Forms/EventWizard/StepPayment";
 import { myOrganizedEvents } from "../../../data/myEventsData";
 import StepTickets from "../../../components/Forms/PromoteEvent/Wizard/StepTickets";
 import StepPromote from "../../../components/Forms/PromoteEvent/Wizard/StepPromote";
-import { confirmPlanning, fetchPlanningByEventId } from "../../../store/slices/planningSlice";
+import { fetchPlanningByEventId } from "../../../store/slices/planningSlice";
 
 const _motion = motion;
 const DEFAULT_TICKET_TIER_ID = 'default-tier';
@@ -31,6 +31,7 @@ const PlanningWizard = () => {
     const [isPreviewMode, setIsPreviewMode] = useState(false);
     const [activeServiceTab, setActiveServiceTab] = useState(0); // Index of active service tab
     const [isRestoring, setIsRestoring] = useState(false);
+    const [manifestOrbitalStepId, setManifestOrbitalStepId] = useState(null);
 
     // Date calculation for minimum allowed booking (Available from Today + 6)
     const minDate = new Date();
@@ -56,7 +57,7 @@ const PlanningWizard = () => {
         totalCapacity: "",
         ticketType: "paid",
         eventDescription: "",
-        promotions: { featured: false, email: false, social: false, insights: false },
+        promotions: {},
     });
 
     const baseSteps = planningWizardSteps.map((s, idx) => ({ ...s, componentId: ['manifest', 'category', 'payment', 'vendor', 'review', 'confirmation'][idx] }));
@@ -146,7 +147,7 @@ const PlanningWizard = () => {
                         totalCapacity: "",
                         ticketType: "paid",
                         eventDescription: "",
-                        promotions: { featured: false, email: false, social: false, insights: false }
+                        promotions: {}
                     };
 
                     const mergedData = { ...defaultData, ...data };
@@ -196,14 +197,14 @@ const PlanningWizard = () => {
                 return d.toISOString().split('T')[0];
             };
 
-            const toPromotionFlags = (arr) => {
-                const values = Array.isArray(arr) ? arr.map((v) => String(v).toLowerCase()) : [];
-                return {
-                    featured: values.includes('featured'),
-                    email: values.includes('email'),
-                    social: values.includes('social'),
-                    insights: values.includes('insights'),
-                };
+            const toPromotionMap = (arr) => {
+                const values = Array.isArray(arr) ? arr : [];
+                return Object.fromEntries(
+                    values
+                        .map((v) => String(v).trim())
+                        .filter(Boolean)
+                        .map((v) => [v, true])
+                );
             };
 
             const load = async () => {
@@ -282,7 +283,7 @@ const PlanningWizard = () => {
                             services: Array.isArray(p?.selectedServices) ? p.selectedServices : [],
                             platformFeePaid: Boolean(p?.platformFeePaid) || Boolean(p?.isPaid),
                             eventDescription: p?.eventDescription || '',
-                            promotions: toPromotionFlags(p?.promotionType),
+                            promotions: toPromotionMap(p?.promotionType),
                         };
 
                         handleStepLogic(mapped);
@@ -304,26 +305,10 @@ const PlanningWizard = () => {
             setIsPreviewMode(true);
         } else {
             if (currentComponentId === 'review') {
-                try {
-                    const eventId = formData?.id;
-                    if (!eventId) throw new Error('Missing event id');
-
-                    const result = await dispatch(confirmPlanning({ eventId }));
-                    if (result.meta?.requestStatus !== 'fulfilled') {
-                        throw new Error(result.payload || result.error?.message || 'Failed to confirm planning');
-                    }
-
-                    const confirmed = result.payload;
-                    if (confirmed?.status) setFormData((prev) => ({ ...prev, status: confirmed.status }));
-
-                    setIsPreviewMode(false);
-                    setCurrentStep(prev => prev + 1);
-                    return;
-                } catch (e) {
-                    console.error('Failed to confirm planning:', e);
-                    window.alert(e?.message || 'Failed to confirm');
-                    return;
-                }
+                // Deposit payment + confirmation is handled inside StepConfirmation.
+                setIsPreviewMode(false);
+                setCurrentStep(prev => prev + 1);
+                return;
             }
 
             if (currentComponentId === 'category') {
@@ -529,6 +514,7 @@ const PlanningWizard = () => {
                                 handleAddTicket={handleAddTicket}
                                 handleRemoveTicket={handleRemoveTicket}
                                 handleTicketChange={handleTicketChange}
+                                onStepChange={setManifestOrbitalStepId}
                             />
                         )}
 
@@ -619,6 +605,7 @@ const PlanningWizard = () => {
                                             formData.guests && formData.guests > 0
                                         ))
                                     )) && (currentComponentId !== 'category' || formData.services.length > 0) && (
+                                            (currentComponentId !== 'manifest' || formData.listingType !== 'Public' || manifestOrbitalStepId === 'promote') &&
                                             <motion.button
                                                 initial={isImmersiveStep ? { opacity: 0, x: 20 } : false}
                                                 animate={{ opacity: 1, x: 0 }}

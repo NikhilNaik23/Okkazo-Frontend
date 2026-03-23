@@ -63,6 +63,8 @@ const VendorDetailsModal = ({
         return `${n.toFixed(1)} km`;
     };
 
+    const headerDistanceText = formatDistance(vendor?.distanceKm);
+
     const detailRows = isVenueServiceMode
         ? [
             { label: 'Package', value: vendor?.name || null },
@@ -113,6 +115,7 @@ const VendorDetailsModal = ({
                         <h2 className="text-4xl font-serif-premium italic mb-2 leading-tight">{vendor.name}</h2>
                         <p className="text-white/70 text-sm font-medium flex items-center gap-2 mb-4 tracking-wide uppercase text-[11px]">
                             <MdLocationOn className="text-secondary" size={16} /> {vendor.location}
+                            {headerDistanceText ? <span className="text-white/60">• {headerDistanceText} from event</span> : null}
                             {vendor.mapsUrl && (
                                 <a
                                     href={vendor.mapsUrl}

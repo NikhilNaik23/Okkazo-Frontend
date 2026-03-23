@@ -40,12 +40,10 @@ const buildPromoteFormData = (formData) => {
 
     const ticketType = (formData.ticketType || 'paid').toLowerCase() === 'free' ? 'free' : 'paid';
 
-    // Map promotion toggles → package strings expected by backend
-    const promotionArr = [];
-    if (formData.promotions?.featured) promotionArr.push('featured placement');
-    if (formData.promotions?.email)    promotionArr.push('email blast');
-    if (formData.promotions?.social)   promotionArr.push('social synergy');
-    if (formData.promotions?.insights) promotionArr.push('advanced analytics');
+    // Selected promotion values (dynamic; configured by admin)
+    const promotionArr = Object.entries(formData.promotions || {})
+        .filter(([k, v]) => Boolean(k) && v === true)
+        .map(([k]) => String(k));
 
     const jsonPayload = {
         eventTitle: formData.eventName,

@@ -49,6 +49,15 @@ const StepReview = ({ formData, onRemoveVendor }) => {
         return Math.round(unitPrice * multiplier);
     };
 
+    const getVendorLineMax = (v) => {
+        const lineMin = getVendorLineMin(v);
+        if (lineMin <= 0) return 0;
+
+        const maxMultiplier = Number(v?.maxPriceMultiplier || DEFAULT_MAX_PRICE_MULTIPLIER);
+        const safeMultiplier = Number.isFinite(maxMultiplier) && maxMultiplier > 0 ? maxMultiplier : DEFAULT_MAX_PRICE_MULTIPLIER;
+        return Math.round(lineMin * safeMultiplier);
+    };
+
     const totalMin = Object.values(formData.vendors).reduce((acc, v) => acc + getVendorLineMin(v), 0);
     const totalMax = Object.values(formData.vendors).reduce(
         (acc, v) => {
@@ -166,7 +175,7 @@ const StepReview = ({ formData, onRemoveVendor }) => {
                                         <h4 className="font-serif-premium text-xl text-primary italic leading-tight mb-4">{vendor.name}</h4>
                                         <div className="flex justify-between items-end border-t border-gray-200 pt-3">
                                             <p className="font-black text-lg text-primary">
-                                                ₹{getVendorLineMin(vendor).toLocaleString()} - ₹{Math.round(getVendorLineMin(vendor) * MAX_PRICE_MULTIPLIER).toLocaleString()}
+                                                ₹{getVendorLineMin(vendor).toLocaleString()} - ₹{getVendorLineMax(vendor).toLocaleString()}
                                             </p>
                                             {onRemoveVendor && (
                                                 <button

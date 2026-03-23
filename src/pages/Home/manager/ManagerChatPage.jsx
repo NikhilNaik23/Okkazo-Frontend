@@ -13,9 +13,36 @@ import {
 import { toast } from "react-hot-toast";
 import EmojiPicker from 'emoji-picker-react';
 import { chatContacts, chatMessages as initialMessages } from '../../../data/chatData';
+import { useSelector } from 'react-redux';
+import { selectUser } from '../../../store/slices/authSlice';
 
 const ManagerChatPage = () => {
-    const currentUserId = 'manager';
+    const user = useSelector(selectUser);
+    const accessToken = useSelector((state) => state.auth.accessToken) || localStorage.getItem('accessToken');
+
+    const decodeJwtPayload = (token) => {
+        try {
+            const parts = String(token || '').split('.');
+            if (parts.length < 2) return null;
+            const base64Url = parts[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+            const json = atob(padded);
+            return JSON.parse(json);
+        } catch {
+            return null;
+        }
+    };
+
+    const resolveAuthId = ({ user, accessToken }) => {
+        const fromUser = String(user?.authId || '').trim();
+        if (fromUser) return fromUser;
+        const payload = decodeJwtPayload(accessToken);
+        const fromToken = String(payload?.authId || payload?.sub || payload?.userId || payload?.id || '').trim();
+        return fromToken;
+    };
+
+    const currentUserId = resolveAuthId({ user, accessToken }) || 'manager';
 
     const [activeChannel, setActiveChannel] = useState(chatContacts[0]?.id || null);
     const [chatInput, setChatInput] = useState('');

@@ -1,8 +1,21 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { BsCalendar, BsGeoAlt, BsTicketPerforated, BsCurrencyRupee } from "react-icons/bs";
-import { promotePrices } from '../../../../data/promoteEventData';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+    fetchPromotionsConfig,
+    selectPromotePackages,
+    selectPromotionsConfigStatus,
+} from '../../../../store/slices/promotionsConfigSlice';
 
 const StepReview = ({ formData, platformFee = 15000, serviceChargePercent = 2.5 }) => {
+    const dispatch = useDispatch();
+    const status = useSelector(selectPromotionsConfigStatus);
+    const promotePackages = useSelector(selectPromotePackages);
+
+    useEffect(() => {
+        dispatch(fetchPromotionsConfig({ force: true }));
+    }, [dispatch]);
+
     // Calculate totals
     const totalTickets = formData.tickets.reduce((acc, t) => acc + (t.quantity || 0), 0);
     const grossRevenue = formData.tickets.reduce((acc, t) => acc + ((t.price * t.quantity) || 0), 0);
@@ -10,13 +23,31 @@ const StepReview = ({ formData, platformFee = 15000, serviceChargePercent = 2.5 
     const serviceCharge = grossRevenue * rate;
     const netRevenue = grossRevenue - serviceCharge;
 
-    // Promotion costs
-    const promoCosts = Object.keys(formData.promotions).reduce((acc, key) => {
-        if (formData.promotions[key] === true && promotePrices[key]) {
-            return acc + promotePrices[key];
+    const feeMap = useMemo(() => {
+        const map = {};
+        for (const it of (Array.isArray(promotePackages) ? promotePackages : [])) {
+            if (!it || it.active === false) continue;
+            if (typeof it.value !== 'string') continue;
+            map[it.value] = Number(it.fee ?? 0);
         }
-        return acc;
-    }, 0);
+        return map;
+    }, [promotePackages]);
+
+    const fallbackFeeMap = useMemo(() => ({
+        'featured placement': 500,
+        'email blast': 250,
+        'social synergy': 150,
+        'advanced analytics': 100,
+    }), []);
+
+    const promoCosts = useMemo(() => {
+        const selected = formData.promotions || {};
+        return Object.entries(selected).reduce((acc, [value, enabled]) => {
+            if (enabled !== true) return acc;
+            const fee = feeMap[value] ?? fallbackFeeMap[value] ?? 0;
+            return acc + (Number.isFinite(Number(fee)) ? Number(fee) : 0);
+        }, 0);
+    }, [formData.promotions, feeMap, fallbackFeeMap]);
 
     const subtotal = platformFee + promoCosts;
     const tax = subtotal * 0.05;

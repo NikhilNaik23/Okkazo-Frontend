@@ -1,23 +1,484 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { BsArrowLeft, BsChatDots, BsCheckCircleFill, BsClock, BsSend, BsFileEarmarkZip, BsDownload, BsCircle, BsTicketPerforated } from "react-icons/bs";
+import { BsArrowLeft, BsChatDots, BsCheckCircleFill, BsClock, BsSend, BsFileEarmarkZip, BsDownload, BsCircle, BsTicketPerforated, BsPaperclip } from "react-icons/bs";
 import { myOrganizedEvents } from "../../../data/myEventsData";
 import { toast, Toaster } from "react-hot-toast";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchPlanningByEventId, fetchPlanningVendorSelectionByEventId, selectPlanningVendorSelectionByEventId } from "../../../store/slices/planningSlice";
 import { fetchPromoteByEventId } from "../../../store/slices/promoteSlice";
+import { io as createSocket } from 'socket.io-client';
+import { refreshAccessToken, selectUser } from "../../../store/slices/authSlice";
+import { fetchWithAuth } from "../../../utils/apiHandler";
+import {
+    ensureEventConversation,
+    fetchConversationMessages,
+    sendConversationMessage,
+    markConversationRead,
+} from "../../../utils/chatApi";
+import { CHAT_API_BASE_URL, CHAT_SOCKET_URL } from "../../../utils/chatConfig";
+import { extractRichChatMessage, stripRichChatMessage } from "../../../utils/richChat";
+import { computeMoneyRangeFromBase } from "../../../utils/pricing";
+
+const EVENTS_API_BASE_URL = 'http://localhost:8080';
+
+const formatMoneyShort = (value) => {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n) || n <= 0) return '—';
+    if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
+    if (n >= 1000) return `₹${(n / 1000).toFixed(0)}k`;
+    return `₹${n.toFixed(0)}`;
+};
+
+const formatMoneyRangeFromBasePrice = (price, { serviceLabel, guestCount } = {}) => {
+    const range = computeMoneyRangeFromBase({
+        basePrice: price,
+        guestCount,
+        serviceLabel,
+    });
+
+    const min = Number(range?.min ?? 0);
+    const max = Number(range?.max ?? 0);
+    if (!Number.isFinite(min) || min <= 0) return '—';
+
+    const fmt = (n) => (n < 10000 ? `₹${Math.round(n)}` : formatMoneyShort(n));
+    return `${fmt(min)} – ${fmt(max)}`;
+};
+
+const formatMoneyRangeFromMinMax = (minRaw, _maxRaw, { serviceLabel, guestCount } = {}) => {
+    // For consistency, max is derived as min*1.5 (and multiplied by guestCount when per-attendee).
+    return formatMoneyRangeFromBasePrice(minRaw, { serviceLabel, guestCount });
+};
+
+const decodeJwtPayload = (token) => {
+    try {
+        const parts = String(token || '').split('.');
+        if (parts.length < 2) return null;
+        const base64Url = parts[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+        const json = atob(padded);
+        return JSON.parse(json);
+    } catch {
+        return null;
+    }
+};
+
+const resolveAuthId = ({ user, accessToken }) => {
+    const fromUser = String(user?.authId || '').trim();
+    if (fromUser) return fromUser;
+    const payload = decodeJwtPayload(accessToken);
+    const fromToken = String(payload?.authId || payload?.sub || payload?.userId || payload?.id || '').trim();
+    return fromToken;
+};
 
 const UserEventManagement = () => {
     const { eventId } = useParams();
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const user = useSelector(selectUser);
+    const accessToken = useSelector((state) => state.auth.accessToken) || localStorage.getItem('accessToken');
+    const currentUserId = resolveAuthId({ user, accessToken }) || String(user?.id || user?._id || '').trim();
     const [event, setEvent] = useState(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("overview"); // "overview" (Command Center) or "chat" (Manager Sync)
     const [chatMessage, setChatMessage] = useState("");
-    const [chatHistory, setChatHistory] = useState([
-        { sender: "manager", text: "Hello! I'm your dedicated event manager. How can I assist you today?", time: "10:00 AM" }
-    ]);
+    const [messages, setMessages] = useState([]);
+    const [conversationId, setConversationId] = useState(null);
+    const socketRef = useRef(null);
+    const fileInputRef = useRef(null);
+
+    const messagesViewportRef = useRef(null);
+    const messagesEndRef = useRef(null);
+    const stickToBottomRef = useRef(true);
+    const initialScrollDoneRef = useRef(false);
+
+    const handleMessagesScroll = () => {
+        const el = messagesViewportRef.current;
+        if (!el) return;
+        const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+        stickToBottomRef.current = distance < 140;
+    };
+
+    const scrollToBottom = (behavior = 'auto') => {
+        const el = messagesViewportRef.current;
+        if (!el) return;
+        el.scrollTo({ top: el.scrollHeight, behavior });
+    };
+
+    const [expandedAltKeys, setExpandedAltKeys] = useState({});
+    const [selectingAltKey, setSelectingAltKey] = useState(null);
+    const [lockedAltByService, setLockedAltByService] = useState({});
+    const [lockedAltServiceIdByService, setLockedAltServiceIdByService] = useState({});
+    const [lockedAltMessageIdByService, setLockedAltMessageIdByService] = useState({});
+
+    const lastAltSyncRef = useRef({});
+
+    const latestAltMessageIdByService = React.useMemo(() => {
+        const latestByService = {};
+        const list = Array.isArray(messages) ? messages : [];
+
+        const normalizeServiceKey = (value) => String(value || '').trim().toLowerCase();
+        const toTs = (m) => {
+            const raw = m?.createdAt;
+            if (raw == null) return null;
+            if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+            const t = Date.parse(String(raw));
+            return Number.isFinite(t) ? t : null;
+        };
+
+        for (let idx = 0; idx < list.length; idx++) {
+            const m = list[idx];
+            const msgId = String(m?._id || m?.id || '').trim();
+            if (!msgId) continue;
+
+            const rich = extractRichChatMessage(m?.text);
+            if (!rich || rich.kind !== 'vendorAlternatives') continue;
+
+            const payload = rich.payload && typeof rich.payload === 'object' ? rich.payload : null;
+            const serviceKey = normalizeServiceKey(payload?.serviceLabel || payload?.service || payload?.serviceCategory);
+            if (!serviceKey) continue;
+
+            const ts = toTs(m);
+            const prev = latestByService[serviceKey];
+            const shouldReplace = !prev
+                || (ts != null && (prev.ts == null || ts > prev.ts))
+                || (ts != null && prev.ts != null && ts === prev.ts && idx > prev.idx)
+                || (ts == null && prev.ts == null && idx > prev.idx);
+
+            if (shouldReplace) {
+                latestByService[serviceKey] = { id: msgId, ts, idx };
+            }
+        }
+
+        const out = {};
+        for (const [k, v] of Object.entries(latestByService)) {
+            out[k] = v.id;
+        }
+        return out;
+    }, [messages]);
+
+    const selectVendorForService = async ({ serviceLabel, vendorAuthId, serviceId, price, sourceMessageId }) => {
+        if (!eventId) return;
+
+        try {
+            const normalizedServiceId = serviceId != null && String(serviceId).trim() ? String(serviceId).trim() : null;
+            setSelectingAltKey(`${serviceLabel}:${vendorAuthId}:${normalizedServiceId || ''}`);
+
+            const servicePrice = computeMoneyRangeFromBase({
+                basePrice: price,
+                guestCount: event?.guestCount,
+                serviceLabel,
+            });
+
+            const res = await fetchWithAuth(
+                `${EVENTS_API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(eventId))}/vendors`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        service: serviceLabel,
+                        vendorAuthId,
+                        serviceId: normalizedServiceId,
+                        status: 'YET_TO_SELECT',
+                        rejectionReason: null,
+                        alternativeNeeded: false,
+                        servicePrice,
+                    }),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const json = await res.json().catch(() => null);
+            if (!res.ok || !json?.success) {
+                throw new Error(json?.message || 'Failed to select vendor');
+            }
+
+            dispatch(fetchPlanningVendorSelectionByEventId(String(eventId)));
+            setLockedAltByService((prev) => ({
+                ...prev,
+                [String(serviceLabel || '').trim().toLowerCase()]: String(vendorAuthId || '').trim(),
+            }));
+            setLockedAltServiceIdByService((prev) => ({
+                ...prev,
+                [String(serviceLabel || '').trim().toLowerCase()]: normalizedServiceId,
+            }));
+            setLockedAltMessageIdByService((prev) => ({
+                ...prev,
+                [String(serviceLabel || '').trim().toLowerCase()]: sourceMessageId != null ? String(sourceMessageId).trim() : null,
+            }));
+            toast.success('Vendor selected');
+        } catch (e) {
+            toast.error(e?.message || 'Failed to select vendor');
+        } finally {
+            setSelectingAltKey(null);
+        }
+    };
+
+    const renderRichAlternatives = (msg, isMe) => {
+        const rich = extractRichChatMessage(msg?.text);
+        if (!rich || rich.kind !== 'vendorAlternatives') return null;
+
+        const payload = rich.payload && typeof rich.payload === 'object' ? rich.payload : null;
+        const serviceLabel = String(payload?.serviceLabel || '').trim();
+        const options = Array.isArray(payload?.options) ? payload.options : [];
+        const radiusKmRaw = Number(payload?.radiusKm);
+        const radiusKm = Number.isFinite(radiusKmRaw) && radiusKmRaw > 0 ? radiusKmRaw : null;
+        if (!serviceLabel || options.length === 0) return null;
+
+        const normalizeService = (s) => String(s || '').trim().toLowerCase();
+        const normalizeServiceId = (id) => {
+            const s = id != null ? String(id).trim() : '';
+            return s || null;
+        };
+        const serviceKey = normalizeService(serviceLabel);
+        const statusForService = (() => {
+            const list = Array.isArray(planningVendorSelection?.vendors) ? planningVendorSelection.vendors : [];
+            const match = list.find((v) => normalizeService(v?.service) === serviceKey);
+            return String(match?.status || '').trim().toUpperCase();
+        })();
+        const isRejected = Boolean(statusForService) && statusForService.includes('REJECT');
+
+        const latestIdForService = latestAltMessageIdByService?.[serviceKey] || null;
+        const localLockMsgId = lockedAltMessageIdByService?.[serviceKey] != null ? String(lockedAltMessageIdByService[serviceKey]).trim() : null;
+        const isLocalLockValid = !latestIdForService ? true : (Boolean(localLockMsgId) && localLockMsgId === latestIdForService);
+
+        const lockedVendorAuthIdLocal = (isRejected || !isLocalLockValid) ? null : (lockedAltByService?.[serviceKey] || null);
+        const lockedVendorAuthIdFromStore = (() => {
+            const list = Array.isArray(planningVendorSelection?.vendors) ? planningVendorSelection.vendors : [];
+            const match = list.find((v) => normalizeService(v?.service) === serviceKey);
+            const status = String(match?.status || '').trim().toUpperCase();
+            if (status && status.includes('REJECT')) return null;
+            const id = match?.vendorAuthId != null ? String(match.vendorAuthId).trim() : '';
+            return id || null;
+        })();
+        const lockedVendorAuthId = lockedVendorAuthIdLocal || lockedVendorAuthIdFromStore || null;
+
+        const lockedServiceIdFromStore = (() => {
+            const list = Array.isArray(planningVendorSelection?.vendors) ? planningVendorSelection.vendors : [];
+            const match = list.find((v) => normalizeService(v?.service) === serviceKey);
+            const status = String(match?.status || '').trim().toUpperCase();
+            if (status && status.includes('REJECT')) return null;
+            return normalizeServiceId(match?.serviceId);
+        })();
+
+        const lockedServiceIdLocal = (isRejected || !isLocalLockValid) ? null : (lockedAltServiceIdByService?.[serviceKey] || null);
+        const lockedServiceId = lockedServiceIdLocal || lockedServiceIdFromStore || null;
+
+        const formatDistance = (km) => {
+            const n = Number(km);
+            if (!Number.isFinite(n)) return null;
+            if (n < 1) return `${Math.round(n * 1000)} m`;
+            return `${n.toFixed(1)} km`;
+        };
+
+        const isVenue = serviceKey === 'venue';
+
+        return (
+            <div className="space-y-3">
+                <div className={`text-sm font-black ${isMe ? 'text-white' : 'text-[#0b2d49]'}`}>Alternative options for {serviceLabel}</div>
+                {radiusKm != null && (
+                    <div className={`text-xs ${isMe ? 'text-white/70' : 'text-primary/60'}`}>Showing options within {radiusKm} km of the event location</div>
+                )}
+                <div className="space-y-3">
+                    {options.slice(0, 6).map((o) => {
+                        const vendorAuthId = String(o?.vendorAuthId || '').trim();
+                        const msgId = String(msg?._id || msg?.id || '').trim();
+                        const key = `${msgId}:${serviceLabel}:${vendorAuthId}`;
+                        const expanded = Boolean(expandedAltKeys[key]);
+                        const selecting = selectingAltKey === `${serviceLabel}:${vendorAuthId}:${o?.serviceId || ''}`;
+                        const latestId = latestAltMessageIdByService?.[serviceKey] || null;
+                        const isLatestForService = !msgId || !latestId ? true : latestId === msgId;
+                        const isLocked = Boolean(lockedVendorAuthId);
+                        const isSelected = isLocked && vendorAuthId && lockedVendorAuthId === vendorAuthId;
+                        const isDisabled = !vendorAuthId || selecting || !isLatestForService || (isLocked && !isSelected);
+                        const name = o?.businessName || 'Vendor';
+                        const tier = o?.tier ? String(o.tier) : '';
+                        const priceText = formatMoneyRangeFromMinMax(o?.priceMin ?? o?.price, o?.priceMax, {
+                            serviceLabel,
+                            guestCount: event?.guestCount,
+                        });
+                        const distanceText = o?.distanceText || formatDistance(o?.distanceKm);
+                        const services = Array.isArray(o?.services) ? o.services : [];
+                        const showServices = !isVenue && services.length > 0;
+                        const showExpandedPanel = expanded;
+                        const showVendorSummaryLine = !(showServices && showExpandedPanel);
+                        const locationName = (() => {
+                            const loc = o?.location;
+                            if (!loc) return '';
+                            if (typeof loc === 'string') return loc;
+                            if (typeof loc === 'object' && typeof loc?.name === 'string') return loc.name;
+                            return '';
+                        })();
+
+                        return (
+                            <div key={key} className="bg-white rounded-2xl border border-gray-100 p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <div className="font-black text-[#0b2d49] truncate">{name}</div>
+                                        {showVendorSummaryLine && (
+                                            <div className="text-[10px] font-black uppercase tracking-widest text-primary/60 mt-1">
+                                                {tier ? tier : '—'} {tier ? '• ' : ''}{priceText}
+                                            </div>
+                                        )}
+                                        {distanceText ? (
+                                            <div className="text-[10px] font-black uppercase tracking-widest text-primary/50 mt-1">{distanceText} from event</div>
+                                        ) : null}
+                                    </div>
+                                    <div className="flex gap-2 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => setExpandedAltKeys((prev) => ({ ...prev, [key]: !prev[key] }))}
+                                            className="px-3 py-2 bg-white border border-primary/10 rounded-lg text-[9px] font-black uppercase tracking-widest text-primary hover:bg-surface transition-all"
+                                        >
+                                            Explore
+                                        </button>
+                                        {isVenue ? (
+                                            <button
+                                                type="button"
+                                                disabled={isDisabled}
+                                                onClick={() => selectVendorForService({
+                                                    serviceLabel,
+                                                    vendorAuthId,
+                                                    serviceId: o?.serviceId,
+                                                    price: o?.price,
+                                                    sourceMessageId: msgId,
+                                                })}
+                                                className="px-3 py-2 bg-primary text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-primary/90 transition-all disabled:opacity-60"
+                                            >
+                                                {selecting ? 'Selecting…' : (isSelected ? 'Selected' : (isLocked || !isLatestForService ? 'Locked' : 'Select'))}
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                </div>
+
+                                {showExpandedPanel && (
+                                    <div className="mt-3 text-xs text-primary/70 space-y-1">
+                                        {(locationName || o?.country) && (
+                                            <div><span className="font-black">Location:</span> {locationName}{o?.country ? `, ${o.country}` : ''}</div>
+                                        )}
+                                        {distanceText && (
+                                            <div><span className="font-black">Distance:</span> {distanceText} from event</div>
+                                        )}
+                                        {o?.description && (
+                                            <div className="text-primary/60">{String(o.description)}</div>
+                                        )}
+
+                                        {showServices && (
+                                            <div className="pt-2">
+                                                <div className="font-black text-primary/80 mb-1 uppercase tracking-widest text-[10px]">Services</div>
+                                                <div className="space-y-2">
+                                                    {services.slice(0, 10).map((s, idx) => {
+                                                        const svcId = s?.serviceId || s?.id || `${idx}`;
+                                                        const normalizedSvcId = normalizeServiceId(svcId);
+                                                        const svcSelecting = selectingAltKey === `${serviceLabel}:${vendorAuthId}:${normalizedSvcId || ''}`;
+                                                        const svcDisabled = !normalizedSvcId || svcSelecting || !isLatestForService || (isLocked && (!isSelected || (lockedServiceId && lockedServiceId !== normalizedSvcId)));
+                                                        const svcSelected = isLocked && isSelected && lockedServiceId && lockedServiceId === normalizedSvcId;
+                                                        const svcTier = s?.tier ? String(s.tier) : '';
+                                                        const svcName = s?.name ? String(s.name) : '';
+                                                        const svcPrice = s?.price;
+                                                        return (
+                                                            <div key={String(normalizedSvcId)} className="flex items-start justify-between gap-2 border border-primary/10 rounded-xl p-3 bg-white">
+                                                                <div className="min-w-0">
+                                                                    <div className="font-black text-[#0b2d49] truncate">{svcTier || svcName || 'Service'}</div>
+                                                                    <div className="text-[9px] font-black uppercase tracking-widest text-primary/60 mt-1">
+                                                                        {svcName && svcTier ? `${svcName} • ` : ''}{formatMoneyRangeFromBasePrice(svcPrice, {
+                                                                            serviceLabel,
+                                                                            guestCount: event?.guestCount,
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={svcDisabled}
+                                                                    onClick={() => selectVendorForService({
+                                                                        serviceLabel,
+                                                                        vendorAuthId,
+                                                                        serviceId: normalizedSvcId,
+                                                                        price: svcPrice,
+                                                                        sourceMessageId: msgId,
+                                                                    })}
+                                                                    className="px-3 py-2 bg-primary text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-primary/90 transition-all disabled:opacity-60 shrink-0"
+                                                                >
+                                                                    {svcSelecting ? 'Selecting…' : (svcSelected ? 'Selected' : (isLocked || !isLatestForService ? 'Locked' : 'Select'))}
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {stripRichChatMessage(msg?.text) ? (
+                    <div className={`text-xs whitespace-pre-wrap ${isMe ? 'text-white/70' : 'text-primary/60'}`}>{stripRichChatMessage(msg?.text)}</div>
+                ) : null}
+            </div>
+        );
+    };
+
+    const resolveChatAssetUrl = (url) => {
+        if (!url) return '';
+        const s = String(url);
+        return s.startsWith('http') ? s : `${CHAT_API_BASE_URL}${s}`;
+    };
+
+    const openAttachmentWithAuth = async ({ url, filename, mimetype }) => {
+        const resolvedUrl = resolveChatAssetUrl(url);
+        if (!resolvedUrl) return;
+
+        // Cloudinary / external URLs should be opened directly (no auth header, avoids CORS preflight issues)
+        if (String(url).startsWith('http') && !resolvedUrl.startsWith(CHAT_API_BASE_URL)) {
+            window.open(resolvedUrl, '_blank', 'noopener,noreferrer');
+            return;
+        }
+
+        try {
+            const res = await fetchWithAuth(
+                resolvedUrl,
+                { method: 'GET' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            if (!res.ok) {
+                const msg = await res.text().catch(() => '');
+                throw new Error(msg || `Failed to open attachment (${res.status})`);
+            }
+
+            const blob = await res.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const safeName = String(filename || 'attachment');
+            const type = String(mimetype || res.headers.get('content-type') || '').toLowerCase();
+            const isPreviewable = type.startsWith('image/') || type.includes('pdf') || type.startsWith('text/');
+
+            if (isPreviewable) {
+                const win = window.open(objectUrl, '_blank', 'noopener,noreferrer');
+                if (!win) {
+                    const a = document.createElement('a');
+                    a.href = objectUrl;
+                    a.download = safeName;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                }
+            } else {
+                const a = document.createElement('a');
+                a.href = objectUrl;
+                a.download = safeName;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            }
+
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+        } catch (e) {
+            toast.error(e?.message || 'Unable to open attachment');
+        }
+    };
 
     useEffect(() => {
         let cancelled = false;
@@ -119,6 +580,57 @@ const UserEventManagement = () => {
     });
 
     useEffect(() => {
+        const list = Array.isArray(planningVendorSelection?.vendors) ? planningVendorSelection.vendors : [];
+        const rejectedKeys = list
+            .map((v) => {
+                const serviceKey = String(v?.service || '').trim().toLowerCase();
+                const status = String(v?.status || '').trim().toUpperCase();
+                if (!serviceKey) return null;
+                if (!status || !status.includes('REJECT')) return null;
+                return serviceKey;
+            })
+            .filter(Boolean);
+
+        if (rejectedKeys.length === 0) return;
+
+        setLockedAltByService((prev) => {
+            let changed = false;
+            const next = { ...prev };
+            for (const k of rejectedKeys) {
+                if (next[k] != null) {
+                    delete next[k];
+                    changed = true;
+                }
+            }
+            return changed ? next : prev;
+        });
+
+        setLockedAltServiceIdByService((prev) => {
+            let changed = false;
+            const next = { ...prev };
+            for (const k of rejectedKeys) {
+                if (next[k] != null) {
+                    delete next[k];
+                    changed = true;
+                }
+            }
+            return changed ? next : prev;
+        });
+
+        setLockedAltMessageIdByService((prev) => {
+            let changed = false;
+            const next = { ...prev };
+            for (const k of rejectedKeys) {
+                if (next[k] != null) {
+                    delete next[k];
+                    changed = true;
+                }
+            }
+            return changed ? next : prev;
+        });
+    }, [planningVendorSelection]);
+
+    useEffect(() => {
         if (!planningVendorSelection) return;
         setEvent((prev) => {
             if (!prev || String(prev?.kind || '').toUpperCase() !== 'PLANNING') return prev;
@@ -146,18 +658,171 @@ const UserEventManagement = () => {
         });
     }, [planningVendorSelection]);
 
-    const handleSendMessage = (e) => {
+    useEffect(() => {
+        if (activeTab !== 'chat') return;
+        if (!eventId) return;
+
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const convo = await ensureEventConversation({ eventId, dispatch, refreshAction: refreshAccessToken });
+                const convoId = String(convo?._id || convo?.id || '').trim();
+                if (!convoId) throw new Error('Invalid conversation');
+                if (cancelled) return;
+                setConversationId(convoId);
+
+                const msgs = await fetchConversationMessages({ conversationId: convoId, limit: 200, dispatch, refreshAction: refreshAccessToken });
+                if (cancelled) return;
+                setMessages(msgs);
+
+                markConversationRead({ conversationId: convoId, dispatch, refreshAction: refreshAccessToken }).catch(() => {});
+            } catch (e) {
+                toast.error(e?.message || 'Failed to load chat');
+            }
+        };
+
+        load();
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab, eventId, dispatch]);
+
+    useEffect(() => {
+        if (activeTab !== 'chat') return;
+        if (!conversationId || !accessToken) return;
+
+        const socket = createSocket(CHAT_SOCKET_URL, {
+            auth: { token: accessToken },
+            transports: ['websocket', 'polling'],
+        });
+
+        socketRef.current = socket;
+
+        socket.on('connect', () => {
+            socket.emit('conversation:join', { conversationId });
+        });
+
+        socket.on('message:new', (msg) => {
+            const msgId = String(msg?._id || msg?.id || '');
+            setMessages((prev) => {
+                if (msgId && prev.some((m) => String(m?._id || m?.id || '') === msgId)) return prev;
+                return [...prev, msg];
+            });
+
+            // If this is an alternatives message, refresh vendor-selection state immediately.
+            // Otherwise the UI may still think a previous vendor is selected and show "Locked" until a full refresh.
+            try {
+                const rich = extractRichChatMessage(msg?.text);
+                if (rich?.kind === 'vendorAlternatives') {
+                    const payload = rich.payload && typeof rich.payload === 'object' ? rich.payload : null;
+                    const serviceKey = String(payload?.serviceLabel || payload?.service || '').trim().toLowerCase();
+                    const planningEventId = String(event?.id || eventId || '').trim();
+                    if (planningEventId) {
+                        const prev = lastAltSyncRef.current || {};
+                        const lastMsgId = prev[serviceKey || '_all'] || null;
+                        if (!msgId || lastMsgId !== msgId) {
+                            lastAltSyncRef.current = { ...prev, [serviceKey || '_all']: msgId || String(Date.now()) };
+                            dispatch(fetchPlanningVendorSelectionByEventId(planningEventId));
+                        }
+                    }
+                }
+            } catch {
+                // ignore
+            }
+
+            if (String(msg?.senderAuthId || '') !== currentUserId) {
+                socket.emit('messages:read', { conversationId });
+                markConversationRead({ conversationId, dispatch, refreshAction: refreshAccessToken }).catch(() => {});
+            }
+        });
+
+        socket.on('messages:read', ({ conversationId: convoId, authId } = {}) => {
+            const readerAuthId = String(authId || '').trim();
+            if (!readerAuthId) return;
+            if (String(convoId || '').trim() !== String(conversationId)) return;
+
+            setMessages((prev) => prev.map((m) => {
+                const sender = String(m?.senderAuthId || '').trim();
+                if (!sender || sender === readerAuthId) return m;
+                const readBy = Array.isArray(m?.readBy) ? m.readBy.map(String) : [];
+                if (readBy.includes(readerAuthId)) return m;
+                return { ...m, readBy: [...readBy, readerAuthId] };
+            }));
+        });
+
+        return () => {
+            socket.disconnect();
+            socketRef.current = null;
+        };
+    }, [activeTab, conversationId, accessToken, currentUserId, dispatch, eventId, event?.id]);
+
+    useEffect(() => {
+        if (activeTab !== 'chat') return;
+        if (!conversationId) return;
+        stickToBottomRef.current = true;
+        initialScrollDoneRef.current = false;
+    }, [activeTab, conversationId]);
+
+    useEffect(() => {
+        if (activeTab !== 'chat') return;
+        if (!conversationId) return;
+        if (!messages.length) return;
+        if (!stickToBottomRef.current) return;
+
+        const behavior = initialScrollDoneRef.current ? 'smooth' : 'auto';
+        requestAnimationFrame(() => scrollToBottom(behavior));
+        initialScrollDoneRef.current = true;
+    }, [activeTab, conversationId, messages.length]);
+
+    const handleSendMessage = async (e) => {
         e.preventDefault();
-        if (!chatMessage.trim()) return;
-        setChatHistory([...chatHistory, { sender: "user", text: chatMessage, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
-        setChatMessage("");
-        setTimeout(() => {
-            setChatHistory(prev => [...prev, {
-                sender: "manager",
-                text: "Thank you for your message. I'm looking into that for you.",
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            }]);
-        }, 2000);
+        if (!chatMessage.trim() || !conversationId) return;
+
+        try {
+            const data = await sendConversationMessage({
+                conversationId,
+                text: chatMessage.trim(),
+                dispatch,
+                refreshAction: refreshAccessToken,
+            });
+
+            setChatMessage("");
+
+            if (!socketRef.current?.connected) {
+                setMessages((prev) => [...prev, data]);
+            }
+        } catch (err) {
+            toast.error(err?.message || 'Failed to send message');
+        }
+    };
+
+    const handleAttachClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = async (e) => {
+        const fileList = Array.from(e.target.files || []);
+        if (!fileList.length || !conversationId) return;
+
+        try {
+            const data = await sendConversationMessage({
+                conversationId,
+                text: chatMessage.trim(),
+                files: fileList,
+                dispatch,
+                refreshAction: refreshAccessToken,
+            });
+
+            setChatMessage('');
+
+            if (!socketRef.current?.connected) {
+                setMessages((prev) => [...prev, data]);
+            }
+        } catch (err) {
+            toast.error(err?.message || 'Failed to upload');
+        } finally {
+            e.target.value = '';
+        }
     };
 
     if (loading) {
@@ -521,14 +1186,16 @@ const UserEventManagement = () => {
 
                 {activeTab === "chat" && (
                     <div className="bg-white rounded-4xl shadow-sm border border-primary/5 overflow-hidden flex flex-col h-175 animate-fade-in-up">
-                        {isPendingApproval ? (
+                        {!hasManagerAssigned || isRejected ? (
                             <div className="flex-1 flex flex-col items-center justify-center p-8 text-center opacity-60">
                                 <div className="w-24 h-24 bg-surface rounded-full flex items-center justify-center mb-8 text-primary">
                                     <BsChatDots size={40} />
                                 </div>
                                 <h3 className="text-2xl font-serif-premium text-[#0b2d49] mb-3">Sync Unavailable</h3>
                                 <p className="text-sm text-primary max-w-sm leading-relaxed">
-                                    Manager Sync will be unlocked once your event passes the Admin Review stage.
+                                    {!hasManagerAssigned
+                                        ? 'Manager Sync will be unlocked once a manager is assigned to your event.'
+                                        : 'This event is not eligible for Manager Sync.'}
                                 </p>
                             </div>
                         ) : (
@@ -536,29 +1203,91 @@ const UserEventManagement = () => {
                                 <div className="p-8 border-b border-primary/10 flex items-center justify-between bg-surface/30">
                                     <div>
                                         <h3 className="font-serif-premium text-xl text-[#0b2d49]">Manager Sync</h3>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/50">Direct Line • Sarah Jenkins</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/50">
+                                            Direct Line • Event Manager
+                                        </p>
                                     </div>
                                     <Link to="#" className="px-4 py-2 bg-white border border-primary/10 rounded-lg text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary hover:text-white transition-all">
                                         View Profile
                                     </Link>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-surface">
+                                <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-surface" ref={messagesViewportRef} onScroll={handleMessagesScroll}>
                                     <div className="flex justify-center mb-8">
                                         <span className="px-4 py-1.5 bg-surface text-primary/60 text-[9px] font-bold rounded-full uppercase tracking-widest">Today</span>
                                     </div>
-                                    {chatHistory.map((msg, index) => (
-                                        <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[60%] p-5 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.sender === 'user' ? 'bg-primary text-white rounded-br-none' : 'bg-white text-[#0b2d49] border border-gray-100 rounded-bl-none'}`}>
-                                                <p>{msg.text}</p>
-                                                <p className={`text-[9px] mt-2 font-bold uppercase tracking-widest text-right ${msg.sender === 'user' ? 'text-white/60' : 'text-gray-300'}`}>{msg.time}</p>
+                                    {messages.map((msg, idx) => {
+                                        const msgId = String(msg?._id || msg?.id || idx);
+                                        const isMe = String(msg?.senderAuthId || msg?.senderId || '') === currentUserId;
+                                        const dt = msg?.createdAt ? new Date(msg.createdAt) : null;
+                                        const time = dt && !Number.isNaN(dt.getTime())
+                                            ? dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                            : '';
+                                        const attachments = Array.isArray(msg?.attachments) ? msg.attachments : [];
+
+                                        return (
+                                            <div key={msgId} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                                <div className={`max-w-[60%] p-5 rounded-2xl text-sm leading-relaxed shadow-sm ${isMe ? 'bg-primary text-white rounded-br-none' : 'bg-white text-[#0b2d49] border border-gray-100 rounded-bl-none'}`}>
+                                                    {renderRichAlternatives(msg, isMe) || (msg?.text ? <p>{msg.text}</p> : null)}
+                                                    {attachments.length > 0 && (
+                                                        <div className="mt-3 space-y-2">
+                                                            {attachments.map((a) => {
+                                                                const url = a?.url;
+                                                                const name = a?.originalName || a?.filename || 'Attachment';
+                                                                const type = (a?.mimetype || '').toLowerCase();
+                                                                const resolvedUrl = resolveChatAssetUrl(url);
+                                                                const isImage = type.startsWith('image/') || (resolvedUrl && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(resolvedUrl));
+                                                                if (!url) return null;
+
+                                                                return isImage ? (
+                                                                    <button
+                                                                        key={`${String(url)}-${name}`}
+                                                                        type="button"
+                                                                        onClick={() => openAttachmentWithAuth({ url, filename: name, mimetype: type })}
+                                                                        className="block"
+                                                                        title="Open image"
+                                                                    >
+                                                                        <img src={resolvedUrl} alt={name} className="max-h-60 rounded-xl border border-black/5" />
+                                                                    </button>
+                                                                ) : (
+                                                                    <button
+                                                                        key={`${String(url)}-${name}`}
+                                                                        type="button"
+                                                                        onClick={() => openAttachmentWithAuth({ url, filename: name, mimetype: type })}
+                                                                        className={`block text-left text-xs font-black uppercase tracking-widest underline underline-offset-4 ${isMe ? 'text-white/80' : 'text-primary/60'}`}
+                                                                        title="Open attachment"
+                                                                    >
+                                                                        {name}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                    <p className={`text-[9px] mt-2 font-bold uppercase tracking-widest text-right ${isMe ? 'text-white/60' : 'text-gray-300'}`}>{time}</p>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
+                                    <div ref={messagesEndRef} />
                                 </div>
 
                                 <div className="p-6 bg-white border-t border-primary/10">
                                     <form onSubmit={handleSendMessage} className="flex gap-4 relative">
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            multiple
+                                            onChange={handleFileChange}
+                                            className="hidden"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleAttachClick}
+                                            className="w-12 bg-surface text-primary rounded-2xl flex items-center justify-center hover:bg-surface/80 transition-all"
+                                            title="Attach files"
+                                        >
+                                            <BsPaperclip size={16} />
+                                        </button>
                                         <input
                                             type="text"
                                             value={chatMessage}
