@@ -61,7 +61,9 @@ const isSupportedGoogleMapsUrl = (rawUrl) => {
     const pathname = String(url.pathname || '').toLowerCase();
 
     // Accept standard Google Maps URLs only (matches links we generate from "Use current location")
-    const isGoogle = hostname === 'www.google.com' || hostname.endsWith('.google.com');
+    // Accept google.<tld> (e.g. google.com, google.co.in, google.co.uk) and subdomains.
+    // This blocks lookalikes like evilgoogle.co.in.
+    const isGoogle = /(^|\.)google\.[a-z.]+$/.test(hostname);
     const isMapsPath = pathname.startsWith('/maps');
     if (!isGoogle || !isMapsPath) return false;
 

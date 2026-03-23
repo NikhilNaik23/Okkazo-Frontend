@@ -257,6 +257,7 @@ const UserEventManagement = () => {
             const match = list.find((v) => normalizeService(v?.service) === serviceKey);
             const status = String(match?.status || '').trim().toUpperCase();
             if (status && status.includes('REJECT')) return null;
+            if (match?.alternativeNeeded === true) return null;
             const id = match?.vendorAuthId != null ? String(match.vendorAuthId).trim() : '';
             return id || null;
         })();
@@ -267,6 +268,7 @@ const UserEventManagement = () => {
             const match = list.find((v) => normalizeService(v?.service) === serviceKey);
             const status = String(match?.status || '').trim().toUpperCase();
             if (status && status.includes('REJECT')) return null;
+            if (match?.alternativeNeeded === true) return null;
             return normalizeServiceId(match?.serviceId);
         })();
 
@@ -292,15 +294,27 @@ const UserEventManagement = () => {
                     {options.slice(0, 6).map((o) => {
                         const vendorAuthId = String(o?.vendorAuthId || '').trim();
                         const msgId = String(msg?._id || msg?.id || '').trim();
-                        const key = `${msgId}:${serviceLabel}:${vendorAuthId}`;
+                        const optionServiceId = normalizeServiceId(o?.serviceId);
+                        const key = `${msgId}:${serviceLabel}:${vendorAuthId}:${optionServiceId || ''}`;
                         const expanded = Boolean(expandedAltKeys[key]);
-                        const selecting = selectingAltKey === `${serviceLabel}:${vendorAuthId}:${o?.serviceId || ''}`;
+                        const selecting = selectingAltKey === `${serviceLabel}:${vendorAuthId}:${optionServiceId || ''}`;
                         const latestId = latestAltMessageIdByService?.[serviceKey] || null;
                         const isLatestForService = !msgId || !latestId ? true : latestId === msgId;
                         const isLocked = Boolean(lockedVendorAuthId);
-                        const isSelected = isLocked && vendorAuthId && lockedVendorAuthId === vendorAuthId;
+                        const isSelected = isLocked
+                            && vendorAuthId
+                            && lockedVendorAuthId === vendorAuthId
+                            && (!lockedServiceId || !optionServiceId || lockedServiceId === optionServiceId);
                         const isDisabled = !vendorAuthId || selecting || !isLatestForService || (isLocked && !isSelected);
-                        const name = o?.businessName || 'Vendor';
+                        const displayName = isVenue ? (o?.name || o?.businessName || 'Venue') : (o?.businessName || 'Vendor');
+                        const displayVendorName = isVenue
+                            && o?.businessName
+                            && o?.name
+                            && String(o.name).trim()
+                            && String(o.businessName).trim()
+                            && String(o.name).trim() !== String(o.businessName).trim()
+                            ? String(o.businessName).trim()
+                            : null;
                         const tier = o?.tier ? String(o.tier) : '';
                         const priceText = formatMoneyRangeFromMinMax(o?.priceMin ?? o?.price, o?.priceMax, {
                             serviceLabel,
@@ -323,7 +337,12 @@ const UserEventManagement = () => {
                             <div key={key} className="bg-white rounded-2xl border border-gray-100 p-4">
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0">
-                                        <div className="font-black text-[#0b2d49] truncate">{name}</div>
+                                        <div className="font-black text-[#0b2d49] truncate">{displayName}</div>
+                                        {displayVendorName ? (
+                                            <div className="text-[10px] font-black uppercase tracking-widest text-primary/50 mt-1">
+                                                {displayVendorName}
+                                            </div>
+                                        ) : null}
                                         {showVendorSummaryLine && (
                                             <div className="text-[10px] font-black uppercase tracking-widest text-primary/60 mt-1">
                                                 {tier ? tier : '—'} {tier ? '• ' : ''}{priceText}

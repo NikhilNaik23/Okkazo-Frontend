@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom';
-import { 
-    CheckCircle, Clock, XCircle, MapPin, Star, RefreshCw, Send, 
-    FileCheck, MessageSquare 
+import {
+    CheckCircle, Clock, XCircle, MapPin, Star, RefreshCw, Send,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import {
@@ -71,8 +70,6 @@ const buildAlternativesMessage = ({ serviceLabel, alternatives = [], radiusKm } 
 };
 
 const normalizeVendorSlotServicePrice = ({ price, min, guestCount, serviceLabel } = {}) => {
-    // For consistency, we derive max as min*1.5 and multiply by guestCount where per-attendee.
-    // Prefer `price` (unit/base) then fallback to `min`.
     return computeMoneyRangeFromBase({
         basePrice: price ?? min,
         guestCount,
@@ -89,9 +86,7 @@ const VendorsTab = () => {
     const vendorSelectionError = useSelector((state) => state?.planning?.vendorSelectionError);
 
     const [showAlternatives, setShowAlternatives] = useState(null);
-
     const [alternativesByKey, setAlternativesByKey] = useState({});
-
     const [guestCountForPricing, setGuestCountForPricing] = useState(null);
 
     const selectVendorForService = async ({ service, vendorAuthId, serviceId, price }) => {
@@ -166,7 +161,13 @@ const VendorsTab = () => {
         } catch (e) {
             setAlternativesByKey((prev) => ({
                 ...prev,
-                [cardKey]: { status: 'failed', error: e?.message || 'Failed to load alternatives', service, alternatives: [], vendorProfiles: [] },
+                [cardKey]: {
+                    status: 'failed',
+                    error: e?.message || 'Failed to load alternatives',
+                    service,
+                    alternatives: [],
+                    vendorProfiles: [],
+                },
             }));
         }
     };
@@ -186,7 +187,6 @@ const VendorsTab = () => {
 
             const altList = Array.isArray(alternatives) ? alternatives : [];
 
-            // Enrich alternatives with vendor profile details if present.
             const profileByAuthId = new Map(
                 (Array.isArray(vendorProfiles) ? vendorProfiles : [])
                     .map((p) => [String(p?.authId || '').trim(), p])
@@ -216,6 +216,7 @@ const VendorsTab = () => {
                     return {
                         vendorAuthId: vendorAuthId || null,
                         serviceId: a?.serviceId || null,
+                        name: a?.name || null,
                         businessName: a?.businessName || profile?.businessName || 'Vendor',
                         tier: a?.tier || null,
                         price: a?.price != null ? Number(a.price) : null,
@@ -225,14 +226,14 @@ const VendorsTab = () => {
                         distanceKm: a?.distanceKm != null ? Number(a.distanceKm) : null,
                         distanceText: a?.distanceText || null,
                         services,
-                        location: profile?.location || profile?.place || null,
+                        // Prefer per-option (service-level) location when present.
+                        location: a?.location || profile?.location || profile?.place || null,
                         country: profile?.country || null,
                         description: profile?.description || a?.description || null,
                     };
                 })
                 .filter((o) => o.vendorAuthId);
 
-            // Match backend auto-send behavior: only show a radius when geo distances exist.
             const derivedRadiusKm = options.some((o) => Number.isFinite(Number(o?.distanceKm)))
                 ? DEFAULT_VENDOR_RADIUS_KM
                 : null;
@@ -353,13 +354,8 @@ const VendorsTab = () => {
         return { bg: 'bg-red-50 border-red-200', text: 'text-red-700', label: '❌ Unavailable', icon: XCircle };
     };
 
-    const handleReplaceVendor = () => {
-        toast('Select this vendor from the alternatives list');
-    };
-
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="flex justify-between items-center">
                 <div>
                     <h3 className="text-xl font-bold text-gray-900">Vendor Management</h3>
@@ -373,9 +369,6 @@ const VendorsTab = () => {
                         className="px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                     >
                         <RefreshCw className="w-4 h-4" /> Refresh
-                    </button>
-                    <button onClick={() => toast.success("Vendor summary sent to client!")} className="px-4 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-bold hover:bg-teal-700 shadow-lg shadow-teal-900/20 flex items-center gap-2">
-                        <Send className="w-4 h-4" /> Send to Client
                     </button>
                 </div>
             </div>
@@ -393,19 +386,18 @@ const VendorsTab = () => {
                 </div>
             )}
 
-            {/* Summary Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Total Vendors</p>
                     <p className="text-2xl font-extrabold text-gray-900 mt-1">{vendors.length}</p>
                 </div>
                 <div className="bg-green-50 p-4 rounded-xl border border-green-100 shadow-sm">
-                    <p className="text-xs font-bold text-green-600 uppercase tracking-wide">Confirmed</p>
-                    <p className="text-2xl font-extrabold text-green-700 mt-1">{vendors.filter(v => v.availability === 'available').length}</p>
+                    <p className="text-xs font-bold text-green-600 uppercase tracking-wide">Accepted</p>
+                    <p className="text-2xl font-extrabold text-green-700 mt-1">{vendors.filter((v) => v.availability === 'available').length}</p>
                 </div>
                 <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 shadow-sm">
                     <p className="text-xs font-bold text-amber-600 uppercase tracking-wide">Pending</p>
-                    <p className="text-2xl font-extrabold text-amber-700 mt-1">{vendors.filter(v => v.availability === 'pending').length}</p>
+                    <p className="text-2xl font-extrabold text-amber-700 mt-1">{vendors.filter((v) => v.availability === 'pending').length}</p>
                 </div>
                 <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Total Cost</p>
@@ -417,7 +409,6 @@ const VendorsTab = () => {
                 </div>
             </div>
 
-            {/* Vendor Cards */}
             <div className="space-y-4">
                 {vendors.map((vendor) => {
                     const badge = getAvailabilityBadge(vendor.availability);
@@ -426,14 +417,16 @@ const VendorsTab = () => {
                         vendor.serviceCategory &&
                         String(vendor.serviceCategory).trim() &&
                         String(vendor.serviceCategory).trim().toLowerCase() !== String(vendor.category || '').trim().toLowerCase();
+
                     return (
                         <div key={vendor.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                             <div className="p-6">
                                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                                    {/* Vendor Info */}
                                     <div className="flex items-center gap-4 flex-1">
-                                        <div className={`w-14 h-14 rounded-xl flex items-center justify-center font-bold text-lg text-white shadow-md
-                                            ${vendor.color === 'blue' ? 'bg-blue-500' : vendor.color === 'orange' ? 'bg-orange-500' : 'bg-purple-500'}`}>
+                                        <div
+                                            className={`w-14 h-14 rounded-xl flex items-center justify-center font-bold text-lg text-white shadow-md
+                                            ${vendor.color === 'blue' ? 'bg-blue-500' : vendor.color === 'orange' ? 'bg-orange-500' : 'bg-purple-500'}`}
+                                        >
                                             {vendor.icon}
                                         </div>
                                         <div className="flex-1">
@@ -463,7 +456,6 @@ const VendorsTab = () => {
                                         </div>
                                     </div>
 
-                                    {/* Pricing */}
                                     <div className="text-right shrink-0">
                                         <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Quoted Price</p>
                                         <p className="text-xl font-extrabold text-gray-900">
@@ -473,7 +465,6 @@ const VendorsTab = () => {
                                         </p>
                                     </div>
 
-                                    {/* Actions */}
                                     <div className="flex gap-2 shrink-0">
                                         {vendor.availability === 'unavailable' && (
                                             <button
@@ -499,23 +490,10 @@ const VendorsTab = () => {
                                                 <CheckCircle className="w-4 h-4" /> Accepted
                                             </span>
                                         )}
-                                        <button
-                                            onClick={() => toast.success("Contract downloaded")}
-                                            className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors"
-                                        >
-                                            <FileCheck className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => toast.success("Opening vendor chat...")}
-                                            className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors"
-                                        >
-                                            <MessageSquare className="w-4 h-4" />
-                                        </button>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Alternatives Panel */}
                             {showAlternatives === vendor.id && (
                                 <div className="border-t border-gray-100 bg-amber-50/30 p-6">
                                     <div className="flex items-center justify-between mb-4">
@@ -533,6 +511,7 @@ const VendorsTab = () => {
                                             <Send className="w-3.5 h-3.5" /> Send Options to Client
                                         </button>
                                     </div>
+
                                     {altState?.status === 'loading' && (
                                         <div className="bg-white rounded-xl p-4 border border-gray-200">
                                             <p className="text-sm text-gray-700 font-medium">Loading alternatives…</p>
@@ -563,19 +542,24 @@ const VendorsTab = () => {
                                                     <div key={alt.serviceId || alt.vendorAuthId} className="bg-white rounded-xl p-4 border border-gray-200 hover:border-teal-300 hover:shadow-md transition-all group">
                                                         <div className="flex items-center gap-3 mb-3">
                                                             <div className="w-10 h-10 bg-teal-100 text-teal-700 rounded-lg flex items-center justify-center font-bold text-sm">
-                                                                {String(alt?.businessName || 'VN').substring(0, 2).toUpperCase()}
+                                                                {String(alt?.name || alt?.businessName || 'VN').substring(0, 2).toUpperCase()}
                                                             </div>
                                                             <div>
-                                                                <p className="font-bold text-gray-900">{alt?.businessName || 'Vendor'}</p>
+                                                                <p className="font-bold text-gray-900">{alt?.name || alt?.businessName || 'Vendor'}</p>
                                                                 <div className="flex items-center gap-2 text-xs text-gray-500">
                                                                     <span className="text-green-600 font-bold">Available</span>
                                                                     {alt?.tier && <span className="text-gray-400">•</span>}
                                                                     {alt?.tier && <span className="font-bold text-gray-600">{alt.tier}</span>}
                                                                 </div>
+                                                                {alt?.location && (
+                                                                    <div className="mt-1 text-xs text-gray-500 font-medium flex items-center gap-1">
+                                                                        <MapPin className="w-3.5 h-3.5" /> {alt.location}
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </div>
                                                         <div className="flex justify-between items-center">
-                                                            <p className="font-extrabold text-gray-900">{formatMoneyRangeFromBasePrice(alt?.price)}</p>
+                                                            <p className="font-extrabold text-gray-900">{formatMoneyRangeFromBasePrice(alt?.price, { serviceLabel: vendor.service, guestCount: guestCountForPricing })}</p>
                                                             <button
                                                                 onClick={() => selectVendorForService({
                                                                     service: vendor.service,
