@@ -678,6 +678,7 @@ const ChatTab = ({ eventId, client }) => {
             const match = list.find((v) => normalizeService(v?.service) === serviceKey);
             const status = String(match?.status || '').trim().toUpperCase();
             if (status && status.includes('REJECT')) return null;
+            if (match?.alternativeNeeded === true) return null;
             const id = match?.vendorAuthId != null ? String(match.vendorAuthId).trim() : '';
             return id || null;
         })();
@@ -688,6 +689,7 @@ const ChatTab = ({ eventId, client }) => {
             const match = list.find((v) => normalizeService(v?.service) === serviceKey);
             const status = String(match?.status || '').trim().toUpperCase();
             if (status && status.includes('REJECT')) return null;
+            if (match?.alternativeNeeded === true) return null;
             return normalizeServiceId(match?.serviceId);
         })();
 
@@ -712,15 +714,27 @@ const ChatTab = ({ eventId, client }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {options.slice(0, 6).map((o) => {
                         const vendorAuthId = String(o?.vendorAuthId || '').trim();
-                        const key = `${msgId}:${serviceLabel}:${vendorAuthId}`;
+                        const optionServiceId = normalizeServiceId(o?.serviceId);
+                        const key = `${msgId}:${serviceLabel}:${vendorAuthId}:${optionServiceId || ''}`;
                         const expanded = Boolean(expandedAltKeys[key]);
-                        const selecting = selectingAltKey === `${serviceLabel}:${vendorAuthId}:${o?.serviceId || ''}`;
+                        const selecting = selectingAltKey === `${serviceLabel}:${vendorAuthId}:${optionServiceId || ''}`;
                         const latestId = latestAltMessageIdByService?.[serviceKey] || null;
                         const isLatestForService = !msgId || !latestId ? true : latestId === msgId;
                         const isLocked = Boolean(lockedVendorAuthId);
-                        const isSelected = isLocked && vendorAuthId && lockedVendorAuthId === vendorAuthId;
+                        const isSelected = isLocked
+                            && vendorAuthId
+                            && lockedVendorAuthId === vendorAuthId
+                            && (!lockedServiceId || !optionServiceId || lockedServiceId === optionServiceId);
                         const isDisabled = !vendorAuthId || selecting || !isLatestForService || (isLocked && !isSelected);
-                        const name = o?.businessName || 'Vendor';
+                        const displayName = isVenue ? (o?.name || o?.businessName || 'Venue') : (o?.businessName || 'Vendor');
+                        const displayVendorName = isVenue
+                            && o?.businessName
+                            && o?.name
+                            && String(o.name).trim()
+                            && String(o.businessName).trim()
+                            && String(o.name).trim() !== String(o.businessName).trim()
+                            ? String(o.businessName).trim()
+                            : null;
                         const tier = o?.tier ? String(o.tier) : '';
                         const priceText = formatMoneyRangeFromMinMax(o?.priceMin ?? o?.price, o?.priceMax, { serviceLabel });
                         const distanceText = o?.distanceText || formatDistance(o?.distanceKm);
@@ -740,7 +754,10 @@ const ChatTab = ({ eventId, client }) => {
                             <div key={key} className="bg-white rounded-xl border border-gray-200 p-3 text-gray-900">
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0">
-                                        <div className="font-extrabold truncate">{name}</div>
+                                        <div className="font-extrabold truncate">{displayName}</div>
+                                        {displayVendorName ? (
+                                            <div className="text-[11px] font-bold text-gray-500 mt-0.5">{displayVendorName}</div>
+                                        ) : null}
                                         {showVendorSummaryLine && (
                                             <div className="text-xs font-bold text-gray-500 mt-0.5">
                                                 {tier ? tier : '—'} {tier ? '• ' : ''}{priceText}
