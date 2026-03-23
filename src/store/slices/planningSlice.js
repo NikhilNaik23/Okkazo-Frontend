@@ -348,6 +348,33 @@ export const fetchPlanningByEventId = createAsyncThunk(
     }
 );
 
+// ─── Planning: fetch latest locked quote snapshot ─────────────────────────
+
+export const fetchPlanningQuoteLatest = createAsyncThunk(
+    'planning/fetchPlanningQuoteLatest',
+    async (eventId, { dispatch, rejectWithValue }) => {
+        try {
+            if (!eventId) return rejectWithValue('Event ID is required');
+
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(eventId))}/quote/latest`,
+                { method: 'GET' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                const msg = data?.message || 'Failed to load quote';
+                return rejectWithValue(msg);
+            }
+
+            return { eventId, quote: data.data };
+        } catch (error) {
+            return rejectWithValue(error.message || 'Failed to load quote');
+        }
+    }
+);
+
 // ─── Planning: fetch vendor selection by eventId ───────────────────────────
 
 export const fetchPlanningVendorSelectionByEventId = createAsyncThunk(
@@ -428,6 +455,10 @@ const planningSlice = createSlice({
         vendorSelectionStatus: 'idle', // idle | loading | succeeded | failed
         vendorSelectionByEventId: {},
         vendorSelectionError: null,
+
+        quoteLatestStatus: 'idle', // idle | loading | succeeded | failed
+        quoteLatestByEventId: {},
+        quoteLatestError: null,
 
         error: null,
     },
@@ -539,6 +570,22 @@ const planningSlice = createSlice({
                 state.vendorSelectionStatus = 'failed';
                 state.vendorSelectionError = action.payload || action.error.message;
             });
+
+        // Quote latest
+        builder
+            .addCase(fetchPlanningQuoteLatest.pending, (state) => {
+                state.quoteLatestStatus = 'loading';
+                state.quoteLatestError = null;
+            })
+            .addCase(fetchPlanningQuoteLatest.fulfilled, (state, action) => {
+                state.quoteLatestStatus = 'succeeded';
+                const key = String(action.payload?.eventId || '').trim();
+                if (key) state.quoteLatestByEventId[key] = action.payload?.quote || null;
+            })
+            .addCase(fetchPlanningQuoteLatest.rejected, (state, action) => {
+                state.quoteLatestStatus = 'failed';
+                state.quoteLatestError = action.payload || action.error.message;
+            });
     },
 });
 
@@ -548,6 +595,11 @@ export const { resetPlanningCheckoutState, clearPlanningError } = planningSlice.
 export const selectPlanningVendorSelectionByEventId = (state, eventId) => {
     const key = String(eventId || '').trim();
     return key ? (state?.planning?.vendorSelectionByEventId?.[key] ?? null) : null;
+};
+
+export const selectPlanningQuoteLatestByEventId = (state, eventId) => {
+    const key = String(eventId || '').trim();
+    return key ? (state?.planning?.quoteLatestByEventId?.[key] ?? null) : null;
 };
 
 export default planningSlice.reducer;

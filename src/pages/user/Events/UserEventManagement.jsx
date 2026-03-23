@@ -1,10 +1,19 @@
+import {
+    createOrder,
+    verifyPayment,
+    fetchPlanningByEventId,
+    fetchPlanningVendorSelectionByEventId,
+    selectPlanningVendorSelectionByEventId,
+    fetchPlanningQuoteLatest,
+    selectPlanningQuoteLatestByEventId,
+    clearPlanningError,
+} from '../../../store/slices/planningSlice';
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { BsArrowLeft, BsChatDots, BsCheckCircleFill, BsClock, BsSend, BsFileEarmarkZip, BsDownload, BsCircle, BsTicketPerforated, BsPaperclip } from "react-icons/bs";
 import { myOrganizedEvents } from "../../../data/myEventsData";
 import { toast, Toaster } from "react-hot-toast";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchPlanningByEventId, fetchPlanningVendorSelectionByEventId, selectPlanningVendorSelectionByEventId } from "../../../store/slices/planningSlice";
 import { fetchPromoteByEventId } from "../../../store/slices/promoteSlice";
 import { io as createSocket } from 'socket.io-client';
 import { refreshAccessToken, selectUser } from "../../../store/slices/authSlice";
@@ -513,6 +522,8 @@ const UserEventManagement = () => {
                             image: p?.eventBanner || p?.banner || null,
                             status: toDisplayStatus(p?.status || 'PENDING APPROVAL'),
                             listingType: String(p?.category || '').toLowerCase() === 'public' ? 'Public' : 'Private',
+                            depositPaid: Boolean(p?.depositPaid || p?.depositPaidAt || p?.depositPaidAmountPaise),
+                            vendorConfirmationPaid: Boolean(p?.vendorConfirmationPaid),
                             assignedManagerId: p?.assignedManagerId || null,
                             guestCount: typeof p?.guestCount === 'number' ? p.guestCount : null,
                             ticketTiers: Array.isArray(p?.tickets?.tiers) ? p.tickets.tiers : [],
@@ -578,6 +589,31 @@ const UserEventManagement = () => {
         if (!event || String(event?.kind || '').toUpperCase() !== 'PLANNING') return null;
         return selectPlanningVendorSelectionByEventId(state, event?.id);
     });
+
+    const planningEventId = String(event?.kind || '').toUpperCase() === 'PLANNING'
+        ? String(event?.id || eventId || '').trim()
+        : '';
+
+    // Roadmap Status Logic
+    const normalizedStatus = String(event?.status || '').toUpperCase().replace(/_/g, ' ').trim();
+    const isPendingApproval = normalizedStatus === 'PENDING APPROVAL' || normalizedStatus === 'PENDING_APPROVAL';
+    const isLive = normalizedStatus === 'LIVE';
+    const isRejected = normalizedStatus === 'REJECTED';
+    const isCompleted = normalizedStatus === 'COMPLETED';
+    const isApproved = normalizedStatus === 'APPROVED';
+    const vendorConfirmationPaid = Boolean(event?.vendorConfirmationPaid);
+    const depositPaid = Boolean(event?.depositPaid);
+
+    const quoteLatest = useSelector((state) => selectPlanningQuoteLatestByEventId(state, planningEventId));
+
+    const [confirmFlowActive, setConfirmFlowActive] = useState(false);
+    const [confirmFlowError, setConfirmFlowError] = useState(null);
+
+    useEffect(() => {
+        if (!planningEventId) return;
+        if (!isApproved || vendorConfirmationPaid) return;
+        dispatch(fetchPlanningQuoteLatest(planningEventId));
+    }, [dispatch, planningEventId, isApproved, vendorConfirmationPaid]);
 
     useEffect(() => {
         const list = Array.isArray(planningVendorSelection?.vendors) ? planningVendorSelection.vendors : [];
@@ -854,12 +890,108 @@ const UserEventManagement = () => {
         return { key: 'yet_to_accept', label: 'yet_to_accept', badge: 'bg-amber-50 text-amber-700 border-amber-200' };
     };
 
-    // Roadmap Status Logic
-    const normalizedStatus = String(event?.status || '').toUpperCase().replace(/_/g, ' ').trim();
-    const isPendingApproval = normalizedStatus === 'PENDING APPROVAL' || normalizedStatus === 'PENDING_APPROVAL';
-    const isLive = normalizedStatus === 'LIVE';
-    const isRejected = normalizedStatus === 'REJECTED';
-    const isCompleted = normalizedStatus === 'COMPLETED';
+    const toInr = (paise) => {
+        const n = Number(paise || 0);
+        if (!Number.isFinite(n)) return 0;
+        return Math.round(n) / 100;
+    };
+
+    const formatInr = (amount) => {
+        const n = Number(amount || 0);
+        const safe = Number.isFinite(n) ? n : 0;
+        return safe.toLocaleString('en-IN');
+    };
+
+    const loadRazorpayScript = () =>
+        new Promise((resolve) => {
+            if (window.Razorpay) { resolve(true); return; }
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.onload = () => resolve(true);
+            script.onerror = () => resolve(false);
+            document.body.appendChild(script);
+        });
+
+    const handlePayVendorConfirmation = async () => {
+        if (!planningEventId) return;
+        setConfirmFlowError(null);
+        setConfirmFlowActive(true);
+        dispatch(clearPlanningError());
+
+        // Ensure we have the latest quote (so totals shown match amount charged)
+        await dispatch(fetchPlanningQuoteLatest(planningEventId));
+
+        const orderResult = await dispatch(createOrder({
+            eventId: planningEventId,
+            orderType: 'PLANNING EVENT VENDOR CONFIRMATION FEE',
+        }));
+
+        if (createOrder.rejected.match(orderResult)) {
+            setConfirmFlowError(orderResult.payload || 'Failed to create payment order');
+            setConfirmFlowActive(false);
+            return;
+        }
+
+        const { razorpayOrderId: rzpOrderId, amount, currency, keyId: rzpKeyId } = orderResult.payload;
+
+        const sdkLoaded = await loadRazorpayScript();
+        if (!sdkLoaded) {
+            setConfirmFlowError('Failed to load payment gateway. Check your internet connection.');
+            setConfirmFlowActive(false);
+            return;
+        }
+
+        await new Promise((resolve) => {
+            const options = {
+                key: rzpKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
+                amount,
+                currency: currency || 'INR',
+                name: 'Okkazo',
+                description: `Vendor Confirmation – ${event?.title || 'Event'}`,
+                order_id: rzpOrderId,
+                modal: {
+                    ondismiss: () => {
+                        setConfirmFlowError('Payment was cancelled. You can try again.');
+                        setConfirmFlowActive(false);
+                        resolve();
+                    },
+                },
+                handler: async (response) => {
+                    const verifyResult = await dispatch(
+                        verifyPayment({
+                            razorpayOrderId: response.razorpay_order_id,
+                            razorpayPaymentId: response.razorpay_payment_id,
+                            razorpaySignature: response.razorpay_signature,
+                            eventId: planningEventId,
+                        })
+                    );
+
+                    if (verifyPayment.rejected.match(verifyResult)) {
+                        setConfirmFlowError(verifyResult.payload || 'Payment verification failed. Contact support.');
+                        setConfirmFlowActive(false);
+                        resolve();
+                        return;
+                    }
+
+                    // Optimistically reflect success; Kafka update is async.
+                    setEvent((prev) => (prev ? { ...prev, vendorConfirmationPaid: true, status: 'CONFIRMED' } : prev));
+                    dispatch(fetchPlanningQuoteLatest(planningEventId));
+
+                    setConfirmFlowActive(false);
+                    resolve();
+                },
+            };
+
+            try {
+                const rzp = new window.Razorpay(options);
+                rzp.open();
+            } catch (e) {
+                setConfirmFlowError(e?.message || 'Failed to open payment gateway. Please try again.');
+                setConfirmFlowActive(false);
+                resolve();
+            }
+        });
+    };
 
     const hasManagerAssigned = Boolean(event?.assignedManagerId);
 
@@ -943,6 +1075,74 @@ const UserEventManagement = () => {
 
                 {activeTab === "overview" && (
                     <div className="space-y-8 animate-fade-in-up">
+                        {!isPromote && isApproved && !vendorConfirmationPaid && (
+                            <div className="bg-white rounded-4xl p-10 shadow-sm border border-primary/5">
+                                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+                                    <div>
+                                        <h2 className="text-xl font-serif-premium text-[#0b2d49] mb-1">Vendor Confirmation</h2>
+                                        <p className="text-xs text-primary/60">
+                                            Pay the vendor confirmation fee to lock vendors and move your event to <span className="font-bold">CONFIRMED</span>.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={handlePayVendorConfirmation}
+                                        disabled={confirmFlowActive || !depositPaid}
+                                        className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                                            (confirmFlowActive || !depositPaid)
+                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                : 'bg-primary text-white hover:opacity-95'
+                                        }`}
+                                    >
+                                        {confirmFlowActive ? 'Processing…' : 'Pay Vendor Confirmation (25%)'}
+                                    </button>
+                                </div>
+
+                                {!depositPaid && (
+                                    <div className="mt-6 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                                        Deposit must be paid before vendor confirmation.
+                                    </div>
+                                )}
+
+                                {confirmFlowError && (
+                                    <div className="mt-6 text-[11px] font-bold text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+                                        {confirmFlowError}
+                                    </div>
+                                )}
+
+                                {quoteLatest && (
+                                    <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="bg-surface rounded-3xl p-6 border border-primary/5">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-primary/40 mb-2">Vendor Subtotal (Min)</p>
+                                            <p className="text-2xl font-black text-[#0b2d49]">₹{formatInr(toInr(quoteLatest?.vendorSubtotal?.minPaise))}</p>
+                                        </div>
+                                        <div className="bg-surface rounded-3xl p-6 border border-primary/5">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-primary/40 mb-2">Service Charge (Min)</p>
+                                            <p className="text-2xl font-black text-[#0b2d49]">₹{formatInr(toInr(quoteLatest?.serviceChargeTotal?.minPaise))}</p>
+                                        </div>
+                                        <div className="bg-surface rounded-3xl p-6 border border-primary/5">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-primary/40 mb-2">Promotions</p>
+                                            <p className="text-2xl font-black text-[#0b2d49]">₹{formatInr(toInr(quoteLatest?.promotionsTotal?.minPaise))}</p>
+                                        </div>
+
+                                        <div className="md:col-span-3 bg-white rounded-3xl p-6 border border-primary/5">
+                                            <div className="flex items-center justify-between gap-6">
+                                                <div>
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-primary/40 mb-2">Client Total (Min)</p>
+                                                    <p className="text-3xl font-black text-[#0b2d49]">₹{formatInr(toInr(quoteLatest?.clientGrandTotal?.minPaise))}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-primary/40">Demand Tier</p>
+                                                    <p className="text-xs font-black text-primary">{String(quoteLatest?.demandTier || 'NORMAL').replace(/_/g, ' ')}</p>
+                                                    <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-primary/40">Locked Version</p>
+                                                    <p className="text-xs font-black text-primary">v{quoteLatest?.version || 1}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Roadmap Card */}
                         <div className="bg-white rounded-4xl p-10 shadow-sm border border-primary/5 relative overflow-hidden">
                             <div className="flex justify-between items-start mb-12">
