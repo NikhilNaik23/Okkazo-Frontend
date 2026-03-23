@@ -8,6 +8,8 @@ import AdminVendorVerification from "../../../pages/Home/admin/AdminVendorVerifi
 import VendorDetails from "../../../pages/Home/admin/VendorDetails";
 import AdminReports from "../../../pages/Home/admin/AdminReports";
 import AdminLedger from "../../../pages/Home/admin/AdminLedger";
+import AdminCommission from "../../../pages/Home/admin/AdminCommission";
+import AdminPromotions from "../../../pages/Home/admin/AdminPromotions";
 import AdminTeamAccess from "../../../pages/Home/admin/AdminTeamAccess";
 import AdminSettings from "../../../pages/Home/admin/AdminSettings";
 import AdminProfile from "../../../pages/Home/admin/AdminProfile";
@@ -18,6 +20,7 @@ import AdminNotifications from "../../../pages/Home/admin/AdminNotifications";
 import AdminChat from "../../../pages/Home/admin/AdminChat";
 import AdminNotificationsPanel from "../../Admin/Notifications/AdminNotificationsPanel";
 import AdminUserManagement from "../../../pages/Home/admin/AdminUserManagement";
+import ProtectedRoute from "../../Auth/ProtectedRoute";
 
 const AdminLayout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -55,6 +58,22 @@ const AdminLayout = () => {
                 <Route path="vendors/:id" element={<VendorDetails />} />
                 <Route path="reports" element={<AdminReports />} />
                 <Route path="ledger" element={<AdminLedger />} />
+                                <Route
+                                    path="commission"
+                                    element={
+                                        <ProtectedRoute allowedRoles={["ADMIN"]}>
+                                            <AdminCommission />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="promotions"
+                                    element={
+                                        <ProtectedRoute allowedRoles={["ADMIN"]}>
+                                            <AdminPromotions />
+                                        </ProtectedRoute>
+                                    }
+                                />
                 <Route path="ledger/:id" element={<TransactionDetails />} />
                                 <Route path="notifications" element={<AdminNotifications />} />
                 <Route path="users" element={<AdminUserManagement />} />

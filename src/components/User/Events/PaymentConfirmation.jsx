@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { useDispatch } from "react-redux";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { motion, AnimatePresence } from "framer-motion";
 import { BsShieldCheck, BsArrowLeft, BsGem, BsArrowRight } from "react-icons/bs";
 import {
@@ -9,7 +9,11 @@ import {
     resetPromoteCheckoutState,
     clearPromoteError,
 } from "../../../store/slices/promoteSlice";
-import { promotePrices } from "../../../data/promoteEventData";
+import {
+    fetchPromotionsConfig,
+    selectPromotePackages,
+    selectPromotionsConfigStatus,
+} from '../../../store/slices/promotionsConfigSlice';
 
 // ─── Load Razorpay once ───────────────────────────────────────────────────────
 const loadRazorpayScript = () =>
@@ -90,6 +94,8 @@ const FlowProgress = ({ activeStep, error }) => (
 // existingPayment: { eventId: string, amount?: number, eventTitle?: string }
 const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaymentSuccess, existingPayment = null }) => {
     const dispatch = useDispatch();
+    const promotionsStatus = useSelector(selectPromotionsConfigStatus);
+    const promotePackages = useSelector(selectPromotePackages);
 
     const [flowActive, setFlowActive]   = useState(false);
     const [activeStep, setActiveStep]   = useState(null);
@@ -100,15 +106,37 @@ const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaym
     // Reset slice on unmount
     useEffect(() => () => { dispatch(resetPromoteCheckoutState()); }, [dispatch]);
 
+    useEffect(() => {
+        dispatch(fetchPromotionsConfig({ force: true }));
+    }, [dispatch]);
+
     const isExistingPayment = !!existingPayment?.eventId;
 
-    // Promotion costs
-    const promoCosts = Object.keys(formData.promotions || {}).reduce((acc, key) => {
-        if (formData.promotions[key] === true && promotePrices[key]) {
-            return acc + promotePrices[key];
+    const feeMap = useMemo(() => {
+        const map = {};
+        for (const it of (Array.isArray(promotePackages) ? promotePackages : [])) {
+            if (!it || it.active === false) continue;
+            if (typeof it.value !== 'string') continue;
+            map[it.value] = Number(it.fee ?? 0);
         }
-        return acc;
-    }, 0);
+        return map;
+    }, [promotePackages]);
+
+    const fallbackFeeMap = useMemo(() => ({
+        'featured placement': 500,
+        'email blast': 250,
+        'social synergy': 150,
+        'advanced analytics': 100,
+    }), []);
+
+    const promoCosts = useMemo(() => {
+        const selected = formData.promotions || {};
+        return Object.entries(selected).reduce((acc, [value, enabled]) => {
+            if (enabled !== true) return acc;
+            const fee = feeMap[value] ?? fallbackFeeMap[value] ?? 0;
+            return acc + (Number.isFinite(Number(fee)) ? Number(fee) : 0);
+        }, 0);
+    }, [formData.promotions, feeMap, fallbackFeeMap]);
 
     const computedSubtotal = platformFee + promoCosts;
     const computedTax = computedSubtotal * 0.05;

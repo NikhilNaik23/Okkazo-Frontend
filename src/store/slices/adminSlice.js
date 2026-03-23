@@ -1,4 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { fetchWithAuth } from '../../utils/apiHandler';
+import { refreshAccessToken } from './authSlice';
 
 const API_BASE_URL = 'http://localhost:8080';
 
@@ -47,6 +49,52 @@ export const fetchTeamAccess = createAsyncThunk(
             if (!response.ok) return rejectWithValue(data.message || 'Failed to fetch team access data');
 
             return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+// Commission config (Admin only)
+export const fetchCommissionConfig = createAsyncThunk(
+    'admin/fetchCommissionConfig',
+    async (_, { dispatch, rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            const refreshToken = localStorage.getItem('refreshToken');
+            if (!accessToken && !refreshToken) return rejectWithValue('No access token found');
+
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/commission`, {
+                method: 'GET',
+            }, { dispatch, refreshAction: refreshAccessToken });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to fetch commission config');
+
+            return data.data || data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const updateCommissionConfig = createAsyncThunk(
+    'admin/updateCommissionConfig',
+    async ({ rates }, { dispatch, rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            const refreshToken = localStorage.getItem('refreshToken');
+            if (!accessToken && !refreshToken) return rejectWithValue('No access token found');
+
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/commission`, {
+                method: 'PUT',
+                body: JSON.stringify({ rates }),
+            }, { dispatch, refreshAction: refreshAccessToken });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to update commission config');
+
+            return data.data || data;
         } catch (error) {
             return rejectWithValue(error.message || 'Network error');
         }
@@ -844,6 +892,13 @@ const initialState = {
 
     managerAutoAssignError: null,
     managerAutoAssignConfig: null,
+
+    // Commission config
+    commissionConfig: null,
+    commissionLoading: false,
+    commissionUpdating: false,
+    commissionError: null,
+    commissionUpdateError: null,
 };
 
 const adminSlice = createSlice({
@@ -1259,6 +1314,32 @@ const adminSlice = createSlice({
             .addCase(fetchEventTransactionsForAdmin.rejected, (state, action) => {
                 state.eventTransactionsLoading = false;
                 state.eventTransactionsError = action.payload;
+            })
+
+            // Commission config
+            .addCase(fetchCommissionConfig.pending, (state) => {
+                state.commissionLoading = true;
+                state.commissionError = null;
+            })
+            .addCase(fetchCommissionConfig.fulfilled, (state, action) => {
+                state.commissionLoading = false;
+                state.commissionConfig = action.payload || null;
+            })
+            .addCase(fetchCommissionConfig.rejected, (state, action) => {
+                state.commissionLoading = false;
+                state.commissionError = action.payload;
+            })
+            .addCase(updateCommissionConfig.pending, (state) => {
+                state.commissionUpdating = true;
+                state.commissionUpdateError = null;
+            })
+            .addCase(updateCommissionConfig.fulfilled, (state, action) => {
+                state.commissionUpdating = false;
+                state.commissionConfig = action.payload || state.commissionConfig;
+            })
+            .addCase(updateCommissionConfig.rejected, (state, action) => {
+                state.commissionUpdating = false;
+                state.commissionUpdateError = action.payload;
             });
     },
 });

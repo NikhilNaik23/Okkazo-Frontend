@@ -18,7 +18,7 @@ const PREDEFINED_INTERESTS = [
     "Photography", "Film & Cinema", "Startups & Entrepreneurship", "Social Impact"
 ];
 
-const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSaveDraft, handleAddTicket, handleRemoveTicket, handleTicketChange }) => {
+const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSaveDraft, handleAddTicket, handleRemoveTicket, handleTicketChange, onStepChange }) => {
     const [activeIndex, setActiveIndex] = useState(0);
     const [isMapOpen, setIsMapOpen] = useState(false);
     const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -52,6 +52,13 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
     ]) : steps;
 
     const currentStep = dynamicSteps[activeIndex];
+    const currentStepId = currentStep?.id;
+
+    useEffect(() => {
+        if (typeof onStepChange === 'function' && currentStepId) {
+            onStepChange(currentStepId);
+        }
+    }, [currentStepId, onStepChange]);
 
     const isStepValid = () => {
         switch (currentStep.id) {

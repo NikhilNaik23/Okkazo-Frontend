@@ -37,12 +37,10 @@ const buildPublicDescription = (formData) => {
 };
 
 const mapPromotions = (promotions = {}) => {
-    const mapped = [];
-    if (promotions.featured) mapped.push('featured placement');
-    if (promotions.email) mapped.push('email blast');
-    if (promotions.social) mapped.push('Social Synergy');
-    if (promotions.insights) mapped.push('advance analysis');
-    return mapped;
+    if (!promotions || typeof promotions !== 'object') return [];
+    return Object.entries(promotions)
+        .filter(([key, enabled]) => Boolean(key) && enabled === true)
+        .map(([key]) => String(key));
 };
 
 const toIso = (value) => {
@@ -231,13 +229,13 @@ export const saveEventPlanning = createAsyncThunk(
 
 export const createOrder = createAsyncThunk(
     'planning/createOrder',
-    async ({ eventId, amount }, { dispatch, rejectWithValue }) => {
+    async ({ eventId, amount, orderType }, { dispatch, rejectWithValue }) => {
         try {
             const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/create`, {
                 method: 'POST',
                 body: JSON.stringify({
                     eventId,
-                    orderType: 'PLANNING EVENT', // required enum in PaymentOrder model
+                    orderType: orderType || 'PLANNING EVENT', // required enum in PaymentOrder model
                     currency:  'INR',
                     ...(amount !== undefined && amount !== null ? { amount } : {}),
                 }),

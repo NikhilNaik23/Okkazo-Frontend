@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import {
     BsChevronLeft,
@@ -25,6 +25,10 @@ import { toast } from 'react-hot-toast';
 import { VendorDetailsModal, VendorCard, SelectionSidebar } from './VendorSelection';
 
 const API_BASE_URL = 'http://localhost:8080';
+
+// Fetch vendors/services within a reasonable driving radius from the event location.
+// Backend only enables geo filtering when `radiusKm` is present in the query.
+const DEFAULT_VENDOR_RADIUS_KM = 120;
 
 const safeJson = async (response) => {
     try {
@@ -138,8 +142,6 @@ const mapBackendVenueServiceToCard = ({ vendor, service, index = 0, eventLat, ev
         vendorBusinessName: vendor?.businessName || null,
         category: 'Venue',
         categoryId: vendor?.categoryId || 'venues',
-
-        name: service?.name || vendor?.businessName || 'Venue',
         rating: service?.rating != null ? String(service.rating) : (vendor?.rating != null ? String(vendor.rating) : '0'),
         reviews: Number(vendor?.reviews || 0),
         description: service?.description || vendor?.description || null,
@@ -165,7 +167,28 @@ const mapBackendVenueServiceToCard = ({ vendor, service, index = 0, eventLat, ev
     };
 };
 
-const mapBackendVendorToCard = (vendor, category, index = 0) => {
+const extractLatLng = (value) => {
+    if (!value || typeof value !== 'object') return { lat: null, lng: null };
+
+    const candidates = [
+        { lat: value?.latitude, lng: value?.longitude },
+        { lat: value?.lat, lng: value?.lng },
+        { lat: value?.locationLat, lng: value?.locationLng },
+        { lat: value?.location?.latitude, lng: value?.location?.longitude },
+        { lat: value?.location?.lat, lng: value?.location?.lng },
+        { lat: value?.details?.locationLat, lng: value?.details?.locationLng },
+    ];
+
+    for (const c of candidates) {
+        const lat = Number(c?.lat);
+        const lng = Number(c?.lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+    }
+
+    return { lat: null, lng: null };
+};
+
+const mapBackendVendorToCard = (vendor, category, index = 0, eventLat, eventLng) => {
     const name = vendor?.businessName || 'Vendor';
     const rating = vendor?.rating != null ? String(vendor.rating) : '0';
     const location = vendor?.location?.name || 'Location TBD';
@@ -175,6 +198,9 @@ const mapBackendVendorToCard = (vendor, category, index = 0) => {
     const priceMax = vendor?.priceMax != null ? Number(vendor.priceMax) : Math.round(priceMin * 1.5);
 
     const image = services?.[0]?.details?.image || pickFallbackImage(category, index);
+
+    const { lat, lng } = extractLatLng(vendor);
+    const computedDistance = haversineKm(eventLat, eventLng, lat, lng);
 
     return {
         id: vendor?.vendorAuthId || `${category}-${index}`,
@@ -190,7 +216,9 @@ const mapBackendVendorToCard = (vendor, category, index = 0) => {
         categoryId: vendor?.categoryId || null,
         isPopular: Boolean(vendor?.isPopular),
         capacity: vendor?.capacity,
-        distanceKm: vendor?.distanceKm,
+        lat,
+        lng,
+        distanceKm: computedDistance != null ? computedDistance : vendor?.distanceKm,
         description: vendor?.description || null,
         services,
         category,
@@ -261,6 +289,57 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     const priceMultiplier = isHighDemand ? 1.5 : 1;
 
     const prevPriceMultiplierRef = useRef(priceMultiplier);
+
+    const persistVendorSelection = useCallback(async ({ category, vendor }) => {
+        if (!eventId || !category || !vendor) return true;
+
+        const vendorAuthId = vendor.vendorAuthId || vendor.authId;
+        if (!vendorAuthId) return true;
+
+        const selectedServiceId = (() => {
+            const raw = vendor?.selectedPackage?.serviceId ?? vendor?.selectedPackage?.id ?? vendor?.serviceId;
+            const s = raw != null ? String(raw).trim() : '';
+            return s || null;
+        })();
+
+        const attendeeCountForPricing = Math.max(1, Number(attendeeInfo?.attendeeCount || 0));
+        const pricingUnit = vendor?.pricingUnit
+            || (String(category || '').toLowerCase().includes('catering') ? 'PER_PLATE' : 'EVENT');
+        const unitPrice = Number(vendor?.unitPrice ?? vendor?.priceMin ?? 0);
+        const maxMultiplier = Number(vendor?.maxPriceMultiplier || DEFAULT_MAX_PRICE_MULTIPLIER);
+
+        const lineMin = pricingUnit === 'PER_PLATE'
+            ? Math.round(unitPrice * attendeeCountForPricing)
+            : Math.round(unitPrice);
+        const lineMax = Math.round(lineMin * (Number.isFinite(maxMultiplier) && maxMultiplier > 0 ? maxMultiplier : DEFAULT_MAX_PRICE_MULTIPLIER));
+
+        const response = await fetchWithAuth(
+            `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(eventId))}/vendors`,
+            {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    service: category,
+                    vendorAuthId,
+                    ...(selectedServiceId ? { serviceId: selectedServiceId } : {}),
+                    servicePrice: {
+                        min: Number.isFinite(lineMin) && lineMin > 0 ? lineMin : 0,
+                        max: Number.isFinite(lineMax) && lineMax > 0 ? lineMax : 0,
+                    },
+                }),
+            },
+            { dispatch, refreshAction: refreshAccessToken }
+        );
+
+        const data = await safeJson(response);
+        if (!response.ok || !data?.success) {
+            const err = new Error(data?.message || 'Failed to save vendor selection');
+            err.status = response.status;
+            throw err;
+        }
+
+        return true;
+    }, [attendeeInfo?.attendeeCount, dispatch, eventId]);
+
     useEffect(() => {
         const prevMultiplier = prevPriceMultiplierRef.current;
         if (prevMultiplier === priceMultiplier) return;
@@ -287,51 +366,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                 }
             })
         ).catch(() => undefined);
-    }, [eventId, formData?.vendors, handleChange, priceMultiplier]);
-
-    const persistVendorSelection = async ({ category, vendor }) => {
-        if (!eventId || !category || !vendor) return true;
-
-        const vendorAuthId = vendor.vendorAuthId || vendor.authId;
-        if (!vendorAuthId) return true;
-
-        const attendeeCountForPricing = Math.max(1, Number(attendeeInfo?.attendeeCount || 0));
-        const pricingUnit = vendor?.pricingUnit
-            || (String(category || '').toLowerCase().includes('catering') ? 'PER_PLATE' : 'EVENT');
-        const unitPrice = Number(vendor?.unitPrice ?? vendor?.priceMin ?? 0);
-        const maxMultiplier = Number(vendor?.maxPriceMultiplier || DEFAULT_MAX_PRICE_MULTIPLIER);
-
-        const lineMin = pricingUnit === 'PER_PLATE'
-            ? Math.round(unitPrice * attendeeCountForPricing)
-            : Math.round(unitPrice);
-        const lineMax = Math.round(lineMin * (Number.isFinite(maxMultiplier) && maxMultiplier > 0 ? maxMultiplier : DEFAULT_MAX_PRICE_MULTIPLIER));
-
-        const response = await fetchWithAuth(
-            `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(eventId))}/vendors`,
-            {
-                method: 'PATCH',
-                body: JSON.stringify({
-                    service: category,
-                    vendorAuthId,
-                    ...(category === 'Venue' && vendor?.serviceId ? { serviceId: String(vendor.serviceId) } : {}),
-                    servicePrice: {
-                        min: Number.isFinite(lineMin) && lineMin > 0 ? lineMin : 0,
-                        max: Number.isFinite(lineMax) && lineMax > 0 ? lineMax : 0,
-                    },
-                }),
-            },
-            { dispatch, refreshAction: refreshAccessToken }
-        );
-
-        const data = await safeJson(response);
-        if (!response.ok || !data?.success) {
-            const err = new Error(data?.message || 'Failed to save vendor selection');
-            err.status = response.status;
-            throw err;
-        }
-
-        return true;
-    };
+    }, [eventId, formData?.vendors, handleChange, persistVendorSelection, priceMultiplier]);
 
     const handleSelectVendorWrapper = async (category, vendor) => {
         const hasExplicitUnitPricing = vendor?.unitPrice != null;
@@ -508,6 +543,8 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                     sort: sortOption,
                     priceMin: String(priceRange.min ?? 0),
                     priceMax: String(priceRange.max ?? 0),
+                    radiusKm: String(DEFAULT_VENDOR_RADIUS_KM),
+                    limit: '100',
                 });
                 if (searchQuery?.trim()) qs.set('q', searchQuery.trim());
                 if (formData?.date) qs.set('day', String(formData.date));
@@ -528,7 +565,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                     ? vendors.flatMap((v, idx) => {
                         const services = Array.isArray(v?.services) ? v.services : [];
                         if (services.length === 0) {
-                            return [mapBackendVendorToCard(v, 'Venue', idx)];
+                            return [mapBackendVendorToCard(v, 'Venue', idx, eventLat, eventLng)];
                         }
                         return services.map((svc, svcIdx) => mapBackendVenueServiceToCard({
                             vendor: v,
@@ -538,7 +575,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                             eventLng,
                         }));
                     })
-                    : vendors.map((v, idx) => mapBackendVendorToCard(v, activeCategory, idx));
+                    : vendors.map((v, idx) => mapBackendVendorToCard(v, activeCategory, idx, eventLat, eventLng));
 
                 setVendorsByCategory((prev) => ({
                     ...prev,
@@ -559,7 +596,12 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
 
     const filteredVendors = useMemo(() => {
         const fetched = vendorsByCategory[activeCategory];
-        let allVendors = Array.isArray(fetched) && fetched.length > 0 ? fetched : (dummyVendors[activeCategory] || []);
+
+        // If we already fetched for this category (even if empty), don't fall back to global dummy data.
+        const hasFetchedCategory = Object.prototype.hasOwnProperty.call(vendorsByCategory, activeCategory);
+        let allVendors = Array.isArray(fetched)
+            ? fetched
+            : (!hasFetchedCategory ? (dummyVendors[activeCategory] || []) : []);
 
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
@@ -586,7 +628,11 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                 allVendors = [...allVendors].sort((a, b) => b.reviews - a.reviews || (b.isPopular === a.isPopular ? 0 : b.isPopular ? 1 : -1));
                 break;
             case 'Nearest':
-                allVendors = [...allVendors].sort((a, b) => (Number(a.distanceKm || 0) - Number(b.distanceKm || 0)));
+                allVendors = [...allVendors].sort((a, b) => {
+                    const da = Number.isFinite(Number(a?.distanceKm)) ? Number(a.distanceKm) : Number.POSITIVE_INFINITY;
+                    const db = Number.isFinite(Number(b?.distanceKm)) ? Number(b.distanceKm) : Number.POSITIVE_INFINITY;
+                    return da - db;
+                });
                 break;
             case 'Price: Low to High':
                 allVendors = [...allVendors].sort((a, b) => a.priceMin - b.priceMin);

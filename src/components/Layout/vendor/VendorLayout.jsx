@@ -12,6 +12,11 @@ import {
   selectVendorApplication,
   selectVendorApplicationLoading,
 } from "../../../store/slices/authSlice";
+import {
+  fetchVendorEventRequests,
+  selectVendorEventRequests,
+  selectVendorEventRequestsStatus,
+} from "../../../store/slices/vendorEventsSlice";
 
 const VendorLayout = () => {
   const dispatch = useDispatch();
@@ -23,6 +28,9 @@ const VendorLayout = () => {
   const userRole = useSelector(selectUserRole);
   const vendorApplication = useSelector(selectVendorApplication);
   const vendorApplicationLoading = useSelector(selectVendorApplicationLoading);
+
+  const vendorRequests = useSelector(selectVendorEventRequests);
+  const vendorRequestsStatus = useSelector(selectVendorEventRequestsStatus);
 
   const sidebarMenus = vendorSidebarMenus;
   const isMessagesPage = location.pathname === '/vendor/messages' || location.pathname.includes('/vendor/event/');
@@ -46,6 +54,17 @@ const VendorLayout = () => {
       dispatch(fetchVendorApplication());
     }
   }, [dispatch, userRole, vendorApplication, vendorApplicationLoading]);
+
+  useEffect(() => {
+    if (userRole !== 'VENDOR') return;
+    if (vendorRequestsStatus !== 'idle') return;
+    dispatch(fetchVendorEventRequests());
+  }, [dispatch, userRole, vendorRequestsStatus]);
+
+  const pendingRequestsCount = useMemo(() => {
+    const rows = Array.isArray(vendorRequests) ? vendorRequests : [];
+    return rows.filter((row) => (row?.vendorItems || []).some((v) => v?.status === 'YET_TO_SELECT')).length;
+  }, [vendorRequests]);
 
   useEffect(() => {
     if (needsImages) {
@@ -74,6 +93,7 @@ const VendorLayout = () => {
           <ul className="space-y-1">
             {sidebarMenus.map((menu, idx) => {
               const isActive = location.pathname === menu.path;
+              const showPendingBadge = menu.path === '/vendor/booked-events' && pendingRequestsCount > 0;
               return (
                 <li key={idx}>
                   <Link
@@ -82,6 +102,11 @@ const VendorLayout = () => {
                   >
                     <span className="text-xl">{menu.icon}</span>
                     {menu.name}
+                    {showPendingBadge && (
+                      <span className="ml-auto flex items-center justify-center min-w-5.5 h-5.5 px-1 bg-red-500 text-white text-[10px] font-black rounded-full ring-4 ring-white shadow-lg">
+                        {pendingRequestsCount}
+                      </span>
+                    )}
                   </Link>
                 </li>
               );

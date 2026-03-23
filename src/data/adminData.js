@@ -1,4 +1,4 @@
-import { MdDashboard, MdEvent, MdStorefront, MdBarChart, MdAccountBalanceWallet, MdSecurity, MdSettings, MdPerson, MdNotifications, MdChat, MdPeople, MdManageAccounts } from "react-icons/md";
+import { MdDashboard, MdEvent, MdStorefront, MdBarChart, MdAccountBalanceWallet, MdSecurity, MdSettings, MdPerson, MdNotifications, MdChat, MdPeople, MdManageAccounts, MdPercent } from "react-icons/md";
 
 export const adminMenuSections = [
   {
@@ -14,7 +14,9 @@ export const adminMenuSections = [
     title: "Financial",
     items: [
       { path: "/admin/reports", label: "Reports", icon: MdBarChart },
-      { path: "/admin/ledger", label: "Ledger", icon: MdAccountBalanceWallet }
+      { path: "/admin/ledger", label: "Ledger", icon: MdAccountBalanceWallet },
+      { path: "/admin/commission", label: "Commission", icon: MdPercent },
+      { path: "/admin/promotions", label: "Promotions", icon: MdAccountBalanceWallet }
     ]
   },
   {

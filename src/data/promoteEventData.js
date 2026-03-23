@@ -28,13 +28,7 @@ export const initialPromoteEventState = {
     banner: null,
     bannerFile: null,   // raw File object for upload
     authDocuments: [],  // Array of { name, size, type, file, preview }
-    promotions: {
-        featured: false,
-        email: false,
-        social: false,
-        insights: false,
-        budget: 0
-    }
+    promotions: {}
 };
 
 export const eventCategories = [

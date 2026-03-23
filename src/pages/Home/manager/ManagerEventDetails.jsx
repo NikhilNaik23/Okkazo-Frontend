@@ -6,7 +6,12 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-hot-toast';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+
+import {
+    fetchPlanningVendorSelectionByEventId,
+    selectPlanningVendorSelectionByEventId,
+} from '../../../store/slices/planningSlice';
 
 // UI Components
 import { Badge } from '../../../components/Manager/EventDetails/ui';
@@ -63,6 +68,8 @@ const ManagerEventDetails = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const dispatch = useDispatch();
+
+    const vendorSelection = useSelector((state) => selectPlanningVendorSelectionByEventId(state, id));
     const [activeTab, setActiveTab] = useState('overview');
     const [scrolled, setScrolled] = useState(false);
 
@@ -85,6 +92,11 @@ const ManagerEventDetails = () => {
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
+
+    useEffect(() => {
+        if (!id) return;
+        dispatch(fetchPlanningVendorSelectionByEventId(id));
+    }, [dispatch, id]);
 
     useEffect(() => {
         if (!id) return;
@@ -384,9 +396,17 @@ const ManagerEventDetails = () => {
         FolderOpen
     };
 
+    const vendorSlotCount = useMemo(() => {
+        if (!vendorSelection) return null;
+        if (Array.isArray(vendorSelection?.selectedServices)) return vendorSelection.selectedServices.length;
+        if (Array.isArray(vendorSelection?.vendors)) return vendorSelection.vendors.length;
+        return null;
+    }, [vendorSelection]);
+
     const tabs = tabsData.map(tab => ({
         ...tab,
-        icon: iconMap[tab.icon]
+        icon: iconMap[tab.icon],
+        count: tab.id === 'vendors' ? (vendorSlotCount ?? tab.count) : tab.count,
     }));
 
     const handleCopyLink = () => {
@@ -520,6 +540,7 @@ const ManagerEventDetails = () => {
                                     onAddTeamMember={handleAddTeamMember}
                                     onRemoveTeamMember={handleRemoveTeamMember}
                                     getInitials={getInitials}
+                                    onMessageClient={() => setActiveTab('chat')}
                                 />
                             ) : (
                                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
@@ -531,7 +552,7 @@ const ManagerEventDetails = () => {
                         )}
                         {activeTab === 'guests' && <GuestsTab onAddClick={() => setIsGuestModalOpen(true)} />}
                         {activeTab === 'vendors' && <VendorsTab />}
-                        {activeTab === 'chat' && <ChatTab />}
+                        {activeTab === 'chat' && <ChatTab eventId={id} client={client} />}
                         {activeTab === 'todo' && <ToDoTab />}
                         {activeTab === 'schedule' && <ScheduleTab />}
                         {activeTab === 'financials' && event && <FinancialsTab event={event} />}

@@ -3,6 +3,15 @@ import { motion } from 'framer-motion';
 import { BsStarFill, BsCheck } from 'react-icons/bs';
 
 const VendorCard = ({ vendor, isSelected, onViewDetails }) => {
+    const formatDistance = (km) => {
+        const n = Number(km);
+        if (!Number.isFinite(n)) return null;
+        if (n < 1) return `${Math.round(n * 1000)} m`;
+        return `${n.toFixed(1)} km`;
+    };
+
+    const distanceText = formatDistance(vendor?.distanceKm);
+
     return (
         <motion.div
             layout
@@ -40,7 +49,7 @@ const VendorCard = ({ vendor, isSelected, onViewDetails }) => {
             <div className="p-6 flex flex-col flex-1">
                 <div className="flex justify-between items-start mb-3">
                     <span className="text-[9px] font-bold tracking-[0.25em] text-gray-400 uppercase block">
-                        {vendor.location}
+                        {vendor.location}{distanceText ? ` • ${distanceText}` : ''}
                         {vendor.mapsUrl && (
                             <a
                                 href={vendor.mapsUrl}

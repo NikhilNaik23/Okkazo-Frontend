@@ -278,6 +278,22 @@ const BookedEvents = () => {
         </button>
       </div>
 
+      {/* Pending Requests Reminder */}
+      {stats.pending > 0 && (
+        <div className="mb-10 bg-white rounded-4xl border border-red-200 shadow-sm p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-black text-[#0b2d49]">You have {stats.pending} pending event request{stats.pending === 1 ? '' : 's'}.</p>
+            <p className="text-xs font-bold text-[#708aa0] mt-1">Open Event Requests to accept or reject them.</p>
+          </div>
+          <button
+            onClick={() => setIsRequestsModalOpen(true)}
+            className="px-6 py-3 bg-red-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 active:scale-95"
+          >
+            View Requests
+          </button>
+        </div>
+      )}
+
       {/* Confirmed Events Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {filteredEvents.length > 0 ? filteredEvents.map((event) => (

@@ -50,6 +50,10 @@ const EventDetails = () => {
     const selectedStatus = useSelector(selectSelectedVendorEventRequestStatus);
     const selectedError = useSelector(selectSelectedVendorEventRequestError);
 
+    const [showRejectModal, setShowRejectModal] = useState(false);
+    const [rejectReason, setRejectReason] = useState('');
+    const [rejectSubmitting, setRejectSubmitting] = useState(false);
+
     React.useEffect(() => {
         if (id) {
             dispatch(fetchVendorEventRequestDetails({ eventId: id }));
@@ -85,16 +89,29 @@ const EventDetails = () => {
     };
 
     const handleReject = async () => {
+        setRejectReason('');
+        setShowRejectModal(true);
+    };
+
+    const handleConfirmReject = async () => {
+        const trimmed = String(rejectReason || '').trim();
+        if (!trimmed) {
+            toast.error('Please provide a reason for rejection');
+            return;
+        }
+
         try {
-            const reason = window.prompt('Please mention the reason for rejection:');
-            if (!reason || !String(reason).trim()) return;
-            await dispatch(rejectVendorEventRequest({ eventId: id, reason: String(reason).trim() })).unwrap();
-            toast.error("Event request rejected.");
+            setRejectSubmitting(true);
+            await dispatch(rejectVendorEventRequest({ eventId: id, reason: trimmed })).unwrap();
+            toast.error('Event request rejected.');
+            setShowRejectModal(false);
             dispatch(fetchVendorEventRequests());
             dispatch(fetchVendorEventRequestDetails({ eventId: id }));
-            navigate("details");
+            navigate('details');
         } catch (e) {
             toast.error(String(e || 'Failed to reject request'));
+        } finally {
+            setRejectSubmitting(false);
         }
     };
 
@@ -417,6 +434,55 @@ const EventDetails = () => {
 
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 min-w-0 overflow-x-hidden">
+            {showRejectModal && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 px-4">
+                    <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl border border-white/20 overflow-hidden">
+                        <div className="p-6 border-b border-gray-100">
+                            <h3 className="text-lg font-black tracking-wide text-[#0b2d49]">Reject Event Request</h3>
+                            <p className="text-xs text-[#708aa0] font-medium mt-1">
+                                Please share a short reason. This will be visible to the team.
+                            </p>
+                        </div>
+
+                        <div className="p-6">
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-[#708aa0] mb-2">
+                                Reason
+                            </label>
+                            <textarea
+                                value={rejectReason}
+                                onChange={(e) => setRejectReason(e.target.value)}
+                                rows={4}
+                                maxLength={500}
+                                placeholder="e.g. Not available on requested date / Budget mismatch / Insufficient details"
+                                className="w-full rounded-2xl bg-[#f6f8f9] border border-[#708aa0]/10 px-4 py-3 text-sm text-[#0b2d49] placeholder:text-[#708aa0]/60 focus:outline-none focus:ring-2 focus:ring-[#0b2d49]/10"
+                                autoFocus
+                            />
+                            <div className="mt-2 text-[10px] font-bold text-[#708aa0] text-right">
+                                {String(rejectReason || '').length}/500
+                            </div>
+                        </div>
+
+                        <div className="p-6 pt-0 flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => !rejectSubmitting && setShowRejectModal(false)}
+                                className="px-5 py-3 rounded-2xl border border-[#708aa0]/20 text-[10px] font-black uppercase tracking-widest text-[#708aa0] hover:text-[#0b2d49] hover:border-[#0b2d49]/20 transition-all"
+                                disabled={rejectSubmitting}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmReject}
+                                className="px-6 py-3 rounded-2xl bg-red-500 text-white text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-all disabled:opacity-60"
+                                disabled={rejectSubmitting || !String(rejectReason || '').trim()}
+                            >
+                                {rejectSubmitting ? 'Rejecting…' : 'Confirm Reject'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {/* Header Navigation */}
             <div className="fixed top-0 right-0 left-72 z-30 bg-[#e9eff1]/90 backdrop-blur-md px-10 pt-6 pb-0 flex items-center justify-between gap-6 transition-all border-b border-white/20">
                 <div className="flex-1 flex items-center bg-white/50 backdrop-blur-md p-1.5 rounded-2xl border border-[#708aa0]/10 shadow-sm overflow-x-auto min-w-0">

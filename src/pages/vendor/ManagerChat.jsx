@@ -31,6 +31,37 @@ const ManagerChat = () => {
     const contextMenuRef = useRef(null);
     const messageMenuRef = useRef(null);
 
+    const messagesViewportRef = useRef(null);
+    const messagesEndRef = useRef(null);
+    const stickToBottomRef = useRef(true);
+    const initialScrollDoneRef = useRef(false);
+
+    const handleMessagesScroll = () => {
+        const el = messagesViewportRef.current;
+        if (!el) return;
+        const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+        stickToBottomRef.current = distance < 140;
+    };
+
+    const scrollToBottom = (behavior = 'auto') => {
+        const el = messagesViewportRef.current;
+        if (!el) return;
+        el.scrollTo({ top: el.scrollHeight, behavior });
+    };
+
+    useEffect(() => {
+        stickToBottomRef.current = true;
+        initialScrollDoneRef.current = false;
+    }, [activeChannel]);
+
+    useEffect(() => {
+        if (!messages.length) return;
+        if (!stickToBottomRef.current) return;
+        const behavior = initialScrollDoneRef.current ? 'smooth' : 'auto';
+        requestAnimationFrame(() => scrollToBottom(behavior));
+        initialScrollDoneRef.current = true;
+    }, [activeChannel, messages.length]);
+
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
@@ -259,7 +290,7 @@ const ManagerChat = () => {
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                <div className="flex-1 overflow-y-auto p-8 space-y-6" ref={messagesViewportRef} onScroll={handleMessagesScroll}>
 
                     {currentContact ? (
                         <>
@@ -334,6 +365,7 @@ const ManagerChat = () => {
                                         </div>
                                     );
                                 })}
+                                <div ref={messagesEndRef} />
                             </div>
                         </>
                     ) : (
