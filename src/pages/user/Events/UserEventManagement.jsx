@@ -10,7 +10,7 @@ import {
 } from '../../../store/slices/planningSlice';
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { BsArrowLeft, BsChatDots, BsCheckCircleFill, BsClock, BsSend, BsFileEarmarkZip, BsDownload, BsCircle, BsTicketPerforated, BsPaperclip } from "react-icons/bs";
+import { BsArrowLeft, BsChatDots, BsCheckCircleFill, BsClock, BsSend, BsFileEarmarkZip, BsDownload, BsCircle, BsTicketPerforated, BsPaperclip, BsThreeDotsVertical } from "react-icons/bs";
 import { myOrganizedEvents } from "../../../data/myEventsData";
 import { toast, Toaster } from "react-hot-toast";
 import { useDispatch, useSelector } from "react-redux";
@@ -58,6 +58,20 @@ const formatMoneyRangeFromMinMax = (minRaw, _maxRaw, { serviceLabel, guestCount 
     return formatMoneyRangeFromBasePrice(minRaw, { serviceLabel, guestCount });
 };
 
+const toManagerBadge = (name) => {
+    const text = String(name || '').trim();
+    if (!text) return 'M';
+
+    const managerWithNumber = text.match(/\bmanager\b\s*(\d+)/i);
+    if (managerWithNumber) return `M${managerWithNumber[1]}`;
+
+    const firstAlpha = text.match(/[A-Za-z]/);
+    const firstLetter = firstAlpha ? firstAlpha[0].toUpperCase() : 'M';
+    const number = text.match(/(\d+)/);
+
+    return number ? `${firstLetter}${number[1]}` : firstLetter;
+};
+
 const decodeJwtPayload = (token) => {
     try {
         const parts = String(token || '').split('.');
@@ -93,6 +107,8 @@ const UserEventManagement = () => {
     const [chatMessage, setChatMessage] = useState("");
     const [messages, setMessages] = useState([]);
     const [conversationId, setConversationId] = useState(null);
+    const [managerSyncUnreadCount, setManagerSyncUnreadCount] = useState(0);
+    const [managerOnline, setManagerOnline] = useState(false);
     const socketRef = useRef(null);
     const fileInputRef = useRef(null);
 
@@ -544,6 +560,7 @@ const UserEventManagement = () => {
                             depositPaid: Boolean(p?.depositPaid || p?.depositPaidAt || p?.depositPaidAmountPaise),
                             vendorConfirmationPaid: Boolean(p?.vendorConfirmationPaid),
                             assignedManagerId: p?.assignedManagerId || null,
+                            managerProfile: p?.managerProfile || null,
                             guestCount: typeof p?.guestCount === 'number' ? p.guestCount : null,
                             ticketTiers: Array.isArray(p?.tickets?.tiers) ? p.tickets.tiers : [],
                             eventDescription: typeof p?.eventDescription === 'string' ? p.eventDescription : null,
@@ -571,6 +588,7 @@ const UserEventManagement = () => {
                             status: toDisplayStatus(pr?.adminDecision?.status || pr?.eventStatus || 'PENDING'),
                             listingType: 'Public',
                             assignedManagerId: pr?.assignedManagerId || null,
+                            managerProfile: pr?.managerProfile || null,
                             guestCount: null,
                             ticketTiers: Array.isArray(pr?.tickets?.tiers) ? pr.tickets.tiers : [],
                             eventDescription: typeof pr?.eventDescription === 'string' ? pr.eventDescription : null,
@@ -612,6 +630,30 @@ const UserEventManagement = () => {
     const planningEventId = String(event?.kind || '').toUpperCase() === 'PLANNING'
         ? String(event?.id || eventId || '').trim()
         : '';
+
+    const managerDetails = React.useMemo(() => {
+        const profile = event?.managerProfile && typeof event.managerProfile === 'object'
+            ? event.managerProfile
+            : null;
+
+        const name = profile?.name || profile?.fullName || 'Event Manager';
+        const role = profile?.assignedRole || profile?.department || profile?.role || 'Manager';
+        const email = profile?.email || null;
+        const authId = profile?.authId || null;
+        const phone = profile?.phone || null;
+
+        return {
+            name,
+            role,
+            email,
+            authId,
+            phone,
+            badge: toManagerBadge(name),
+        };
+    }, [event?.managerProfile]);
+
+    const managerAuthId = String(managerDetails?.authId || '').trim();
+    const hasManagerAssigned = Boolean(event?.assignedManagerId);
 
     // Roadmap Status Logic
     const normalizedStatus = String(event?.status || '').toUpperCase().replace(/_/g, ' ').trim();
@@ -755,6 +797,19 @@ const UserEventManagement = () => {
 
         socket.on('connect', () => {
             socket.emit('conversation:join', { conversationId });
+            if (managerAuthId) {
+                socket.emit('presence:watch', { authIds: [managerAuthId] });
+            }
+        });
+
+        socket.on('disconnect', () => {
+            setManagerOnline(false);
+        });
+
+        socket.on('presence:update', ({ authId, online } = {}) => {
+            if (!managerAuthId) return;
+            if (String(authId || '').trim() !== managerAuthId) return;
+            setManagerOnline(Boolean(online));
         });
 
         socket.on('message:new', (msg) => {
@@ -809,7 +864,13 @@ const UserEventManagement = () => {
             socket.disconnect();
             socketRef.current = null;
         };
-    }, [activeTab, conversationId, accessToken, currentUserId, dispatch, eventId, event?.id]);
+    }, [activeTab, conversationId, accessToken, currentUserId, dispatch, eventId, event?.id, managerAuthId]);
+
+    useEffect(() => {
+        if (activeTab !== 'chat' || !hasManagerAssigned || !managerAuthId) {
+            setManagerOnline(false);
+        }
+    }, [activeTab, hasManagerAssigned, managerAuthId]);
 
     useEffect(() => {
         if (activeTab !== 'chat') return;
@@ -828,6 +889,69 @@ const UserEventManagement = () => {
         requestAnimationFrame(() => scrollToBottom(behavior));
         initialScrollDoneRef.current = true;
     }, [activeTab, conversationId, messages.length]);
+
+    useEffect(() => {
+        const resolvedEventId = String(event?.id || eventId || '').trim();
+        const viewerAuthId = String(currentUserId || '').trim();
+
+        if (!resolvedEventId || !hasManagerAssigned || !viewerAuthId) {
+            setManagerSyncUnreadCount(0);
+            return;
+        }
+
+        if (activeTab === 'chat') {
+            setManagerSyncUnreadCount(0);
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadUnread = async () => {
+            try {
+                const convo = await ensureEventConversation({
+                    eventId: resolvedEventId,
+                    dispatch,
+                    refreshAction: refreshAccessToken,
+                });
+
+                const convoId = String(convo?._id || convo?.id || '').trim();
+                if (!convoId) {
+                    if (!cancelled) setManagerSyncUnreadCount(0);
+                    return;
+                }
+
+                const msgs = await fetchConversationMessages({
+                    conversationId: convoId,
+                    limit: 200,
+                    dispatch,
+                    refreshAction: refreshAccessToken,
+                });
+
+                if (cancelled) return;
+
+                const managerId = String(managerAuthId || '').trim();
+                const unread = (Array.isArray(msgs) ? msgs : []).filter((m) => {
+                    const sender = String(m?.senderAuthId || m?.senderId || '').trim();
+                    if (!sender || sender === viewerAuthId) return false;
+                    if (managerId && sender !== managerId) return false;
+                    const readBy = Array.isArray(m?.readBy) ? m.readBy.map((v) => String(v || '').trim()) : [];
+                    return !readBy.includes(viewerAuthId);
+                }).length;
+
+                setManagerSyncUnreadCount(unread);
+            } catch {
+                if (!cancelled) setManagerSyncUnreadCount(0);
+            }
+        };
+
+        loadUnread();
+        const timer = setInterval(loadUnread, 20000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+        };
+    }, [event?.id, eventId, hasManagerAssigned, activeTab, currentUserId, managerAuthId, dispatch]);
 
     const handleSendMessage = async (e) => {
         e.preventDefault();
@@ -1012,8 +1136,6 @@ const UserEventManagement = () => {
         });
     };
 
-    const hasManagerAssigned = Boolean(event?.assignedManagerId);
-
     const displayStatus = isPendingApproval
         ? 'Pending Approval'
         : isLive
@@ -1085,9 +1207,14 @@ const UserEventManagement = () => {
                         </button>
                         <button
                             onClick={() => setActiveTab("chat")}
-                            className={`px-6 py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'chat' ? 'bg-surface text-primary shadow-sm' : 'text-primary/40 hover:text-primary'}`}
+                            className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'chat' ? 'bg-surface text-primary shadow-sm' : 'text-primary/40 hover:text-primary'}`}
                         >
                             Manager Sync
+                            {managerSyncUnreadCount > 0 ? (
+                                <span className={`inline-flex min-w-5 h-5 items-center justify-center px-1.5 rounded-full text-[10px] leading-none ${activeTab === 'chat' ? 'bg-primary/15 text-primary' : 'bg-gray-200 text-gray-600'}`}>
+                                    {managerSyncUnreadCount > 99 ? '99+' : managerSyncUnreadCount}
+                                </span>
+                            ) : null}
                         </button>
                     </div>
                 </div>
@@ -1404,9 +1531,10 @@ const UserEventManagement = () => {
                 )}
 
                 {activeTab === "chat" && (
-                    <div className="bg-white rounded-4xl shadow-sm border border-primary/5 overflow-hidden flex flex-col h-175 animate-fade-in-up">
+                    <div className="animate-fade-in-up">
                         {!hasManagerAssigned || isRejected ? (
-                            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center opacity-60">
+                            <div className="bg-white rounded-4xl shadow-sm border border-primary/5 overflow-hidden flex flex-col h-175">
+                                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center opacity-60">
                                 <div className="w-24 h-24 bg-surface rounded-full flex items-center justify-center mb-8 text-primary">
                                     <BsChatDots size={40} />
                                 </div>
@@ -1416,110 +1544,129 @@ const UserEventManagement = () => {
                                         ? 'Manager Sync will be unlocked once a manager is assigned to your event.'
                                         : 'This event is not eligible for Manager Sync.'}
                                 </p>
+                                </div>
                             </div>
                         ) : (
-                            <>
-                                <div className="p-8 border-b border-primary/10 flex items-center justify-between bg-surface/30">
-                                    <div>
-                                        <h3 className="font-serif-premium text-xl text-[#0b2d49]">Manager Sync</h3>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/50">
-                                            Direct Line • Event Manager
-                                        </p>
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                <div className="bg-white rounded-4xl p-8 shadow-sm border border-primary/5 h-fit text-center">
+                                    <div className="w-32 h-32 rounded-full p-1 bg-gradient-to-tr from-primary to-accent mx-auto mb-6">
+                                        <div className="w-full h-full rounded-full border-4 border-white bg-white flex items-center justify-center">
+                                            <span className="text-4xl font-black text-primary tracking-wider">{managerDetails.badge}</span>
+                                        </div>
                                     </div>
-                                    <Link to="#" className="px-4 py-2 bg-white border border-primary/10 rounded-lg text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary hover:text-white transition-all">
-                                        View Profile
-                                    </Link>
+
+                                    <h3 className="text-2xl font-serif-premium italic text-primary mb-1">{managerDetails.name}</h3>
+                                    <p className="text-xs font-black uppercase tracking-widest text-primary/40 mb-6">{managerDetails.role}</p>
+
+                                    <div
+                                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest mb-8 ${managerOnline ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-600'}`}
+                                    >
+                                        <span className={`w-2 h-2 rounded-full ${managerOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                                        {managerOnline ? 'Online' : 'Offline'}
+                                    </div>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-surface" ref={messagesViewportRef} onScroll={handleMessagesScroll}>
-                                    <div className="flex justify-center mb-8">
-                                        <span className="px-4 py-1.5 bg-surface text-primary/60 text-[9px] font-bold rounded-full uppercase tracking-widest">Today</span>
+                                <div className="lg:col-span-2 bg-white rounded-4xl shadow-sm border border-primary/5 overflow-hidden flex flex-col h-[600px]">
+                                    <div className="p-6 border-b border-primary/10 flex justify-between items-center bg-surface/30">
+                                        <div>
+                                            <h4 className="font-bold text-primary">Strategy Sync</h4>
+                                            <p className="text-[10px] uppercase tracking-wider text-primary/50">
+                                                Last active: {managerOnline ? 'Now' : 'Recently'}
+                                            </p>
+                                        </div>
+                                        <BsThreeDotsVertical className="text-primary/40" />
                                     </div>
-                                    {messages.map((msg, idx) => {
-                                        const msgId = String(msg?._id || msg?.id || idx);
-                                        const isMe = String(msg?.senderAuthId || msg?.senderId || '') === currentUserId;
-                                        const dt = msg?.createdAt ? new Date(msg.createdAt) : null;
-                                        const time = dt && !Number.isNaN(dt.getTime())
-                                            ? dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                            : '';
-                                        const attachments = Array.isArray(msg?.attachments) ? msg.attachments : [];
 
-                                        return (
-                                            <div key={msgId} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                                <div className={`max-w-[60%] p-5 rounded-2xl text-sm leading-relaxed shadow-sm ${isMe ? 'bg-primary text-white rounded-br-none' : 'bg-white text-[#0b2d49] border border-gray-100 rounded-bl-none'}`}>
-                                                    {renderRichAlternatives(msg, isMe) || (msg?.text ? <p>{msg.text}</p> : null)}
-                                                    {attachments.length > 0 && (
-                                                        <div className="mt-3 space-y-2">
-                                                            {attachments.map((a) => {
-                                                                const url = a?.url;
-                                                                const name = a?.originalName || a?.filename || 'Attachment';
-                                                                const type = (a?.mimetype || '').toLowerCase();
-                                                                const resolvedUrl = resolveChatAssetUrl(url);
-                                                                const isImage = type.startsWith('image/') || (resolvedUrl && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(resolvedUrl));
-                                                                if (!url) return null;
+                                    <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-surface" ref={messagesViewportRef} onScroll={handleMessagesScroll}>
+                                        <div className="flex justify-center mb-8">
+                                            <span className="px-4 py-1.5 bg-surface text-primary/60 text-[9px] font-bold rounded-full uppercase tracking-widest">Today</span>
+                                        </div>
+                                        {messages.map((msg, idx) => {
+                                            const msgId = String(msg?._id || msg?.id || idx);
+                                            const isMe = String(msg?.senderAuthId || msg?.senderId || '') === currentUserId;
+                                            const dt = msg?.createdAt ? new Date(msg.createdAt) : null;
+                                            const time = dt && !Number.isNaN(dt.getTime())
+                                                ? dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                                : '';
+                                            const attachments = Array.isArray(msg?.attachments) ? msg.attachments : [];
 
-                                                                return isImage ? (
-                                                                    <button
-                                                                        key={`${String(url)}-${name}`}
-                                                                        type="button"
-                                                                        onClick={() => openAttachmentWithAuth({ url, filename: name, mimetype: type })}
-                                                                        className="block"
-                                                                        title="Open image"
-                                                                    >
-                                                                        <img src={resolvedUrl} alt={name} className="max-h-60 rounded-xl border border-black/5" />
-                                                                    </button>
-                                                                ) : (
-                                                                    <button
-                                                                        key={`${String(url)}-${name}`}
-                                                                        type="button"
-                                                                        onClick={() => openAttachmentWithAuth({ url, filename: name, mimetype: type })}
-                                                                        className={`block text-left text-xs font-black uppercase tracking-widest underline underline-offset-4 ${isMe ? 'text-white/80' : 'text-primary/60'}`}
-                                                                        title="Open attachment"
-                                                                    >
-                                                                        {name}
-                                                                    </button>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    )}
-                                                    <p className={`text-[9px] mt-2 font-bold uppercase tracking-widest text-right ${isMe ? 'text-white/60' : 'text-gray-300'}`}>{time}</p>
+                                            return (
+                                                <div key={msgId} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                                    <div className={`max-w-[60%] p-5 rounded-2xl text-sm leading-relaxed shadow-sm ${isMe ? 'bg-primary text-white rounded-br-none' : 'bg-white text-[#0b2d49] border border-gray-100 rounded-bl-none'}`}>
+                                                        {renderRichAlternatives(msg, isMe) || (msg?.text ? <p>{msg.text}</p> : null)}
+                                                        {attachments.length > 0 && (
+                                                            <div className="mt-3 space-y-2">
+                                                                {attachments.map((a) => {
+                                                                    const url = a?.url;
+                                                                    const name = a?.originalName || a?.filename || 'Attachment';
+                                                                    const type = (a?.mimetype || '').toLowerCase();
+                                                                    const resolvedUrl = resolveChatAssetUrl(url);
+                                                                    const isImage = type.startsWith('image/') || (resolvedUrl && /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(resolvedUrl));
+                                                                    if (!url) return null;
+
+                                                                    return isImage ? (
+                                                                        <button
+                                                                            key={`${String(url)}-${name}`}
+                                                                            type="button"
+                                                                            onClick={() => openAttachmentWithAuth({ url, filename: name, mimetype: type })}
+                                                                            className="block"
+                                                                            title="Open image"
+                                                                        >
+                                                                            <img src={resolvedUrl} alt={name} className="max-h-60 rounded-xl border border-black/5" />
+                                                                        </button>
+                                                                    ) : (
+                                                                        <button
+                                                                            key={`${String(url)}-${name}`}
+                                                                            type="button"
+                                                                            onClick={() => openAttachmentWithAuth({ url, filename: name, mimetype: type })}
+                                                                            className={`block text-left text-xs font-black uppercase tracking-widest underline underline-offset-4 ${isMe ? 'text-white/80' : 'text-primary/60'}`}
+                                                                            title="Open attachment"
+                                                                        >
+                                                                            {name}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                        <p className={`text-[9px] mt-2 font-bold uppercase tracking-widest text-right ${isMe ? 'text-white/60' : 'text-gray-300'}`}>{time}</p>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        );
-                                    })}
-                                    <div ref={messagesEndRef} />
-                                </div>
+                                            );
+                                        })}
+                                        <div ref={messagesEndRef} />
+                                    </div>
 
-                                <div className="p-6 bg-white border-t border-primary/10">
-                                    <form onSubmit={handleSendMessage} className="flex gap-4 relative">
-                                        <input
-                                            ref={fileInputRef}
-                                            type="file"
-                                            multiple
-                                            onChange={handleFileChange}
-                                            className="hidden"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={handleAttachClick}
-                                            className="w-12 bg-surface text-primary rounded-2xl flex items-center justify-center hover:bg-surface/80 transition-all"
-                                            title="Attach files"
-                                        >
-                                            <BsPaperclip size={16} />
-                                        </button>
-                                        <input
-                                            type="text"
-                                            value={chatMessage}
-                                            onChange={(e) => setChatMessage(e.target.value)}
-                                            placeholder="Type your message..."
-                                            className="flex-1 bg-surface border-none rounded-2xl px-6 py-4 text-sm focus:ring-2 focus:ring-primary/20 text-[#0b2d49] placeholder:text-gray-400"
-                                        />
-                                        <button type="submit" className="absolute right-2 top-2 bottom-2 w-12 bg-primary text-white rounded-xl flex items-center justify-center hover:bg-primary/90 transition-all shadow-md">
-                                            <BsSend size={18} />
-                                        </button>
-                                    </form>
+                                    <div className="p-6 bg-white border-t border-primary/10">
+                                        <form onSubmit={handleSendMessage} className="flex gap-4 relative">
+                                            <input
+                                                ref={fileInputRef}
+                                                type="file"
+                                                multiple
+                                                onChange={handleFileChange}
+                                                className="hidden"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleAttachClick}
+                                                className="w-12 bg-surface text-primary rounded-2xl flex items-center justify-center hover:bg-surface/80 transition-all"
+                                                title="Attach files"
+                                            >
+                                                <BsPaperclip size={16} />
+                                            </button>
+                                            <input
+                                                type="text"
+                                                value={chatMessage}
+                                                onChange={(e) => setChatMessage(e.target.value)}
+                                                placeholder="Type your message..."
+                                                className="flex-1 bg-surface border-none rounded-2xl px-6 py-4 text-sm focus:ring-2 focus:ring-primary/20 text-[#0b2d49] placeholder:text-gray-400"
+                                            />
+                                            <button type="submit" className="absolute right-2 top-2 bottom-2 w-12 bg-primary text-white rounded-xl flex items-center justify-center hover:bg-primary/90 transition-all shadow-md">
+                                                <BsSend size={18} />
+                                            </button>
+                                        </form>
+                                    </div>
                                 </div>
-                            </>
+                            </div>
                         )}
                     </div>
                 )}

@@ -35,7 +35,8 @@ import {
 // Data
 import { tabs as tabsData } from '../../../data/managerEventDetailsData';
 import { fetchWithAuth } from '../../../utils/apiHandler';
-import { refreshAccessToken } from '../../../store/slices/authSlice';
+import { refreshAccessToken, selectUser } from '../../../store/slices/authSlice';
+import { ensureEventDmConversation, fetchConversationMessages } from '../../../utils/chatApi';
 
 const API_BASE_URL = 'http://localhost:8080';
 
@@ -54,6 +55,27 @@ const formatEventDate = (value) => {
     return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
 };
 
+const decodeJwtPayload = (token) => {
+    try {
+        const parts = String(token || '').split('.');
+        if (parts.length < 2) return null;
+        const base64Url = parts[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+        const json = atob(padded);
+        return JSON.parse(json);
+    } catch {
+        return null;
+    }
+};
+
+const resolveAuthId = ({ user, accessToken }) => {
+    const fromUser = String(user?.authId || '').trim();
+    if (fromUser) return fromUser;
+    const payload = decodeJwtPayload(accessToken);
+    return String(payload?.authId || payload?.sub || payload?.userId || payload?.id || '').trim();
+};
+
 const getInitials = (name) => {
     const n = String(name || '').trim();
     if (!n) return 'NA';
@@ -68,6 +90,9 @@ const ManagerEventDetails = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const user = useSelector(selectUser);
+    const accessToken = useSelector((state) => state.auth.accessToken) || localStorage.getItem('accessToken');
+    const currentUserAuthId = resolveAuthId({ user, accessToken });
 
     const vendorSelection = useSelector((state) => selectPlanningVendorSelectionByEventId(state, id));
     const [activeTab, setActiveTab] = useState('overview');
@@ -85,6 +110,7 @@ const ManagerEventDetails = () => {
     const [staffRefreshKey, setStaffRefreshKey] = useState(0);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
+    const [unreadChatCount, setUnreadChatCount] = useState(0);
 
     // Scroll listener for sticky header
     useEffect(() => {
@@ -403,11 +429,109 @@ const ManagerEventDetails = () => {
         return null;
     }, [vendorSelection]);
 
-    const tabs = tabsData.map(tab => ({
-        ...tab,
-        icon: iconMap[tab.icon],
-        count: tab.id === 'vendors' ? (vendorSlotCount ?? tab.count) : tab.count,
-    }));
+    const promoteProofCount = useMemo(() => {
+        if (eventType !== 'promote') return null;
+        return Array.isArray(rawEvent?.authenticityProofs) ? rawEvent.authenticityProofs.length : 0;
+    }, [eventType, rawEvent?.authenticityProofs]);
+
+    const chatContactAuthIds = useMemo(() => {
+        const ids = new Set();
+
+        const clientAuthId = String(client?.authId || '').trim();
+        if (clientAuthId) ids.add(clientAuthId);
+
+        const acceptedVendorAuthIds = (Array.isArray(vendorSelection?.vendors) ? vendorSelection.vendors : [])
+            .filter((v) => String(v?.status || '').trim().toUpperCase() === 'ACCEPTED')
+            .map((v) => String(v?.vendorAuthId || '').trim())
+            .filter(Boolean);
+
+        for (const authId of acceptedVendorAuthIds) ids.add(authId);
+        return Array.from(ids);
+    }, [client?.authId, vendorSelection?.vendors]);
+
+    useEffect(() => {
+        const eventId = String(id || '').trim();
+        const managerAuthId = String(currentUserAuthId || '').trim();
+        const contactAuthIds = Array.isArray(chatContactAuthIds) ? chatContactAuthIds : [];
+
+        if (!eventId || !managerAuthId || contactAuthIds.length === 0) {
+            setUnreadChatCount(0);
+            return;
+        }
+
+        if (activeTab === 'chat') {
+            // Chat tab marks messages as read when opened.
+            setUnreadChatCount(0);
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadUnreadCount = async () => {
+            try {
+                const counts = await Promise.all(contactAuthIds.map(async (otherAuthId) => {
+                    const convo = await ensureEventDmConversation({
+                        eventId,
+                        otherAuthId,
+                        dispatch,
+                        refreshAction: refreshAccessToken,
+                    });
+
+                    const conversationId = String(convo?._id || convo?.id || '').trim();
+                    if (!conversationId) return 0;
+
+                    const messages = await fetchConversationMessages({
+                        conversationId,
+                        limit: 200,
+                        dispatch,
+                        refreshAction: refreshAccessToken,
+                    });
+
+                    return (Array.isArray(messages) ? messages : []).filter((msg) => {
+                        const sender = String(msg?.senderAuthId || msg?.senderId || '').trim();
+                        if (!sender || sender === managerAuthId) return false;
+                        const readBy = Array.isArray(msg?.readBy) ? msg.readBy.map((v) => String(v || '').trim()) : [];
+                        return !readBy.includes(managerAuthId);
+                    }).length;
+                }));
+
+                if (cancelled) return;
+
+                const unreadTotal = counts.reduce((sum, n) => sum + Number(n || 0), 0);
+                setUnreadChatCount(unreadTotal);
+            } catch {
+                if (!cancelled) setUnreadChatCount(0);
+            }
+        };
+
+        loadUnreadCount();
+        const timer = setInterval(loadUnreadCount, 20000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+        };
+    }, [id, currentUserAuthId, activeTab, dispatch, chatContactAuthIds]);
+
+    const tabs = tabsData
+        .filter((tab) => !(eventType === 'promote' && tab.id === 'vendors'))
+        .map(tab => ({
+            ...tab,
+            icon: iconMap[tab.icon],
+            count: tab.id === 'vendors'
+                ? (vendorSlotCount ?? tab.count)
+                : tab.id === 'chat'
+                    ? unreadChatCount
+                : tab.id === 'documents' && eventType === 'promote'
+                    ? promoteProofCount
+                    : tab.count,
+        }));
+
+    useEffect(() => {
+        if (eventType === 'promote' && activeTab === 'vendors') {
+            setActiveTab('overview');
+        }
+    }, [eventType, activeTab]);
 
     const handleCopyLink = () => {
         navigator.clipboard.writeText(window.location.href);
@@ -500,6 +624,11 @@ const ManagerEventDetails = () => {
                         {tabs.map((tab) => {
                             const Icon = tab.icon;
                             const isActive = activeTab === tab.id;
+                            const hasCount = tab.count !== undefined && tab.count !== null;
+                            const numericCount = Number(tab.count);
+                            const displayCount = Number.isFinite(numericCount)
+                                ? (numericCount > 999 ? '2.4k' : String(numericCount))
+                                : String(tab.count);
                             return (
                                 <button
                                     key={tab.id}
@@ -511,9 +640,9 @@ const ManagerEventDetails = () => {
                                 >
                                     <Icon className={`w-4 h-4 ${isActive ? 'text-teal-600' : 'text-gray-400'}`} />
                                     {tab.label}
-                                    {tab.count && (
-                                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${isActive ? 'bg-teal-200 text-teal-800' : 'bg-gray-200 text-gray-600'}`}>
-                                            {tab.count > 999 ? '2.4k' : tab.count}
+                                    {hasCount && (
+                                        <span className={`inline-flex min-w-5 h-5 items-center justify-center px-1.5 py-0.5 rounded-full text-[10px] leading-none ${isActive ? 'bg-teal-200 text-teal-800' : 'bg-gray-200 text-gray-600'}`}>
+                                            {displayCount}
                                         </span>
                                     )}
                                 </button>
@@ -551,12 +680,12 @@ const ManagerEventDetails = () => {
                             )
                         )}
                         {activeTab === 'guests' && <GuestsTab onAddClick={() => setIsGuestModalOpen(true)} />}
-                        {activeTab === 'vendors' && <VendorsTab />}
+                        {activeTab === 'vendors' && eventType !== 'promote' && <VendorsTab />}
                         {activeTab === 'chat' && <ChatTab eventId={id} client={client} />}
                         {activeTab === 'todo' && <ToDoTab />}
                         {activeTab === 'schedule' && <ScheduleTab />}
                         {activeTab === 'financials' && event && <FinancialsTab event={event} />}
-                        {activeTab === 'documents' && <DocumentsTab />}
+                        {activeTab === 'documents' && <DocumentsTab eventType={eventType} eventData={rawEvent} />}
                     </motion.div>
                 </AnimatePresence>
             </div>

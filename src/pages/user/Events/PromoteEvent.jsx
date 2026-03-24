@@ -144,11 +144,78 @@ const PromoteEvent = () => {
         });
     };
 
+    const getFinalizeValidationErrors = () => {
+        const errors = [];
+
+        const hasEventName = (formData.eventName || '').trim().length > 0;
+        const hasDescription = (formData.eventDescription || '').trim().length >= 10;
+        if (!hasEventName || !hasDescription) {
+            errors.push('Complete Step 1: event name and description (min 10 characters).');
+        }
+
+        const hasCategory = !!formData.category;
+        const hasCustomCategory = formData.category !== 'Other' || (formData.customCategory || '').trim().length > 0;
+        const hasInterests = (formData.interests?.length || 0) > 0;
+        if (!hasCategory || !hasCustomCategory || !hasInterests) {
+            errors.push('Complete Step 2: category and at least one event field.');
+        }
+
+        if (!formData.banner || !formData.bannerFile) {
+            errors.push('Complete Step 3: upload an event banner.');
+        }
+
+        const totalCapacity = parseInt(formData.totalCapacity, 10) || 0;
+        const ticketRows = Array.isArray(formData.tickets) ? formData.tickets : [];
+        const ticketQtySum = ticketRows.reduce((sum, t) => sum + (parseInt(t.quantity, 10) || 0), 0);
+        const ticketsValid =
+            totalCapacity > 0 &&
+            ticketRows.length > 0 &&
+            ticketRows.every((t) => !!t.name && (parseInt(t.quantity, 10) || 0) > 0) &&
+            ticketQtySum === totalCapacity &&
+            (
+                formData.ticketType === 'free' ||
+                ticketRows.every((t) => {
+                    const price = parseFloat(t.price);
+                    return Number.isFinite(price) && price > 0;
+                })
+            );
+        if (!ticketsValid) {
+            errors.push('Complete Step 4: valid ticket tiers and quantities matching total tickets.');
+        }
+
+        const hasSchedule = !!formData.startDate && !!formData.endDate && !!formData.ticketReleaseDate && !!formData.ticketSalesEndDate;
+        const hasVenue = (formData.address || '').trim().length > 0;
+        const hasCoordinates = Number.isFinite(Number(formData.lat)) && Number.isFinite(Number(formData.lng));
+        if (!hasSchedule || !hasVenue || !hasCoordinates) {
+            errors.push('Complete Step 5: schedule, venue address, and map location.');
+        }
+
+        if ((formData.authDocuments?.length || 0) === 0) {
+            errors.push('Complete Step 7: upload at least one authenticity proof document.');
+        }
+
+        return errors;
+    };
+
     // Navigation
     const handleNext = () => {
         if (currentStep < 8) {
             setCurrentStep(prev => prev + 1);
         } else {
+            const validationErrors = getFinalizeValidationErrors();
+            if (validationErrors.length > 0) {
+                toast.error(validationErrors[0], {
+                    id: 'promote-finalize-validation',
+                    duration: 4500,
+                    style: {
+                        background: '#09637E',
+                        color: '#EBF4F6',
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                    },
+                });
+                return;
+            }
             setIsPaymentStep(true);
         }
     };
