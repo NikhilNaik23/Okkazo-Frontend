@@ -1,119 +1,241 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-hot-toast';
 import { useParams, Link } from 'react-router-dom';
-import { BsArrowLeft, BsFileEarmarkPdf, BsDownload, BsCheckCircleFill, BsPersonCheckFill, BsFillChatSquareTextFill, BsGraphUp, BsWallet2, BsPersonVcardFill, BsThreeDotsVertical, BsSendFill, BsClockHistory, BsCalendarEvent, BsGeoAlt } from 'react-icons/bs';
-import { promotedCampaigns } from '../../../data/myEventsDashboardData';
+import { BsArrowLeft, BsFileEarmarkPdf, BsDownload, BsCheckCircleFill, BsPersonCheckFill, BsFillChatSquareTextFill, BsGraphUp, BsWallet2, BsThreeDotsVertical, BsSendFill, BsCalendarEvent, BsGeoAlt } from 'react-icons/bs';
+import { useDispatch, useSelector } from 'react-redux';
+import { io as createSocket } from 'socket.io-client';
+import { refreshAccessToken, selectUser } from '../../../store/slices/authSlice';
+import {
+    ensureEventConversation,
+    ensureEventDmConversation,
+    fetchConversationMessages,
+    sendConversationMessage,
+    markConversationRead,
+} from '../../../utils/chatApi';
+import { CHAT_SOCKET_URL } from '../../../utils/chatConfig';
 
 const API_BASE_URL = 'http://localhost:8080';
 
+const toManagerBadge = (name) => {
+    const text = String(name || '').trim();
+    if (!text) return 'M';
+
+    const managerWithNumber = text.match(/\bmanager\b\s*(\d+)/i);
+    if (managerWithNumber) return `M${managerWithNumber[1]}`;
+
+    const firstAlpha = text.match(/[A-Za-z]/);
+    const firstLetter = firstAlpha ? firstAlpha[0].toUpperCase() : 'M';
+    const number = text.match(/(\d+)/);
+
+    return number ? `${firstLetter}${number[1]}` : firstLetter;
+};
+
 const EventCommandCenter = () => {
     const { id } = useParams();
+    const dispatch = useDispatch();
+    const user = useSelector(selectUser);
+    const accessToken = useSelector((state) => state.auth.accessToken) || localStorage.getItem('accessToken');
+
     const [campaign, setCampaign] = useState(null);
     const [activeTab, setActiveTab] = useState("command_center"); // command_center | manager_sync
     const [chatMessage, setChatMessage] = useState("");
-    const [chatHistory, setChatHistory] = useState([
-        { id: 1, sender: "manager", text: "Hello! checking in on your event details.", time: "10:30 AM" },
-        { id: 2, sender: "user", text: "Hi Siddharth, thanks for the quick assignment.", time: "10:32 AM" },
-    ]);
+    const [messages, setMessages] = useState([]);
+    const [conversationId, setConversationId] = useState(null);
+    const [managerSyncUnreadCount, setManagerSyncUnreadCount] = useState(0);
+    const socketRef = useRef(null);
+    const [socketConnected, setSocketConnected] = useState(false);
+    const [socketJoined, setSocketJoined] = useState(false);
+
+    const decodeJwtPayload = (token) => {
+        try {
+            const parts = String(token || '').split('.');
+            if (parts.length < 2) return null;
+            const base64Url = parts[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+            const json = atob(padded);
+            return JSON.parse(json);
+        } catch {
+            return null;
+        }
+    };
+
+    const currentUserAuthId = (() => {
+        const fromUser = String(user?.authId || '').trim();
+        if (fromUser) return fromUser;
+        const payload = decodeJwtPayload(accessToken);
+        return String(payload?.authId || payload?.sub || payload?.userId || payload?.id || '').trim();
+    })();
 
     const [manager, setManager] = useState({
-        name: "Siddharth Mehta",
-        role: "Senior Operations Lead",
+        name: "Event Manager",
+        role: "Manager",
         avatar: "https://randomuser.me/api/portraits/men/32.jpg",
-        status: "Online"
+        status: "Offline",
+        authId: null,
     });
+
+    const toDateLabel = (value, fallback = '—') => {
+        if (!value) return fallback;
+        const dt = new Date(value);
+        if (Number.isNaN(dt.getTime())) return fallback;
+        return dt.toLocaleDateString();
+    };
+
+    const toDateTimeLabel = (schedule) => {
+        const startAt = schedule?.startAt ? new Date(schedule.startAt) : null;
+        if (!startAt || Number.isNaN(startAt.getTime())) return '—';
+        return `${startAt.toLocaleDateString()} • ${startAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    };
+
+    const toStatusLabel = (status) => {
+        const normalized = String(status || '').trim();
+        if (!normalized) return 'Pending';
+        return normalized.replace(/_/g, ' ');
+    };
+
+    const buildRoadmap = (promote) => {
+        const eventStatus = String(promote?.eventStatus || '').toUpperCase();
+        const isManagerUnassigned = eventStatus === 'MANAGER_UNASSIGNED';
+        const isInReview = eventStatus === 'IN_REVIEW';
+        const isLive = eventStatus === 'LIVE';
+        const isCompleted = eventStatus === 'COMPLETED' || eventStatus === 'COMPLETE';
+        const isFinal = isLive || isCompleted;
+
+        const trackingStatus = isManagerUnassigned
+            ? 'Application Received'
+            : isInReview
+                ? 'Application in Review'
+                : isLive
+                    ? 'Live'
+                    : isCompleted
+                        ? 'Completed'
+                        : 'In Progress';
+
+        return {
+            trackingStatus,
+            steps: [
+                {
+                    step: 1,
+                    label: 'Application Received',
+                    status: isManagerUnassigned ? 'in_progress' : 'completed',
+                    date: toDateLabel(promote?.createdAt),
+                },
+                {
+                    step: 2,
+                    label: 'Manager Assigned',
+                    status: isInReview || isFinal ? 'completed' : 'pending',
+                    date: toDateLabel(promote?.managerAssignment?.assignedAt),
+                },
+                {
+                    step: 3,
+                    label: 'Application In Review',
+                    status: isInReview ? 'in_progress' : isFinal ? 'completed' : 'pending',
+                    date: isInReview ? 'Today' : toDateLabel(promote?.adminDecision?.decidedAt),
+                },
+                {
+                    step: 4,
+                    label: isCompleted ? 'Completed' : 'Success / Live',
+                    status: isFinal ? 'completed' : 'pending',
+                    date: isFinal ? toDateLabel(promote?.updatedAt) : '—',
+                },
+            ],
+        };
+    };
 
     useEffect(() => {
         let cancelled = false;
 
-        const toDisplayStatus = (status) => String(status || '').trim() || 'PENDING';
-        const toDateTimeLabel = (schedule) => {
-            const startAt = schedule?.startAt ? new Date(schedule.startAt) : null;
-            if (!startAt || Number.isNaN(startAt.getTime())) return '—';
-            return `${startAt.toLocaleDateString()} • ${startAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-        };
-
         const load = async () => {
-            // 1) Try local storage / static (legacy)
-            const storedCampaigns = JSON.parse(localStorage.getItem('promoted_campaigns') || '[]');
-            const found = storedCampaigns.find((c) => c.id === id) || promotedCampaigns.find((c) => c.id === id);
-
-            if (found) {
-                if (!cancelled) {
-                    setCampaign({
-                        ...found,
-                        ticketsSold: found.ticketsSold !== undefined ? found.ticketsSold : 142,
-                        totalTickets: found.totalTickets !== undefined ? found.totalTickets : 500,
-                        revenueGenerated: found.revenueGenerated !== undefined ? found.revenueGenerated : (found.revenue === '-' ? 0 : 213000),
-                        cost: found.cost !== undefined ? found.cost : 15000,
-                        daysLeft: found.daysLeft !== undefined ? found.daysLeft : 12,
-                        roadmap: found.roadmap || [
-                            { step: 1, label: "Application Received", status: "completed", date: "Feb 18, 2026" },
-                            { step: 2, label: "Manager Assigned", status: "completed", date: "Feb 19, 2026" },
-                            { step: 3, label: "Application In Review", status: "in_progress", date: "Today" },
-                            { step: 4, label: "Success / Live", status: "pending", date: "Estimation: Feb 20" }
-                        ],
-                        documents: found.documents || [
-                            { name: "Venue_Permission_Letter.pdf", type: "application/pdf", size: "2.4 MB" },
-                            { name: "Organizer_ID_Proof.jpg", type: "image/jpeg", size: "1.1 MB" }
-                        ],
-                        description: found.description || "Join us for an evening of innovation and networking as we explore the future of corporate strategies.",
-                        location: found.location || "Business Park Conference Room, Mumbai",
-                        date: found.date || "March 5, 2026 • 10:00 AM"
-                    });
-                }
-                return;
-            }
-
-            // 2) Fetch from backend promote API by eventId
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) {
                 toast.error('Please log in to view promote event details');
                 return;
             }
 
-            const res = await fetch(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-            });
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+            };
 
-            const json = await res.json().catch(() => ({}));
-            if (!res.ok || !json?.data) {
-                toast.error(json?.message || 'Failed to load promote event');
-                return;
+            const resolveByRouteId = (arr) => {
+                return (arr || []).find((item) => {
+                    const routeId = String(id || '').trim();
+                    if (!routeId) return false;
+                    return (
+                        String(item?.eventId || '') === routeId ||
+                        String(item?.promoteId || '') === routeId ||
+                        String(item?._id || '') === routeId
+                    );
+                });
+            };
+
+            let pr = null;
+            try {
+                const listRes = await fetch(`${API_BASE_URL}/api/events/promote/me`, {
+                    method: 'GET',
+                    headers,
+                });
+                const listJson = await listRes.json().catch(() => ({}));
+                const promoteList = Array.isArray(listJson?.promotes)
+                    ? listJson.promotes
+                    : Array.isArray(listJson?.data?.promotes)
+                        ? listJson.data.promotes
+                        : [];
+                pr = resolveByRouteId(promoteList) || null;
+            } catch {
+                // Keep fallback below.
             }
 
-            const pr = json.data;
+            if (!pr) {
+                const singleRes = await fetch(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}`, {
+                    method: 'GET',
+                    headers,
+                });
+                const singleJson = await singleRes.json().catch(() => ({}));
+                if (!singleRes.ok || !singleJson?.success) {
+                    toast.error(singleJson?.message || 'Failed to load promote event');
+                    return;
+                }
+                pr = singleJson?.data || null;
+            }
+
+            if (!pr) {
+                toast.error('Promote event not found');
+                return;
+            }
 
             const ticketType = String(pr?.tickets?.ticketType || '').toLowerCase();
             const isFreeEvent = ticketType === 'free';
             const totalTickets = typeof pr?.tickets?.noOfTickets === 'number' ? pr.tickets.noOfTickets : 0;
+            const roadmapState = buildRoadmap(pr);
 
             const mapped = {
                 id: pr?.eventId || String(id),
                 title: pr?.eventTitle || 'Promote Event',
-                status: toDisplayStatus(pr?.adminDecision?.status || pr?.eventStatus),
+                status: toStatusLabel(pr?.eventStatus || pr?.adminDecision?.status),
                 location: pr?.venue?.locationName || 'Location TBD',
                 date: toDateTimeLabel(pr?.schedule),
                 description: pr?.eventDescription || '',
                 revenue: isFreeEvent ? '-' : (typeof pr?.totalAmount === 'number' ? pr.totalAmount : '-'),
                 cost: typeof pr?.platformFee === 'number' ? pr.platformFee : 0,
                 revenueGenerated: typeof pr?.totalAmount === 'number' ? pr.totalAmount : 0,
-                ticketsSold: typeof pr?.ticketAnalytics?.sold === 'number' ? pr.ticketAnalytics.sold : 0,
+                ticketsSold: typeof pr?.ticketAnalytics?.ticketsSold === 'number' ? pr.ticketAnalytics.ticketsSold : 0,
                 totalTickets: totalTickets,
-                roadmap: [
-                    { step: 1, label: "Application Received", status: "completed", date: pr?.createdAt ? new Date(pr.createdAt).toLocaleDateString() : '—' },
-                    { step: 2, label: "Manager Assigned", status: pr?.assignedManagerId ? 'completed' : 'pending', date: pr?.managerAssignment?.assignedAt ? new Date(pr.managerAssignment.assignedAt).toLocaleDateString() : '—' },
-                    { step: 3, label: "Application In Review", status: String(pr?.adminDecision?.status || '').toUpperCase() === 'APPROVED' ? 'completed' : 'in_progress', date: pr?.adminDecision?.decidedAt ? new Date(pr.adminDecision.decidedAt).toLocaleDateString() : 'Today' },
-                    { step: 4, label: "Success / Live", status: String(pr?.eventStatus || '').toUpperCase() === 'LIVE' ? 'completed' : 'pending', date: '—' },
-                ],
+                hasAssignedManager: Boolean(pr?.assignedManagerId),
+                assignedManagerId: pr?.assignedManagerId || null,
+                managerProfile: pr?.managerProfile || null,
+                trackingStatus: roadmapState.trackingStatus,
+                roadmap: roadmapState.steps,
                 documents: Array.isArray(pr?.authenticityProofs)
                     ? pr.authenticityProofs
                         .filter((p) => p?.url)
-                        .map((p) => ({ name: p.publicId || 'auth-proof', type: p.mimeType || 'image/*', size: p.sizeBytes ? `${Math.round(p.sizeBytes / (1024 * 1024) * 10) / 10} MB` : '—' }))
+                        .map((p, index) => ({
+                            name: p.publicId || `auth-proof-${index + 1}`,
+                            type: p.mimeType || 'image/*',
+                            size: p.sizeBytes ? `${Math.round(p.sizeBytes / (1024 * 1024) * 10) / 10} MB` : '—',
+                            url: p.url,
+                        }))
                     : [],
                 bannerUrl: pr?.eventBanner?.url || null,
             };
@@ -127,15 +249,267 @@ const EventCommandCenter = () => {
         };
     }, [id]);
 
+    useEffect(() => {
+        if (!campaign?.hasAssignedManager) {
+            setManager((prev) => ({
+                ...prev,
+                name: 'Event Manager',
+                role: 'Manager',
+                status: 'Offline',
+                authId: null,
+            }));
+            return;
+        }
+
+        const profile = campaign?.managerProfile && typeof campaign.managerProfile === 'object'
+            ? campaign.managerProfile
+            : null;
+
+        const role = profile?.assignedRole || profile?.department || profile?.role || 'Manager';
+
+        setManager((prev) => ({
+            ...prev,
+            name: profile?.name || profile?.fullName || 'Event Manager',
+            role,
+            avatar: profile?.avatar || prev.avatar,
+            status: 'Offline',
+            authId: profile?.authId || null,
+        }));
+    }, [campaign?.hasAssignedManager, campaign?.managerProfile]);
+
+    useEffect(() => {
+        if (activeTab !== 'manager_sync') return;
+        if (!campaign?.hasAssignedManager) return;
+        if (!campaign?.id) return;
+
+        let cancelled = false;
+        const loadConversation = async () => {
+            try {
+                setMessages([]);
+
+                const convo = manager?.authId
+                    ? await ensureEventDmConversation({
+                        eventId: campaign.id,
+                        otherAuthId: manager.authId,
+                        dispatch,
+                        refreshAction: refreshAccessToken,
+                    })
+                    : await ensureEventConversation({
+                        eventId: campaign.id,
+                        dispatch,
+                        refreshAction: refreshAccessToken,
+                    });
+
+                const convoId = String(convo?._id || convo?.id || '').trim();
+                if (!convoId) throw new Error('Invalid conversation');
+                if (cancelled) return;
+
+                setConversationId(convoId);
+                const msgs = await fetchConversationMessages({
+                    conversationId: convoId,
+                    limit: 200,
+                    dispatch,
+                    refreshAction: refreshAccessToken,
+                });
+                if (cancelled) return;
+
+                setMessages(Array.isArray(msgs) ? msgs : []);
+                markConversationRead({ conversationId: convoId, dispatch, refreshAction: refreshAccessToken }).catch(() => {});
+            } catch (e) {
+                toast.error(e?.message || 'Failed to load chat');
+            }
+        };
+
+        loadConversation();
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab, campaign?.hasAssignedManager, campaign?.id, manager?.authId, dispatch]);
+
+    useEffect(() => {
+        if (activeTab !== 'manager_sync') return;
+        if (!conversationId || !accessToken) return;
+
+        const socket = createSocket(CHAT_SOCKET_URL, {
+            auth: { token: accessToken },
+            transports: ['websocket', 'polling'],
+        });
+        socketRef.current = socket;
+
+        socket.on('connect', () => {
+            setSocketConnected(true);
+            setSocketJoined(false);
+            socket.emit('conversation:join', { conversationId });
+            if (manager?.authId) {
+                socket.emit('presence:watch', { authIds: [manager.authId] });
+            }
+        });
+
+        socket.on('conversation:joined', (payload) => {
+            const joinedId = String(payload?.conversationId || '').trim();
+            if (joinedId && joinedId === String(conversationId)) {
+                setSocketJoined(true);
+            }
+        });
+
+        socket.on('disconnect', () => {
+            setSocketConnected(false);
+            setSocketJoined(false);
+        });
+
+        socket.on('connect_error', () => {
+            setSocketConnected(false);
+            setSocketJoined(false);
+        });
+
+        socket.on('message:new', (msg) => {
+            const msgId = String(msg?._id || msg?.id || '');
+            setMessages((prev) => {
+                if (msgId && prev.some((m) => String(m?._id || m?.id || '') === msgId)) return prev;
+                return [...prev, msg];
+            });
+
+            if (String(msg?.senderAuthId || '') !== currentUserAuthId) {
+                socket.emit('messages:read', { conversationId });
+                markConversationRead({ conversationId, dispatch, refreshAction: refreshAccessToken }).catch(() => {});
+            }
+        });
+
+        socket.on('presence:update', ({ authId, online } = {}) => {
+            const managerAuthId = String(manager?.authId || '').trim();
+            if (!managerAuthId) return;
+            if (String(authId || '').trim() !== managerAuthId) return;
+
+            setManager((prev) => ({
+                ...prev,
+                status: online ? 'Online' : 'Offline',
+            }));
+        });
+
+        return () => {
+            socket.disconnect();
+            socketRef.current = null;
+            setSocketConnected(false);
+            setSocketJoined(false);
+        };
+    }, [activeTab, conversationId, accessToken, manager?.authId, currentUserAuthId, dispatch]);
+
+    useEffect(() => {
+        const eventId = String(campaign?.id || '').trim();
+        const viewerAuthId = String(currentUserAuthId || '').trim();
+
+        if (!campaign?.hasAssignedManager || !eventId || !viewerAuthId) {
+            setManagerSyncUnreadCount(0);
+            return;
+        }
+
+        if (activeTab === 'manager_sync') {
+            setManagerSyncUnreadCount(0);
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadUnread = async () => {
+            try {
+                const convo = manager?.authId
+                    ? await ensureEventDmConversation({
+                        eventId,
+                        otherAuthId: manager.authId,
+                        dispatch,
+                        refreshAction: refreshAccessToken,
+                    })
+                    : await ensureEventConversation({
+                        eventId,
+                        dispatch,
+                        refreshAction: refreshAccessToken,
+                    });
+
+                const convoId = String(convo?._id || convo?.id || '').trim();
+                if (!convoId) {
+                    if (!cancelled) setManagerSyncUnreadCount(0);
+                    return;
+                }
+
+                const msgs = await fetchConversationMessages({
+                    conversationId: convoId,
+                    limit: 200,
+                    dispatch,
+                    refreshAction: refreshAccessToken,
+                });
+
+                if (cancelled) return;
+
+                const managerAuthId = String(manager?.authId || '').trim();
+                const unread = (Array.isArray(msgs) ? msgs : []).filter((m) => {
+                    const sender = String(m?.senderAuthId || m?.senderId || '').trim();
+                    if (!sender || sender === viewerAuthId) return false;
+                    if (managerAuthId && sender !== managerAuthId) return false;
+                    const readBy = Array.isArray(m?.readBy) ? m.readBy.map((v) => String(v || '').trim()) : [];
+                    return !readBy.includes(viewerAuthId);
+                }).length;
+
+                setManagerSyncUnreadCount(unread);
+            } catch {
+                if (!cancelled) setManagerSyncUnreadCount(0);
+            }
+        };
+
+        loadUnread();
+        const timer = setInterval(loadUnread, 20000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+        };
+    }, [activeTab, campaign?.id, campaign?.hasAssignedManager, manager?.authId, currentUserAuthId, dispatch]);
+    useEffect(() => {
+        if (!conversationId) return;
+        if (socketConnected && socketJoined) return;
+
+        let stopped = false;
+        const poll = async () => {
+            try {
+                const msgs = await fetchConversationMessages({
+                    conversationId,
+                    limit: 200,
+                    dispatch,
+                    refreshAction: refreshAccessToken,
+                });
+                if (!stopped) setMessages(Array.isArray(msgs) ? msgs : []);
+            } catch {
+                // ignore
+            }
+        };
+
+        poll();
+        const intervalId = setInterval(poll, 2500);
+        return () => {
+            stopped = true;
+            clearInterval(intervalId);
+        };
+    }, [conversationId, socketConnected, socketJoined, dispatch]);
+
     const handleSendMessage = (e) => {
         e.preventDefault();
-        if (!chatMessage.trim()) return;
-        setChatHistory([...chatHistory, { id: Date.now(), sender: "user", text: chatMessage, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
-        setChatMessage("");
-        // Mock reply
-        setTimeout(() => {
-            setChatHistory(prev => [...prev, { id: Date.now() + 1, sender: "manager", text: "Thanks for the update. I'm reviewing the documents now.", time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
-        }, 2000);
+        if (!chatMessage.trim() || !conversationId) return;
+
+        const text = chatMessage.trim();
+        sendConversationMessage({
+            conversationId,
+            text,
+            dispatch,
+            refreshAction: refreshAccessToken,
+        })
+            .then((data) => {
+                setChatMessage('');
+                if (!socketRef.current?.connected) {
+                    setMessages((prev) => [...prev, data]);
+                }
+            })
+            .catch((err) => {
+                toast.error(err?.message || 'Failed to send message');
+            });
     };
 
     if (!campaign) {
@@ -148,6 +522,11 @@ const EventCommandCenter = () => {
 
     const isFreeEvent = campaign.revenue === '-';
     const profitLoss = !isFreeEvent ? (campaign.revenueGenerated - campaign.cost) : 0;
+    const soldPercent = campaign.totalTickets > 0
+        ? Math.round((campaign.ticketsSold / campaign.totalTickets) * 100)
+        : 0;
+    const hasAssignedManager = Boolean(campaign.hasAssignedManager);
+    const managerIsOnline = String(manager?.status || '').toLowerCase() === 'online';
 
     return (
         <div className="min-h-screen bg-[#EBF4F6] text-[#09637E] font-sans px-8 pb-8 pt-24 md:px-16 md:pb-16 md:pt-28">
@@ -165,9 +544,16 @@ const EventCommandCenter = () => {
                         </button>
                         <button
                             onClick={() => setActiveTab("manager_sync")}
-                            className={`px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "manager_sync" ? "bg-[#09637E] text-white shadow-lg" : "bg-white text-[#09637E] hover:bg-[#09637E]/5"}`}
+                            disabled={!hasAssignedManager}
+                            title={hasAssignedManager ? 'Open manager sync' : 'Manager not assigned yet'}
+                            className={`inline-flex items-center gap-2 px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "manager_sync" ? "bg-[#09637E] text-white shadow-lg" : "bg-white text-[#09637E] hover:bg-[#09637E]/5"} ${!hasAssignedManager ? 'opacity-50 cursor-not-allowed hover:bg-white' : ''}`}
                         >
                             Manager Sync
+                            {managerSyncUnreadCount > 0 ? (
+                                <span className={`inline-flex min-w-5 h-5 items-center justify-center px-1.5 rounded-full text-[10px] leading-none ${activeTab === 'manager_sync' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'}`}>
+                                    {managerSyncUnreadCount > 99 ? '99+' : managerSyncUnreadCount}
+                                </span>
+                            ) : null}
                         </button>
                     </div>
                 </div>
@@ -187,7 +573,7 @@ const EventCommandCenter = () => {
                         <div className="bg-white rounded-[2.5rem] p-12 shadow-sm border border-[#09637E]/5 relative overflow-hidden">
                             <div className="flex justify-between items-center mb-12">
                                 <h3 className="text-2xl font-serif-premium italic text-[#09637E]">Event Planning Roadmap</h3>
-                                <span className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/60">Tracking Status: In Progress</span>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/60">Tracking Status: {campaign.trackingStatus || 'In Progress'}</span>
                             </div>
 
                             <div className="relative">
@@ -241,11 +627,17 @@ const EventCommandCenter = () => {
                                     <div className="absolute top-0 right-0 w-32 h-32 bg-[#fff]/10 rounded-full blur-3xl -mr-16 -mt-16" />
                                     <BsFillChatSquareTextFill size={24} className="mb-6 opacity-80" />
                                     <p className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-2">Consultation</p>
-                                    <h3 className="text-2xl font-serif-premium italic mb-4">Manager Connected</h3>
+                                    <h3 className="text-2xl font-serif-premium italic mb-4">{hasAssignedManager ? 'Manager Connected' : 'Manager Pending'}</h3>
                                     <p className="text-xs opacity-80 mb-6 leading-relaxed">
-                                        {manager.name} is assigned to your event. Sync up for strategy and execution details.
+                                        {hasAssignedManager
+                                            ? `${manager.name} is assigned to your event. Sync up for strategy and execution details.`
+                                            : 'Your event is waiting for manager assignment. Chat will unlock once a manager is assigned.'}
                                     </p>
-                                    <button onClick={() => setActiveTab("manager_sync")} className="w-full py-3 bg-white text-[#09637E] rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#EBF4F6] transition-colors">
+                                    <button
+                                        onClick={() => hasAssignedManager && setActiveTab("manager_sync")}
+                                        disabled={!hasAssignedManager}
+                                        className={`w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${hasAssignedManager ? 'bg-white text-[#09637E] hover:bg-[#EBF4F6]' : 'bg-white/70 text-[#09637E]/50 cursor-not-allowed'}`}
+                                    >
                                         Chat with Manager
                                     </button>
                                 </div>
@@ -267,7 +659,7 @@ const EventCommandCenter = () => {
                                                 </div>
                                                 <div className="text-right">
                                                     <span className="inline-block px-2 py-1 bg-emerald-50 text-emerald-600 rounded-md text-[9px] font-black uppercase tracking-widest mb-1">
-                                                        {Math.round((campaign.ticketsSold / campaign.totalTickets) * 100)}% Conversion
+                                                        {soldPercent}% Conversion
                                                     </span>
                                                     <p className="text-[10px] font-bold text-[#09637E]/60">{campaign.totalTickets - campaign.ticketsSold} to go</p>
                                                 </div>
@@ -276,7 +668,7 @@ const EventCommandCenter = () => {
                                             <div className="w-full h-2 bg-[#EBF4F6] rounded-full overflow-hidden">
                                                 <div
                                                     className="h-full bg-gradient-to-r from-[#09637E] to-[#7AB2B2] rounded-full transition-all duration-1000 ease-out"
-                                                    style={{ width: `${(campaign.ticketsSold / campaign.totalTickets) * 100}%` }}
+                                                    style={{ width: `${soldPercent}%` }}
                                                 />
                                             </div>
                                         </div>
@@ -315,15 +707,30 @@ const EventCommandCenter = () => {
                                     <div>
                                         <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/40 mb-2">Attached Documents</p>
                                         <div className="space-y-3">
-                                            {campaign.documents.map((doc, idx) => (
-                                                <div key={idx} className="flex items-center justify-between p-4 bg-[#EBF4F6] rounded-xl">
-                                                    <div className="flex items-center gap-3">
-                                                        <BsFileEarmarkPdf className="text-[#09637E]" />
-                                                        <span className="text-xs font-bold text-[#09637E]">{doc.name}</span>
-                                                    </div>
-                                                    <BsCheckCircleFill className="text-emerald-500" size={12} />
+                                            {campaign.documents.length > 0 ? (
+                                                campaign.documents.map((doc, idx) => (
+                                                    <a
+                                                        key={idx}
+                                                        href={doc.url}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="flex items-center justify-between p-4 bg-[#EBF4F6] rounded-xl hover:bg-[#ddeef2] transition-colors"
+                                                    >
+                                                        <div className="flex items-center gap-3 min-w-0">
+                                                            <BsFileEarmarkPdf className="text-[#09637E] shrink-0" />
+                                                            <div className="min-w-0">
+                                                                <p className="text-xs font-bold text-[#09637E] truncate">{doc.name}</p>
+                                                                <p className="text-[10px] text-[#09637E]/50">{doc.type} • {doc.size}</p>
+                                                            </div>
+                                                        </div>
+                                                        <BsDownload className="text-[#09637E]/70 shrink-0" size={14} />
+                                                    </a>
+                                                ))
+                                            ) : (
+                                                <div className="p-4 bg-[#EBF4F6] rounded-xl text-xs text-[#09637E]/60">
+                                                    No authenticity proofs uploaded yet.
                                                 </div>
-                                            ))}
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -332,42 +739,21 @@ const EventCommandCenter = () => {
                     </div>
                 )}
 
-                {activeTab === "manager_sync" && (
+                {activeTab === "manager_sync" && hasAssignedManager && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-right-8 duration-500">
                         {/* Manager Profile */}
                         <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-[#09637E]/5 h-fit text-center">
                             <div className="w-32 h-32 rounded-full p-1 bg-gradient-to-tr from-[#09637E] to-[#7AB2B2] mx-auto mb-6">
-                                <img src={manager.avatar} alt={manager.name} className="w-full h-full rounded-full object-cover border-4 border-white" />
+                                <div className="w-full h-full rounded-full border-4 border-white bg-white flex items-center justify-center">
+                                    <span className="text-4xl font-black text-[#09637E] tracking-wider">{toManagerBadge(manager.name)}</span>
+                                </div>
                             </div>
                             <h3 className="text-2xl font-serif-premium italic text-[#09637E] mb-1">{manager.name}</h3>
                             <p className="text-xs font-black uppercase tracking-widest text-[#09637E]/40 mb-6">{manager.role}</p>
 
-                            <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-widest mb-8">
-                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest mb-8 ${managerIsOnline ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-600'}`}>
+                                <span className={`w-2 h-2 rounded-full ${managerIsOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
                                 {manager.status}
-                            </div>
-
-                            <div className="flex justify-center gap-4">
-                                <button
-                                    onClick={() => toast.success("Manager Contact: siddharth.m@okkazo.com", {
-                                        id: 'manager-contact',
-                                        icon: '📇',
-                                        style: { borderRadius: '10px', background: '#333', color: '#fff' }
-                                    })}
-                                    className="w-10 h-10 rounded-full bg-[#EBF4F6] flex items-center justify-center text-[#09637E] hover:bg-[#09637E] hover:text-white transition-colors"
-                                >
-                                    <BsPersonVcardFill />
-                                </button>
-                                <button
-                                    onClick={() => toast("Available: Mon-Fri, 9AM - 6PM", {
-                                        id: 'manager-availability',
-                                        icon: '🕒',
-                                        style: { borderRadius: '10px', background: '#333', color: '#fff' }
-                                    })}
-                                    className="w-10 h-10 rounded-full bg-[#EBF4F6] flex items-center justify-center text-[#09637E] hover:bg-[#09637E] hover:text-white transition-colors"
-                                >
-                                    <BsClockHistory />
-                                </button>
                             </div>
                         </div>
 
@@ -382,17 +768,25 @@ const EventCommandCenter = () => {
                             </div>
 
                             <div className="flex-1 p-8 overflow-y-auto space-y-6 bg-[#FAFAFA]">
-                                {chatHistory.map(msg => (
-                                    <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                        <div className={`max-w-[70%] p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.sender === 'user'
+                                {messages.map((msg, idx) => {
+                                    const msgId = String(msg?._id || msg?.id || idx);
+                                    const isMe = String(msg?.senderAuthId || msg?.senderId || '') === currentUserAuthId;
+                                    const dt = msg?.createdAt ? new Date(msg.createdAt) : null;
+                                    const time = dt && !Number.isNaN(dt.getTime())
+                                        ? dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                        : '';
+
+                                    return (
+                                    <div key={msgId} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-[70%] p-4 rounded-2xl text-sm leading-relaxed shadow-sm ${isMe
                                             ? 'bg-[#09637E] text-white rounded-tr-none'
                                             : 'bg-white text-[#09637E] border border-[#09637E]/5 rounded-tl-none'
                                             }`}>
-                                            <p>{msg.text}</p>
-                                            <p className={`text-[9px] mt-2 text-right ${msg.sender === 'user' ? 'text-white/60' : 'text-[#09637E]/40'}`}>{msg.time}</p>
+                                            <p>{msg?.text || ''}</p>
+                                            <p className={`text-[9px] mt-2 text-right ${isMe ? 'text-white/60' : 'text-[#09637E]/40'}`}>{time}</p>
                                         </div>
                                     </div>
-                                ))}
+                                )})}
                             </div>
 
                             <div className="p-6 bg-white border-t border-[#09637E]/5">

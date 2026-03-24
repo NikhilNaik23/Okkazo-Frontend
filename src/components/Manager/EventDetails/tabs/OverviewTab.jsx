@@ -8,6 +8,14 @@ import { Badge } from '../ui';
 import { pipelineStages } from '../../../../data/managerEventDetailsData';
 import { CircleDot, ShieldCheck } from 'lucide-react';
 
+const promotePipelineStages = [
+    { id: 'draft', label: 'Draft' },
+    { id: 'promoting', label: 'Promoting' },
+    { id: 'confirmed', label: 'Confirmed' },
+    { id: 'live', label: 'Live' },
+    { id: 'completed', label: 'Completed' },
+];
+
 const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, onMessageClient }) => {
     const [addingTeam, setAddingTeam] = useState(false);
     const [pickedStaffKey, setPickedStaffKey] = useState('');
@@ -25,17 +33,22 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, 
         };
 
         const status = normalizeStatus(event?.status);
+        const isPromote = String(event?.type || '').toLowerCase() === 'promote';
+        const basePipeline = isPromote ? promotePipelineStages : pipelineStages;
 
-        // Mapping requested:
-        // - Pending_Approval -> Vendor Confirmation
-        // - Approved -> Client Review
-        // - Confirmed -> Confirmed
         const activeStageId = (() => {
+            if (isPromote) {
+                if (status === 'MANAGER UNASSIGNED') return 'draft';
+                if (status === 'IN REVIEW') return 'promoting';
+                if (status === 'CONFIRMED') return 'confirmed';
+                if (status === 'LIVE') return 'live';
+                if (status === 'COMPLETED' || status === 'COMPLETE') return 'completed';
+                return 'promoting';
+            }
+
             if (status === 'PENDING APPROVAL') return 'vendor_confirm';
             if (status === 'APPROVED') return 'client_review';
             if (status === 'CONFIRMED') return 'confirmed';
-
-            // Sensible fallbacks for other known statuses
             if (status === 'DRAFT') return 'draft';
             if (status === 'PLANNING') return 'planning';
             if (status === 'IN REVIEW') return 'vendor_confirm';
@@ -45,14 +58,14 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, 
             return 'planning';
         })();
 
-        const activeIndex = Math.max(0, pipelineStages.findIndex((s) => s?.id === activeStageId));
+        const activeIndex = Math.max(0, basePipeline.findIndex((s) => s?.id === activeStageId));
 
-        return pipelineStages.map((stage, i) => ({
+        return basePipeline.map((stage, i) => ({
             ...stage,
             done: i < activeIndex,
             active: i === activeIndex,
         }));
-    }, [event?.status]);
+    }, [event?.status, event?.type]);
 
     const servicesOpted = useMemo(() => {
         return Array.isArray(event?.servicesOpted) ? event.servicesOpted : [];
