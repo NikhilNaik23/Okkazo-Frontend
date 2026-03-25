@@ -52,6 +52,7 @@ const SidebarItem = ({ item, location, onLogout }) => {
   return (
     <NavLink
       to={fullPath}
+      state={item.key === 'chat' ? { resetChatSelection: true } : undefined}
       className={() =>
         `relative flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all w-full text-left group
                 ${isActive ? "bg-teal-50/50 text-teal-800" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`

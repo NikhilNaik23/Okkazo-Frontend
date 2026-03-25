@@ -33,6 +33,30 @@ export const ensureEventDmConversation = async ({ eventId, otherAuthId, dispatch
   return json.data;
 };
 
+export const fetchStaffChatContacts = async ({ dispatch, refreshAction }) => {
+  const res = await fetchWithAuth(
+    `${CHAT_API_BASE_URL}/api/chat/contacts/staff`,
+    { method: 'GET' },
+    { dispatch, refreshAction }
+  );
+
+  const json = await safeJson(res);
+  if (!res.ok || !json?.success) throw new Error(json?.message || 'Failed to load chat contacts');
+  return Array.isArray(json?.data?.groups) ? json.data.groups : [];
+};
+
+export const ensureStaffDmConversation = async ({ otherAuthId, dispatch, refreshAction }) => {
+  const res = await fetchWithAuth(
+    `${CHAT_API_BASE_URL}/api/chat/conversations/staff/dm/${encodeURIComponent(String(otherAuthId))}/ensure`,
+    { method: 'POST' },
+    { dispatch, refreshAction }
+  );
+
+  const json = await safeJson(res);
+  if (!res.ok || !json?.success) throw new Error(json?.message || 'Failed to create chat');
+  return json.data;
+};
+
 export const fetchConversationMessages = async ({ conversationId, limit = 100, dispatch, refreshAction }) => {
   const res = await fetchWithAuth(
     `${CHAT_API_BASE_URL}/api/chat/conversations/${encodeURIComponent(String(conversationId))}/messages?limit=${encodeURIComponent(String(limit))}`,

@@ -18,8 +18,19 @@ const EventCheckout = () => {
     const [isSuccess, setIsSuccess] = useState(false);
 
     useEffect(() => {
+        const stateEvent = location?.state?.event;
+        if (stateEvent && String(stateEvent.id) === String(eventId)) {
+            const normalizedStateEvent = { ...stateEvent };
+            if (normalizedStateEvent.categories && Array.isArray(normalizedStateEvent.categories)) {
+                const cat = normalizedStateEvent.categories.find(c => c.name === selectedCategory);
+                if (cat) normalizedStateEvent.price = cat.price;
+            }
+            setEvent(normalizedStateEvent);
+            return;
+        }
+
         const combinedEvents = [...allEvents, ...popularEvents];
-        const foundEvent = combinedEvents.find(e => e.id === parseInt(eventId));
+        const foundEvent = combinedEvents.find(e => String(e.id) === String(eventId));
         if (foundEvent) {
             // Update event price if category is selected
             if (foundEvent.categories) {
@@ -155,7 +166,7 @@ const EventCheckout = () => {
                             <div className="flex flex-col gap-8 mb-12">
                                 <div className="flex justify-between items-center w-full">
                                     <div className="hidden lg:block">
-                                        <Link to={`/user/event/${event.id}`} className="inline-flex items-center gap-2 text-[#09637E]/60 hover:text-[#09637E] font-bold text-[10px] uppercase tracking-[0.2em] transition-colors group">
+                                        <Link to={`/user/event/${event.id}`} state={{ event }} className="inline-flex items-center gap-2 text-[#09637E]/60 hover:text-[#09637E] font-bold text-[10px] uppercase tracking-[0.2em] transition-colors group">
                                             <BsArrowLeft className="text-lg group-hover:-translate-x-1 transition-transform" />
                                             Return to Details
                                         </Link>

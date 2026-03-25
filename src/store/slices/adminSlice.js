@@ -637,7 +637,7 @@ export const assignPromoteEventManager = createAsyncThunk(
             if (!response.ok) return rejectWithValue(data.message || 'Failed to assign manager');
 
             dispatch(fetchAdminEventDashboard());
-            dispatch(fetchUnavailableEventManagers());
+            dispatch(fetchUnavailableEventManagers({ eventId }));
             dispatch(fetchPromoteEventRequestById(eventId));
             return data.data;
         } catch (error) {
@@ -666,7 +666,7 @@ export const assignPlanningEventManager = createAsyncThunk(
             if (!response.ok) return rejectWithValue(data.message || 'Failed to assign manager');
 
             dispatch(fetchAdminEventDashboard());
-            dispatch(fetchUnavailableEventManagers());
+            dispatch(fetchUnavailableEventManagers({ eventId }));
             dispatch(fetchAdminEventRequestById(eventId));
             return data.data;
         } catch (error) {
@@ -698,7 +698,7 @@ export const unassignPromoteEventManager = createAsyncThunk(
             if (!response.ok) return rejectWithValue(data.message || 'Failed to unassign manager');
 
             dispatch(fetchAdminEventDashboard());
-            dispatch(fetchUnavailableEventManagers());
+            dispatch(fetchUnavailableEventManagers({ eventId }));
             dispatch(fetchAdminEventRequestById(eventId));
             return data.data;
         } catch (error) {
@@ -730,7 +730,7 @@ export const unassignPlanningEventManager = createAsyncThunk(
             if (!response.ok) return rejectWithValue(data.message || 'Failed to unassign manager');
 
             dispatch(fetchAdminEventDashboard());
-            dispatch(fetchUnavailableEventManagers());
+            dispatch(fetchUnavailableEventManagers({ eventId }));
             dispatch(fetchAdminEventRequestById(eventId));
             return data.data;
         } catch (error) {
@@ -741,12 +741,16 @@ export const unassignPlanningEventManager = createAsyncThunk(
 
 export const fetchUnavailableEventManagers = createAsyncThunk(
     'admin/fetchUnavailableEventManagers',
-    async (_, { rejectWithValue }) => {
+    async ({ eventId } = {}, { rejectWithValue }) => {
         try {
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/events/promote/admin/unavailable-managers`, {
+            const query = eventId
+                ? `?eventId=${encodeURIComponent(String(eventId).trim())}`
+                : '';
+
+            const response = await fetch(`${API_BASE_URL}/api/events/promote/admin/unavailable-managers${query}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -787,6 +791,58 @@ export const fetchEventVendorSelection = createAsyncThunk(
             if (!response.ok) return rejectWithValue(data.message || 'Failed to fetch vendor selection');
 
             return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const fetchEventVendorAlternatives = createAsyncThunk(
+    'admin/fetchEventVendorAlternatives',
+    async ({ eventId, services = [] }, { rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+            if (!eventId) return rejectWithValue('Event ID is required');
+
+            const uniqueServices = Array.from(
+                new Set(
+                    (Array.isArray(services) ? services : [])
+                        .map((s) => String(s || '').trim())
+                        .filter(Boolean)
+                )
+            );
+
+            if (uniqueServices.length === 0) return [];
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`,
+            };
+
+            const responses = await Promise.all(
+                uniqueServices.map(async (service) => {
+                    const url = `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(eventId)}/alternatives?service=${encodeURIComponent(service)}&limit=8`;
+                    const response = await fetch(url, { method: 'GET', headers });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        return {
+                            service,
+                            alternatives: [],
+                            vendorProfiles: [],
+                            error: data.message || 'Failed to fetch alternatives',
+                        };
+                    }
+
+                    return {
+                        service,
+                        alternatives: Array.isArray(data?.data?.alternatives) ? data.data.alternatives : [],
+                        vendorProfiles: Array.isArray(data?.data?.vendorProfiles) ? data.data.vendorProfiles : [],
+                    };
+                })
+            );
+
+            return responses;
         } catch (error) {
             return rejectWithValue(error.message || 'Network error');
         }
@@ -858,6 +914,7 @@ const initialState = {
     selectedEventRequest: null,
     selectedEventRequestType: null,
     selectedEventVendorSelection: null,
+    selectedEventVendorAlternatives: [],
     selectedEventTransactions: null,
     unavailableManagerIds: [],
     
@@ -872,6 +929,7 @@ const initialState = {
     unavailableManagersLoading: false,
 
     eventVendorSelectionLoading: false,
+    eventVendorAlternativesLoading: false,
     eventTransactionsLoading: false,
 
     managerAutoAssignLoading: false,
@@ -888,6 +946,7 @@ const initialState = {
     unavailableManagersError: null,
 
     eventVendorSelectionError: null,
+    eventVendorAlternativesError: null,
     eventTransactionsError: null,
 
     managerAutoAssignError: null,
@@ -922,9 +981,11 @@ const adminSlice = createSlice({
             state.selectedEventRequest = null;
             state.selectedEventRequestType = null;
             state.selectedEventVendorSelection = null;
+            state.selectedEventVendorAlternatives = [];
             state.selectedEventTransactions = null;
             state.eventRequestError = null;
             state.eventVendorSelectionError = null;
+            state.eventVendorAlternativesError = null;
             state.eventTransactionsError = null;
         },
     },
@@ -1187,8 +1248,10 @@ const adminSlice = createSlice({
                 state.eventRequestLoading = true;
                 state.eventRequestError = null;
                 state.selectedEventVendorSelection = null;
+                state.selectedEventVendorAlternatives = [];
                 state.selectedEventTransactions = null;
                 state.eventVendorSelectionError = null;
+                state.eventVendorAlternativesError = null;
                 state.eventTransactionsError = null;
             })
             .addCase(fetchAdminEventRequestById.fulfilled, (state, action) => {
@@ -1300,6 +1363,20 @@ const adminSlice = createSlice({
             .addCase(fetchEventVendorSelection.rejected, (state, action) => {
                 state.eventVendorSelectionLoading = false;
                 state.eventVendorSelectionError = action.payload;
+            })
+
+            // Vendor alternatives (planning)
+            .addCase(fetchEventVendorAlternatives.pending, (state) => {
+                state.eventVendorAlternativesLoading = true;
+                state.eventVendorAlternativesError = null;
+            })
+            .addCase(fetchEventVendorAlternatives.fulfilled, (state, action) => {
+                state.eventVendorAlternativesLoading = false;
+                state.selectedEventVendorAlternatives = Array.isArray(action.payload) ? action.payload : [];
+            })
+            .addCase(fetchEventVendorAlternatives.rejected, (state, action) => {
+                state.eventVendorAlternativesLoading = false;
+                state.eventVendorAlternativesError = action.payload;
             })
 
             // Transactions (admin)

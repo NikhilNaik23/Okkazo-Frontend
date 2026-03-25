@@ -55,6 +55,20 @@ const formatEventDate = (value) => {
     return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' });
 };
 
+const formatEventDateTime = (value) => {
+    if (!value) return '—';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+    });
+};
+
 const decodeJwtPayload = (token) => {
     try {
         const parts = String(token || '').split('.');
@@ -289,6 +303,8 @@ const ManagerEventDetails = () => {
         if (eventType === 'planning') {
             const startAt = rawEvent?.schedule?.startAt || rawEvent?.eventDate || null;
             const endAt = rawEvent?.schedule?.endAt || rawEvent?.eventDate || null;
+            const ticketAvailabilityStartAt = rawEvent?.ticketAvailability?.startAt || null;
+            const ticketAvailabilityEndAt = rawEvent?.ticketAvailability?.endAt || null;
             const expectedGuests = rawEvent?.guestCount ?? rawEvent?.noOfGuest ?? rawEvent?.noOfGuests ?? null;
             return {
                 id: rawEvent.eventId || id,
@@ -303,6 +319,8 @@ const ManagerEventDetails = () => {
                 servicesOpted: Array.isArray(rawEvent?.selectedServices) ? rawEvent.selectedServices : [],
                 preferredLocation: rawEvent?.location?.name || '—',
                 expectedGuests,
+                ticketAvailabilityStart: formatEventDateTime(ticketAvailabilityStartAt),
+                ticketAvailabilityEnd: formatEventDateTime(ticketAvailabilityEndAt),
                 client,
                 availableCoreStaff,
                 selectedTeamMembers,
@@ -310,6 +328,8 @@ const ManagerEventDetails = () => {
         }
 
         if (eventType === 'promote') {
+            const ticketAvailabilityStartAt = rawEvent?.ticketAvailability?.startAt || null;
+            const ticketAvailabilityEndAt = rawEvent?.ticketAvailability?.endAt || null;
             return {
                 id: rawEvent.eventId || id,
                 type: 'promote',
@@ -322,6 +342,8 @@ const ManagerEventDetails = () => {
                 organizer: client?.name || client?.fullName || '—',
                 servicesOpted: Array.isArray(rawEvent?.promotion) ? rawEvent.promotion : [],
                 preferredLocation: rawEvent?.venue?.locationName || '—',
+                ticketAvailabilityStart: formatEventDateTime(ticketAvailabilityStartAt),
+                ticketAvailabilityEnd: formatEventDateTime(ticketAvailabilityEndAt),
                 client,
                 availableCoreStaff,
                 selectedTeamMembers,

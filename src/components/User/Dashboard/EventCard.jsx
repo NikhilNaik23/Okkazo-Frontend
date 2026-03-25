@@ -6,7 +6,7 @@ const EventCard = ({ event, rank, isTopTen }) => {
 
     return (
         <div
-            onClick={() => navigate(`/user/event/${event.id}`)}
+            onClick={() => navigate(`/user/event/${event.id}`, { state: { event } })}
             className={`flex-none ${isTopTen ? 'w-[280px] md:w-[320px] aspect-[4/5]' : 'w-[280px] md:w-[320px] aspect-[4/5]'} relative group cursor-pointer transition-all duration-500 hover:z-50 hover:-translate-y-2 ${isTopTen ? 'ml-16 md:ml-20' : ''}`}
         >
             {/* Rank Number for Top 10 */}

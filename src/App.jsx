@@ -3,7 +3,9 @@ import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { useDispatch, useSelector } from 'react-redux';
 import { Toaster } from 'react-hot-toast';
+import { io as createSocket } from 'socket.io-client';
 import { fetchCurrentUser, fetchVendorApplication, refreshAccessToken, selectIsAuthenticated, selectUser } from './store/slices/authSlice';
+import { CHAT_SOCKET_URL } from './utils/chatConfig';
 
 // Route Guards
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -75,7 +77,9 @@ const App = () => {
   const dispatch = useDispatch();
   const isAuthenticated = useSelector(selectIsAuthenticated);
   const user = useSelector(selectUser);
+  const accessToken = useSelector((state) => state.auth.accessToken) || localStorage.getItem('accessToken');
   const [isInitializing, setIsInitializing] = React.useState(true);
+  const presenceSocketRef = React.useRef(null);
 
   // Try to refresh token on app load if we have a refresh token
   useEffect(() => {
@@ -118,6 +122,41 @@ const App = () => {
       dispatch(fetchCurrentUser());
     }
   }, [dispatch, isAuthenticated, user, isInitializing]);
+
+  // Keep a global socket alive while authenticated so presence reflects platform activity,
+  // not only when users open the chat page.
+  useEffect(() => {
+    if (!accessToken) {
+      if (presenceSocketRef.current) {
+        presenceSocketRef.current.disconnect();
+        presenceSocketRef.current = null;
+      }
+      return undefined;
+    }
+
+    if (presenceSocketRef.current) {
+      return () => {
+        if (presenceSocketRef.current) {
+          presenceSocketRef.current.disconnect();
+          presenceSocketRef.current = null;
+        }
+      };
+    }
+
+    const socket = createSocket(CHAT_SOCKET_URL, {
+      auth: { token: accessToken },
+      transports: ['websocket'],
+    });
+
+    presenceSocketRef.current = socket;
+
+    return () => {
+      if (presenceSocketRef.current) {
+        presenceSocketRef.current.disconnect();
+        presenceSocketRef.current = null;
+      }
+    };
+  }, [accessToken]);
 
   return (
     <>

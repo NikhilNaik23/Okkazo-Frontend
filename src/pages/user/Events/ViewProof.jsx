@@ -96,21 +96,25 @@ const EventCommandCenter = () => {
 
     const buildRoadmap = (promote) => {
         const eventStatus = String(promote?.eventStatus || '').toUpperCase();
+        const adminDecisionStatus = String(promote?.adminDecision?.status || '').toUpperCase();
+        const isRejected = adminDecisionStatus === 'REJECTED';
         const isManagerUnassigned = eventStatus === 'MANAGER_UNASSIGNED';
         const isInReview = eventStatus === 'IN_REVIEW';
         const isLive = eventStatus === 'LIVE';
         const isCompleted = eventStatus === 'COMPLETED' || eventStatus === 'COMPLETE';
         const isFinal = isLive || isCompleted;
 
-        const trackingStatus = isManagerUnassigned
-            ? 'Application Received'
-            : isInReview
-                ? 'Application in Review'
-                : isLive
-                    ? 'Live'
-                    : isCompleted
-                        ? 'Completed'
-                        : 'In Progress';
+        const trackingStatus = isRejected
+            ? 'Rejected'
+            : isManagerUnassigned
+                ? 'Application Received'
+                : isInReview
+                    ? 'Application in Review'
+                    : isLive
+                        ? 'Live'
+                        : isCompleted
+                            ? 'Completed'
+                            : 'In Progress';
 
         return {
             trackingStatus,
@@ -118,26 +122,32 @@ const EventCommandCenter = () => {
                 {
                     step: 1,
                     label: 'Application Received',
-                    status: isManagerUnassigned ? 'in_progress' : 'completed',
+                    status: isManagerUnassigned && !isRejected ? 'in_progress' : 'completed',
                     date: toDateLabel(promote?.createdAt),
                 },
                 {
                     step: 2,
                     label: 'Manager Assigned',
-                    status: isInReview || isFinal ? 'completed' : 'pending',
+                    status: isRejected
+                        ? (promote?.managerAssignment?.assignedAt ? 'completed' : 'pending')
+                        : (isInReview || isFinal ? 'completed' : 'pending'),
                     date: toDateLabel(promote?.managerAssignment?.assignedAt),
                 },
                 {
                     step: 3,
-                    label: 'Application In Review',
-                    status: isInReview ? 'in_progress' : isFinal ? 'completed' : 'pending',
-                    date: isInReview ? 'Today' : toDateLabel(promote?.adminDecision?.decidedAt),
+                    label: isRejected ? 'Application Rejected' : 'Application In Review',
+                    status: isRejected ? 'rejected' : isInReview ? 'in_progress' : isFinal ? 'completed' : 'pending',
+                    date: isRejected
+                        ? toDateLabel(promote?.adminDecision?.decidedAt)
+                        : isInReview
+                            ? 'Today'
+                            : toDateLabel(promote?.adminDecision?.decidedAt),
                 },
                 {
                     step: 4,
-                    label: isCompleted ? 'Completed' : 'Success / Live',
-                    status: isFinal ? 'completed' : 'pending',
-                    date: isFinal ? toDateLabel(promote?.updatedAt) : '—',
+                    label: isRejected ? 'Closed' : isCompleted ? 'Completed' : 'Success / Live',
+                    status: isRejected ? 'pending' : isFinal ? 'completed' : 'pending',
+                    date: isRejected ? toDateLabel(promote?.adminDecision?.decidedAt) : isFinal ? toDateLabel(promote?.updatedAt) : '—',
                 },
             ],
         };
@@ -209,11 +219,14 @@ const EventCommandCenter = () => {
             const isFreeEvent = ticketType === 'free';
             const totalTickets = typeof pr?.tickets?.noOfTickets === 'number' ? pr.tickets.noOfTickets : 0;
             const roadmapState = buildRoadmap(pr);
+            const displayStatus = String(pr?.adminDecision?.status || '').toUpperCase() === 'REJECTED'
+                ? 'REJECTED'
+                : (pr?.eventStatus || pr?.adminDecision?.status);
 
             const mapped = {
                 id: pr?.eventId || String(id),
                 title: pr?.eventTitle || 'Promote Event',
-                status: toStatusLabel(pr?.eventStatus || pr?.adminDecision?.status),
+                status: toStatusLabel(displayStatus),
                 location: pr?.venue?.locationName || 'Location TBD',
                 date: toDateTimeLabel(pr?.schedule),
                 description: pr?.eventDescription || '',
@@ -585,13 +598,15 @@ const EventCommandCenter = () => {
                                         <div key={idx} className="flex flex-col items-center text-center group">
                                             <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-6 transition-all duration-500 ${step.status === 'completed' ? 'bg-[#09637E] text-white scale-110 shadow-lg' :
                                                 step.status === 'in_progress' ? 'bg-white border-4 border-[#09637E] text-[#09637E] scale-125 shadow-xl' :
-                                                    'bg-[#EBF4F6] text-[#09637E]/30'
+                                                    step.status === 'rejected' ? 'bg-rose-50 border-4 border-rose-500 text-rose-600 scale-125 shadow-xl' :
+                                                        'bg-[#EBF4F6] text-[#09637E]/30'
                                                 }`}>
                                                 {step.status === 'completed' ? <BsCheckCircleFill size={20} /> :
                                                     step.status === 'in_progress' ? <div className="w-3 h-3 bg-[#09637E] rounded-full animate-pulse" /> :
-                                                        <div className="w-3 h-3 bg-[#09637E]/20 rounded-full" />}
+                                                        step.status === 'rejected' ? <div className="w-3 h-3 bg-rose-600 rounded-full animate-pulse" /> :
+                                                            <div className="w-3 h-3 bg-[#09637E]/20 rounded-full" />}
                                             </div>
-                                            <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${step.status === 'pending' ? 'opacity-40' : 'text-[#09637E]'}`}>
+                                            <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${step.status === 'pending' ? 'opacity-40' : step.status === 'rejected' ? 'text-rose-600' : 'text-[#09637E]'}`}>
                                                 {idx + 1}. {step.label}
                                             </p>
                                             <p className="text-[9px] font-bold opacity-50">{step.date}</p>

@@ -1339,7 +1339,7 @@ const UserEventManagement = () => {
                                         <div className="absolute top-4 left-4 z-20 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">Minimal Banner</div>
                                         <img src={event.image || "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1200&q=80"} alt="Asset" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 filter grayscale group-hover:grayscale-0" />
                                         <div className="absolute inset-0 bg-linear-to-t from-gray-900/60 to-transparent flex flex-col justify-end p-8 text-white">
-                                            <h4 className="font-serif-premium italic text-2xl">{event.title} 2024</h4>
+                                            <h4 className="font-serif-premium italic text-2xl">{event.title} </h4>
                                             <p className="text-[10px] uppercase tracking-widest opacity-80">{event.location}</p>
                                         </div>
                                     </div>

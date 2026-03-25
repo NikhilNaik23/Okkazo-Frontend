@@ -72,6 +72,7 @@ const Navbar = ({ isOpen, onClose, onToggleNotifications }) => {
                     <Link 
                       key={item.path}
                       to={item.path}
+                      state={item.path === '/admin/chat' ? { resetChatSelection: true } : undefined}
                       onClick={() => onClose && window.innerWidth < 768 && onClose()}
                       className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 group ${
                         active
