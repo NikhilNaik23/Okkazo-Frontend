@@ -36,6 +36,7 @@ import {
     fetchAdminEventRequestById,
     fetchTeamAccess,
     fetchEventTransactionsForAdmin,
+    fetchEventVendorAlternatives,
     fetchEventVendorSelection,
     fetchUnavailableEventManagers,
     unassignPlanningEventManager,
@@ -122,8 +123,10 @@ const EventDetails = () => {
         selectedEventRequest,
         selectedEventRequestType,
         selectedEventVendorSelection,
+        selectedEventVendorAlternatives,
         selectedEventTransactions,
         eventVendorSelectionLoading,
+        eventVendorAlternativesLoading,
         eventTransactionsLoading,
         teamMembers,
         unavailableManagerIds,
@@ -140,7 +143,7 @@ const EventDetails = () => {
         if (!id) return;
         dispatch(fetchAdminEventRequestById(id));
         dispatch(fetchAdminEventDashboard());
-        dispatch(fetchUnavailableEventManagers());
+        dispatch(fetchUnavailableEventManagers({ eventId: id }));
         dispatch(fetchTeamAccess({ page: 1, limit: 50 }));
     }, [dispatch, id]);
 
@@ -327,6 +330,48 @@ const EventDetails = () => {
         return Array.isArray(fromPlanning) ? fromPlanning : [];
     }, [selectedEventVendorSelection?.selectedServices, selectedEventRequest?.selectedServices]);
 
+    useEffect(() => {
+        if (!id) return;
+        if (selectedEventRequestType !== 'PLANNING') return;
+        if (!Array.isArray(selectedServices) || selectedServices.length === 0) return;
+
+        dispatch(fetchEventVendorAlternatives({ eventId: id, services: selectedServices }));
+    }, [dispatch, id, selectedEventRequestType, selectedServices]);
+
+    const availableVendors = useMemo(() => {
+        if (!Array.isArray(selectedEventVendorAlternatives)) return [];
+
+        const rows = [];
+        for (const bucket of selectedEventVendorAlternatives) {
+            const service = String(bucket?.service || '').trim();
+            const alternatives = Array.isArray(bucket?.alternatives) ? bucket.alternatives : [];
+            const profiles = Array.isArray(bucket?.vendorProfiles) ? bucket.vendorProfiles : [];
+            const profileByAuthId = new Map(profiles.map((p) => [String(p?.authId || ''), p]));
+
+            for (const alt of alternatives) {
+                const vendorAuthId = String(alt?.vendorAuthId || '').trim();
+                if (!vendorAuthId) continue;
+                const profile = profileByAuthId.get(vendorAuthId);
+
+                rows.push({
+                    vendorAuthId,
+                    service,
+                    businessName: profile?.businessName || alt?.businessName || 'Vendor',
+                    distanceText: alt?.distanceText || null,
+                    price: Number.isFinite(Number(alt?.price)) ? Number(alt.price) : null,
+                });
+            }
+        }
+
+        const dedup = new Map();
+        for (const row of rows) {
+            const key = `${row.vendorAuthId}::${row.service}`;
+            if (!dedup.has(key)) dedup.set(key, row);
+        }
+
+        return Array.from(dedup.values());
+    }, [selectedEventVendorAlternatives]);
+
     const transactions = useMemo(() => {
         const orders = selectedEventTransactions?.orders;
         return Array.isArray(orders) ? orders : [];
@@ -433,7 +478,7 @@ const EventDetails = () => {
                                                                     const next = !showManagerDropdown;
                                                                     setShowManagerDropdown(next);
                                                                     if (next) {
-                                                                        dispatch(fetchUnavailableEventManagers());
+                                                                        dispatch(fetchUnavailableEventManagers({ eventId: id }));
                                                                         dispatch(fetchTeamAccess({ page: 1, limit: 50 }));
                                                                     }
                                                                 }}
@@ -991,6 +1036,36 @@ const EventDetails = () => {
                                     )}
                                </div>
                            </div>
+
+                               {selectedEventRequestType === 'PLANNING' && (
+                                   <div className="mt-5 pt-5 border-t border-[#e9eff1]">
+                                       <p className="text-xs font-bold text-[#708aa0] uppercase tracking-wider mb-2">Available Vendors</p>
+                                       <div className="space-y-3">
+                                           {eventVendorAlternativesLoading ? (
+                                               <div className="text-sm font-medium text-[#708aa0]">Loading available vendors…</div>
+                                           ) : availableVendors.length === 0 ? (
+                                               <div className="text-sm font-medium text-[#708aa0]">No available vendors found yet.</div>
+                                           ) : (
+                                               availableVendors.slice(0, 8).map((vendor, idx) => (
+                                                   <div key={`${vendor.vendorAuthId}-${vendor.service}-${idx}`} className="flex items-center justify-between">
+                                                       <div className="flex items-center gap-2">
+                                                           <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                                                               <CheckCircle size={12} />
+                                                           </div>
+                                                           <span className="text-sm font-medium text-[#5a5b44]">
+                                                               {vendor.businessName}
+                                                               <span className="text-[#94a3b8]"> {`· ${vendor.service}`}</span>
+                                                           </span>
+                                                       </div>
+                                                       <span className="text-[10px] font-bold uppercase text-[#28a785]">
+                                                           {vendor.distanceText || 'AVAILABLE'}
+                                                       </span>
+                                                   </div>
+                                               ))
+                                           )}
+                                       </div>
+                                   </div>
+                               )}
                        </div>
                    )}
 

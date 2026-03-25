@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { BsArrowLeft, BsCheckCircleFill, BsBookmarkHeart, BsBookmarkHeartFill } from "react-icons/bs";
 import { allEvents, popularEvents } from "../../../data/eventsData";
 import { toast, Toaster } from "react-hot-toast";
@@ -9,16 +9,58 @@ import TicketSelector from "../../../components/User/Events/TicketSelector";
 const EventDetails = () => {
     const { eventId } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const [event, setEvent] = useState(null);
     const [ticketSelection, setTicketSelection] = useState({}); // { "Category A": 2, "Category B": 0 }
     const [isSaved, setIsSaved] = useState(false);
 
+    const resolvedDescription = String(
+        event?.description || event?.eventDescription || event?.raw?.eventDescription || ""
+    );
+
+    const aboutParagraphs = resolvedDescription
+        .split(/\n+/)
+        .map((text) => text.trim())
+        .filter(Boolean);
+
+    const venueName = String(event?.eventLocation || event?.location || "Venue TBA");
+    const eventDateText = String(event?.date || "DATE TBA");
+    const eventTimeText = String(event?.eventTime || "Time TBA");
+
     useEffect(() => {
+        const stateEvent = location?.state?.event;
+        if (stateEvent && String(stateEvent.id) === String(eventId)) {
+            const eventWithCategories = { ...stateEvent };
+            eventWithCategories.description =
+                eventWithCategories.description
+                || eventWithCategories.eventDescription
+                || eventWithCategories.raw?.eventDescription
+                || "";
+            if (!eventWithCategories.categories || eventWithCategories.categories.length === 0) {
+                eventWithCategories.categories = [
+                    {
+                        name: "General Admission",
+                        price: eventWithCategories.price || "Free"
+                    }
+                ];
+            }
+            setEvent(eventWithCategories);
+
+            const savedItems = JSON.parse(localStorage.getItem('saved') || '[]');
+            setIsSaved(savedItems.some(item => String(item.id) === String(eventWithCategories.id)));
+            return;
+        }
+
         const combinedEvents = [...allEvents, ...popularEvents];
-        const foundEvent = combinedEvents.find(e => e.id === parseInt(eventId));
+        const foundEvent = combinedEvents.find(e => String(e.id) === String(eventId));
         if (foundEvent) {
             // Normalize event data
             const eventWithCategories = { ...foundEvent };
+            eventWithCategories.description =
+                eventWithCategories.description
+                || eventWithCategories.eventDescription
+                || eventWithCategories.raw?.eventDescription
+                || "";
             if (!eventWithCategories.categories || eventWithCategories.categories.length === 0) {
                 eventWithCategories.categories = [
                     {
@@ -30,17 +72,17 @@ const EventDetails = () => {
             setEvent(eventWithCategories);
             // Check if saved
             const savedItems = JSON.parse(localStorage.getItem('saved') || '[]');
-            setIsSaved(savedItems.some(item => item.id === foundEvent.id));
+            setIsSaved(savedItems.some(item => String(item.id) === String(foundEvent.id)));
         } else {
             toast.error("Event not found");
             navigate("/user/dashboard");
         }
-    }, [eventId, navigate]);
+    }, [eventId, location, navigate]);
 
     const toggleSave = () => {
         const savedItems = JSON.parse(localStorage.getItem('saved') || '[]');
         if (isSaved) {
-            const newSaved = savedItems.filter(item => item.id !== event.id);
+            const newSaved = savedItems.filter(item => String(item.id) !== String(event.id));
             localStorage.setItem('saved', JSON.stringify(newSaved));
             setIsSaved(false);
             toast.success("Removed from collection");
@@ -108,7 +150,9 @@ const EventDetails = () => {
         // Pass selection state to checkout (could use location state or query params)
         // For query params, we might need a serialized format if complex
         const selectionParam = JSON.stringify(ticketSelection);
-        navigate(`/user/checkout/${event.id}?qty=${totalTickets}&category=${encodeURIComponent(Object.keys(ticketSelection)[0] || 'General')}`);
+        navigate(`/user/checkout/${event.id}?qty=${totalTickets}&category=${encodeURIComponent(Object.keys(ticketSelection)[0] || 'General')}`, {
+            state: { event },
+        });
     };
 
     return (
@@ -140,7 +184,6 @@ const EventDetails = () => {
                             Bespoke Experience
                         </span>
                         <h1 className="text-6xl md:text-8xl font-serif-premium italic mb-2 tracking-tight drop-shadow-lg leading-none">{event.title}</h1>
-                        <p className="text-xl font-light opacity-90 max-w-2xl mt-4">{event.description || "A curated experience designed for the modern connoisseur."}</p>
                     </div>
                 </div>
 
@@ -154,40 +197,28 @@ const EventDetails = () => {
                                 <span className="float-left text-7xl font-serif-premium text-[#09637E] mr-4 mt-[-10px] leading-none">
                                     {event.title.charAt(0)}
                                 </span>
-                                <p>
-                                    Experience an unparalleled night of elegance at the {event.title}. This isn't just a performance; it's a curated sensory journey designed for the most discerning connoisseurs of modern art and sound.
-                                    <br /><br />
-                                    Set within the architectural marvel of the {event.eventLocation || "Downtown Arena"}, the evening unfolds through a series of immersive installations that dance in perfect harmony with a hand-selected lineup of global virtuosos.
-                                </p>
-                            </div>
-
-                            <div className="mt-12 space-y-6">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-[1px] bg-[#09637E]"></div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]">Private Lounge Access</p>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-[1px] bg-[#09637E]"></div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]">Curated Gastronomy</p>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-[1px] bg-[#09637E]"></div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]">Artisan Mixology</p>
-                                </div>
+                                {aboutParagraphs.length > 0 ? (
+                                    aboutParagraphs.map((paragraph, idx) => (
+                                        <p key={`${event.id}-about-${idx}`} className={idx > 0 ? "mt-6" : ""}>
+                                            {paragraph}
+                                        </p>
+                                    ))
+                                ) : (
+                                    <p>{`Experience an unparalleled night of elegance at ${event.title}.`}</p>
+                                )}
                             </div>
                         </div>
 
                         {/* Venue Section */}
                         <div>
                             <p className="text-[#09637E] font-black text-xs uppercase tracking-widest mb-8">The Venue</p>
-                            <div className="flex justify-between items-end border-b border-[#09637E]/20 pb-8">
-                                <div>
-                                    <h3 className="text-4xl font-serif-premium text-[#0b2d49] italic mb-2">{event.eventLocation || "Downtown Arena"}</h3>
-                                    <p className="text-sm text-[#09637E]/60 font-medium">123 Music Ave, Metropolis</p>
+                            <div className="flex justify-between items-end gap-8 border-b border-[#09637E]/20 pb-8">
+                                <div className="max-w-[68%]">
+                                    <h3 className="text-2xl md:text-3xl font-serif-premium text-[#0b2d49] italic leading-tight">{venueName}</h3>
                                 </div>
-                                <div className="text-right">
-                                    <h3 className="text-4xl font-serif-premium text-[#0b2d49] italic mb-2">{event.date}</h3>
-                                    <p className="text-sm text-[#09637E]/60 font-medium">{event.eventTime || "Doors open at 8:00 PM"}</p>
+                                <div className="text-right shrink-0">
+                                    <h3 className="text-3xl font-serif-premium text-[#0b2d49] italic mb-2">{eventDateText}</h3>
+                                    <p className="text-sm text-[#09637E]/60 font-medium">{eventTimeText}</p>
                                 </div>
                             </div>
                         </div>

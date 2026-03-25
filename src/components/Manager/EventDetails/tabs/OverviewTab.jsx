@@ -196,6 +196,11 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, 
                                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Requested Timeline</p>
                                     <p className="font-bold text-gray-900">{event?.date || '—'} – {event?.endDate || '—'}</p>
                                 </div>
+                                <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Ticket Availability</p>
+                                    <p className="font-bold text-gray-900">Start: {event?.ticketAvailabilityStart || '—'}</p>
+                                    <p className="font-bold text-gray-900">End: {event?.ticketAvailabilityEnd || '—'}</p>
+                                </div>
                             </div>
                         </div>
                     </section>

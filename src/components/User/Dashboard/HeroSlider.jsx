@@ -7,11 +7,23 @@ const HeroSlider = ({ events }) => {
     const navigate = useNavigate();
 
     useEffect(() => {
+        if (!Array.isArray(events) || events.length === 0) return undefined;
+
         const interval = setInterval(() => {
             setCurrentIndex((prev) => (prev + 1) % events.length);
         }, 5000); // Auto-scroll every 5 seconds
         return () => clearInterval(interval);
     }, [events.length]);
+
+    useEffect(() => {
+        if (!Array.isArray(events) || events.length === 0) {
+            setCurrentIndex(0);
+            return;
+        }
+        if (currentIndex > events.length - 1) {
+            setCurrentIndex(0);
+        }
+    }, [events, currentIndex]);
 
     const currentEvent = events[currentIndex];
 
@@ -77,13 +89,13 @@ const HeroSlider = ({ events }) => {
 
                     <div className="flex items-center gap-4 animate-fade-in delay-300 pt-2">
                         <button
-                            onClick={() => navigate(`/user/event/${currentEvent.id}`)}
+                            onClick={() => navigate(`/user/event/${currentEvent.id}`, { state: { event: currentEvent } })}
                             className="flex items-center gap-3 px-8 py-5 bg-[#09637E] text-white rounded-xl hover:bg-[#088395] transition-all transform hover:scale-105 hover:shadow-lg font-black text-lg border border-white/10"
                         >
                             <BsTicketPerforated size={22} /> Get Tickets
                         </button>
                         <button
-                            onClick={() => navigate(`/user/event/${currentEvent.id}`)}
+                            onClick={() => navigate(`/user/event/${currentEvent.id}`, { state: { event: currentEvent } })}
                             className="flex items-center gap-3 px-8 py-5 bg-white/10 border border-white/20 text-white rounded-xl hover:bg-white/20 transition-all font-bold text-lg backdrop-blur-md"
                         >
                             More Info
