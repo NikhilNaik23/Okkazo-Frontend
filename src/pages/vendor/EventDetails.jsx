@@ -23,6 +23,13 @@ import {
     selectSelectedVendorEventRequestError,
     selectSelectedVendorEventRequestStatus,
 } from '../../store/slices/vendorEventsSlice';
+import {
+    fetchMyVendorServices,
+    fetchPublicServiceById,
+    selectMyServices,
+    selectPublicServicesById,
+    selectPublicServiceStatusById,
+} from '../../store/slices/vendorSlice';
 
 const formatEventDateLabel = (value) => {
     if (!value) return 'TBD';
@@ -49,6 +56,9 @@ const EventDetails = () => {
     const selected = useSelector(selectSelectedVendorEventRequest);
     const selectedStatus = useSelector(selectSelectedVendorEventRequestStatus);
     const selectedError = useSelector(selectSelectedVendorEventRequestError);
+    const myServices = useSelector(selectMyServices);
+    const publicServicesById = useSelector(selectPublicServicesById);
+    const publicServiceStatusById = useSelector(selectPublicServiceStatusById);
 
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [rejectReason, setRejectReason] = useState('');
@@ -58,7 +68,26 @@ const EventDetails = () => {
         if (id) {
             dispatch(fetchVendorEventRequestDetails({ eventId: id }));
         }
+        dispatch(fetchMyVendorServices());
     }, [dispatch, id]);
+
+    React.useEffect(() => {
+        const vendorItems = Array.isArray(selected?.vendorItems) ? selected.vendorItems : [];
+        if (vendorItems.length === 0) return;
+
+        const idsToFetch = vendorItems
+            .map((v) => String(v?.serviceId || '').trim())
+            .filter(Boolean)
+            .filter((serviceId) => !myServices.some((s) => String(s?._id) === String(serviceId)))
+            .filter((serviceId) => !publicServicesById?.[serviceId])
+            .filter((serviceId) => {
+                const st = publicServiceStatusById?.[serviceId];
+                return st !== 'loading' && st !== 'succeeded';
+            });
+
+        if (idsToFetch.length === 0) return;
+        idsToFetch.forEach((serviceId) => dispatch(fetchPublicServiceById({ serviceId })));
+    }, [dispatch, myServices, publicServiceStatusById, publicServicesById, selected]);
 
     React.useEffect(() => {
         if (selectedStatus === 'failed' && selectedError) {
@@ -213,15 +242,107 @@ const EventDetails = () => {
 
         const manager = selected.managerProfile || null;
 
-        const nextRequestedServices = vendorItems.map((v, idx) => ({
-            id: idx + 1,
-            name: v?.service || 'Service',
-            details: v?.status === 'REJECTED'
-                ? `Rejected: ${v?.rejectionReason || 'No reason provided'}`
-                : 'Service request for this event.',
-            price: Number(v?.servicePrice?.max || 0),
-            qty: 1,
-        }));
+        const toNumber = (v) => {
+            if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+            if (typeof v === 'string') {
+                const cleaned = v.replace(/[^0-9.-]/g, '');
+                const num = Number(cleaned);
+                return Number.isFinite(num) ? num : 0;
+            }
+            return 0;
+        };
+
+        const receivedAmount = Number(
+            selected?.summary?.amountReceived ??
+            selected?.summary?.receivedAmount ??
+            selected?.summary?.amountPaid ??
+            selected?.summary?.paidAmount ??
+            selected?.payment?.amountReceived ??
+            selected?.payment?.receivedAmount ??
+            selected?.payments?.amountReceived ??
+            selected?.payments?.receivedAmount ??
+            0
+        ) || 0;
+
+        const rawLedger =
+            selected?.ledgerEntries ??
+            selected?.ledger?.entries ??
+            selected?.ledger ??
+            selected?.payments?.entries ??
+            selected?.payments?.transactions ??
+            selected?.payments ??
+            selected?.transactions ??
+            selected?.paymentHistory ??
+            [];
+
+        const rawLedgerEntries = Array.isArray(rawLedger)
+            ? rawLedger
+            : Array.isArray(rawLedger?.entries)
+                ? rawLedger.entries
+                : [];
+
+        const normalizedLedger = rawLedgerEntries
+            .map((e, idx) => {
+                const dateRaw = e?.date || e?.createdAt || e?.created_at || e?.timestamp || e?.time;
+                const when = dateRaw ? new Date(dateRaw) : null;
+                const dateLabel = when && !Number.isNaN(when.getTime())
+                    ? when.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
+                    : '—';
+
+                const desc =
+                    e?.description ||
+                    e?.note ||
+                    e?.remarks ||
+                    e?.message ||
+                    e?.purpose ||
+                    e?.event ||
+                    e?.title ||
+                    'Transaction';
+
+                const status = (e?.status || e?.state || e?.paymentStatus || '').toString() || '—';
+
+                const amountRaw = e?.amount ?? e?.value ?? e?.total ?? e?.paidAmount ?? e?.receivedAmount ?? 0;
+                const amountNum = toNumber(amountRaw);
+
+                const typeRaw = (e?.type || e?.direction || e?.txnType || '').toString().toLowerCase();
+                const isDebit = amountNum < 0 || typeRaw.includes('debit') || typeRaw.includes('fee') || typeRaw.includes('charge');
+                const signedAmount = isDebit ? -Math.abs(amountNum) : Math.abs(amountNum);
+
+                return {
+                    id: String(e?.id || e?._id || e?.transactionId || e?.txnId || idx + 1),
+                    dateLabel,
+                    description: String(desc),
+                    status: String(status),
+                    type: isDebit ? 'Debit' : 'Credit',
+                    signedAmount,
+                };
+            })
+            .filter((x) => x && (x.description || x.signedAmount !== 0));
+
+        const nextRequestedServices = vendorItems.map((v, idx) => {
+            const serviceId = String(v?.serviceId || '').trim();
+            const serviceDoc =
+                myServices.find((s) => String(s?._id) === String(serviceId)) ||
+                publicServicesById?.[serviceId] ||
+                null;
+
+            const min = Number(v?.servicePrice?.min || 0);
+            const max = Number(v?.servicePrice?.max || 0);
+
+            return {
+                id: idx + 1,
+                serviceId,
+                name: serviceDoc?.name || v?.service || 'Service',
+                details: v?.status === 'REJECTED'
+                    ? `Rejected: ${v?.rejectionReason || 'No reason provided'}`
+                    : (serviceDoc?.description || 'Service request for this event.'),
+                price: min || Number(serviceDoc?.price || 0),
+                maxBudget: max,
+                basePrice: Number(serviceDoc?.price || 0),
+                qty: 1,
+                fullService: serviceDoc,
+            };
+        });
 
         setEvent((prev) => {
             const nextEvent = {
@@ -235,6 +356,8 @@ const EventDetails = () => {
                 category: planning.eventType || planning.category || prev.category,
                 location: planning.location?.name || prev.location,
                 description: planning.eventDescription || prev.description,
+                amountReceived: receivedAmount,
+                ledger: normalizedLedger,
                 requestedServices: nextRequestedServices.length > 0 ? nextRequestedServices : prev.requestedServices,
                 client: manager
                     ? {
@@ -253,7 +376,7 @@ const EventDetails = () => {
 
             return nextEvent;
         });
-    }, [selected, id]);
+    }, [selected, id, myServices, publicServicesById]);
 
     const handleUpdateQuotes = () => {
         setServices([...tempServices]);
@@ -435,7 +558,7 @@ const EventDetails = () => {
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 min-w-0 overflow-x-hidden">
             {showRejectModal && (
-                <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 px-4">
+                <div className="fixed inset-0 z-80 flex items-center justify-center bg-black/40 px-4">
                     <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl border border-white/20 overflow-hidden">
                         <div className="p-6 border-b border-gray-100">
                             <h3 className="text-lg font-black tracking-wide text-[#0b2d49]">Reject Event Request</h3>
@@ -527,7 +650,7 @@ const EventDetails = () => {
                             >
 
                                 <BsChatDots size={20} />
-                                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full text-[8px] font-black shadow-lg bg-red-500 text-white">
+                                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-3.5 h-3.5 px-0.5 rounded-full text-[8px] font-black shadow-lg bg-red-500 text-white">
                                     3
                                 </span>
                             </NavLink>

@@ -6,20 +6,15 @@ import {
   BsGeoAlt,
   BsBriefcase,
   BsChatDots,
-  BsCheckCircle,
-  BsXCircle,
   BsEye,
   BsThreeDots,
-  BsSend,
   BsSearch,
   BsBell
 } from "react-icons/bs";
 import { RiCloseLine } from "react-icons/ri";
 import { toast } from "react-hot-toast";
 import {
-  acceptVendorEventRequest,
   fetchVendorEventRequests,
-  rejectVendorEventRequest,
   selectVendorEventRequests,
   selectVendorEventRequestsError,
   selectVendorEventRequestsStatus,
@@ -41,10 +36,8 @@ const summarizeServiceLabel = (vendorItems = []) => {
   return services.length > 0 ? services.join(', ') : 'Service';
 };
 
-const EventRequestsModal = ({ isOpen, onClose, requests, onAccept, onReject }) => {
+const EventRequestsModal = ({ isOpen, onClose, requests }) => {
   const navigate = useNavigate();
-  const [rejectingId, setRejectingId] = useState(null);
-  const [reason, setReason] = useState("");
 
   if (!isOpen) return null;
 
@@ -65,7 +58,7 @@ const EventRequestsModal = ({ isOpen, onClose, requests, onAccept, onReject }) =
         {/* Modal Content */}
         <div className="flex-1 overflow-y-auto p-8 space-y-6">
           {requests.length > 0 ? requests.map((event) => (
-            <div key={event.id} className="bg-white p-6 rounded-[2rem] shadow-sm border border-[#708aa0]/10 transition-all hover:border-[#0b2d49]/20">
+            <div key={event.id} className="bg-white p-6 rounded-4xl shadow-sm border border-[#708aa0]/10 transition-all hover:border-[#0b2d49]/20">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div className="flex items-center gap-6">
                   {/* Thumbnail & Date Box */}
@@ -73,7 +66,7 @@ const EventRequestsModal = ({ isOpen, onClose, requests, onAccept, onReject }) =
                     <img
                       src={event.image}
                       alt={event.title}
-                      className="w-20 h-20 rounded-[1.5rem] object-cover border-2 border-white shadow-md"
+                      className="w-20 h-20 rounded-3xl object-cover border-2 border-white shadow-md"
                     />
                     <div className="absolute -bottom-2 -right-2 flex flex-col items-center justify-center w-10 h-10 bg-white rounded-xl shadow-lg border border-gray-100">
                       <span className="text-[10px] font-black text-[#0b2d49] leading-none mb-0.5">{event.date}</span>
@@ -90,62 +83,15 @@ const EventRequestsModal = ({ isOpen, onClose, requests, onAccept, onReject }) =
                   </div>
                 </div>
 
-                {rejectingId !== event.id ? (
-                  <div className="flex items-center gap-3 w-full md:w-auto">
-                    <button
-                      onClick={() => navigate(`/vendor/event/${event.id}`)}
-                      className="flex-1 md:flex-none px-4 py-3 bg-white border border-gray-200 text-[#0b2d49] rounded-xl font-bold text-sm hover:border-[#0b2d49] transition-all flex items-center justify-center gap-2"
-                    >
-                      <BsEye />
-                      Details
-                    </button>
-                    <button
-                      onClick={() => setRejectingId(event.id)}
-                      className="flex-1 md:flex-none px-6 py-3 bg-red-50 text-red-500 rounded-xl font-bold text-sm hover:bg-red-500 hover:text-white transition-all shadow-sm active:scale-95"
-                    >
-                      Reject
-                    </button>
-                    <button
-                      onClick={() => onAccept(event.id)}
-                      className="flex-1 md:flex-none px-8 py-3 bg-[#0b2d49] text-white rounded-xl font-bold text-sm hover:bg-[#d7a444] transition-all shadow-lg shadow-[#0b2d49]/10 active:scale-95"
-                    >
-                      Accept Request
-                    </button>
-                  </div>
-                ) : (
-                  <div className="w-full md:w-[450px] animate-in slide-in-from-right-4">
-                    <div className="flex flex-col gap-3">
-                      <div className="relative">
-                        <textarea
-                          value={reason}
-                          onChange={(e) => setReason(e.target.value)}
-                          placeholder="Please mention the reason for rejection..."
-                          className="w-full p-4 rounded-xl bg-[#e9eff1]/50 border-none focus:ring-2 focus:ring-red-500/20 focus:bg-white transition-all resize-none text-sm font-medium h-24"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => { setRejectingId(null); setReason(""); }}
-                          className="flex-1 py-2.5 bg-white border border-gray-200 text-[#708aa0] rounded-lg font-bold text-xs hover:border-[#708aa0] transition-all"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          disabled={!reason.trim()}
-                          onClick={() => {
-                            onReject(event.id, reason);
-                            setRejectingId(null);
-                            setReason("");
-                          }}
-                          className={`flex-[2] py-2.5 rounded-lg font-bold text-xs text-white transition-all flex items-center justify-center gap-2 ${reason.trim() ? "bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20" : "bg-gray-300 cursor-not-allowed"}`}
-                        >
-                          <BsSend size={14} />
-                          Confirm Rejection
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                <div className="flex items-center justify-end gap-3 w-full md:w-auto">
+                  <button
+                    onClick={() => navigate(`/vendor/event/${event.id}`)}
+                    className="w-full md:w-auto px-5 py-3 bg-white border border-gray-200 text-[#0b2d49] rounded-xl font-bold text-sm hover:border-[#0b2d49] transition-all flex items-center justify-center gap-2"
+                  >
+                    <BsEye />
+                    View Details
+                  </button>
+                </div>
               </div>
             </div>
           )) : (
@@ -216,34 +162,10 @@ const BookedEvents = () => {
 
   const pendingRequests = uiRequests.filter(e => e.status === "PENDING");
 
-  const handleAccept = async (eventId) => {
-    try {
-      await dispatch(acceptVendorEventRequest({ eventId })).unwrap();
-      toast.success("Event request accepted successfully!", {
-        style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' }
-      });
-      dispatch(fetchVendorEventRequests());
-    } catch (e) {
-      toast.error(String(e || 'Failed to accept request'));
-    }
-  };
-
-  const handleReject = async (eventId, reason) => {
-    try {
-      await dispatch(rejectVendorEventRequest({ eventId, reason })).unwrap();
-      toast.error("Event request rejected. Reason: " + reason, {
-        style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' }
-      });
-      dispatch(fetchVendorEventRequests());
-    } catch (e) {
-      toast.error(String(e || 'Failed to reject request'));
-    }
-  };
-
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Search Header */}
-      <div className="mb-8 p-6 bg-white rounded-[2rem] shadow-sm border border-[#708aa0]/5 flex items-center gap-4">
+      <div className="mb-8 p-6 bg-white rounded-4xl shadow-sm border border-[#708aa0]/5 flex items-center gap-4">
         <BsSearch className="text-[#708aa0] ml-2" size={20} />
         <input
           type="text"
@@ -271,7 +193,7 @@ const BookedEvents = () => {
           <BsBell size={18} className={stats.pending > 0 ? "animate-bounce" : ""} />
           <span>Event Requests</span>
           {stats.pending > 0 && (
-            <span className="flex items-center justify-center min-w-[22px] h-[22px] px-1 bg-red-500 text-white text-[10px] font-black rounded-full ring-4 ring-[#f8f9fa] shadow-lg">
+            <span className="flex items-center justify-center min-w-5.5 h-5.5 px-1 bg-red-500 text-white text-[10px] font-black rounded-full ring-4 ring-[#f8f9fa] shadow-lg">
               {stats.pending}
             </span>
           )}
@@ -283,7 +205,7 @@ const BookedEvents = () => {
         <div className="mb-10 bg-white rounded-4xl border border-red-200 shadow-sm p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <p className="text-sm font-black text-[#0b2d49]">You have {stats.pending} pending event request{stats.pending === 1 ? '' : 's'}.</p>
-            <p className="text-xs font-bold text-[#708aa0] mt-1">Open Event Requests to accept or reject them.</p>
+            <p className="text-xs font-bold text-[#708aa0] mt-1">Open Event Requests to view details and lock your quote prices.</p>
           </div>
           <button
             onClick={() => setIsRequestsModalOpen(true)}
@@ -305,7 +227,7 @@ const BookedEvents = () => {
                 alt={event.title}
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0b2d49]/40 to-transparent"></div>
+              <div className="absolute inset-0 bg-linear-to-t from-[#0b2d49]/40 to-transparent"></div>
               <div className="absolute top-4 left-4 flex flex-col items-center justify-center w-14 h-14 bg-white/90 backdrop-blur-md rounded-2xl shadow-lg">
                 <span className="text-lg font-black text-[#0b2d49] leading-none mb-0.5">{event.date}</span>
                 <span className="text-[8px] font-bold text-[#708aa0] uppercase tracking-tighter">{event.month}</span>
@@ -410,8 +332,6 @@ const BookedEvents = () => {
         isOpen={isRequestsModalOpen}
         onClose={() => setIsRequestsModalOpen(false)}
         requests={pendingRequests}
-        onAccept={handleAccept}
-        onReject={handleReject}
       />
     </div>
   );

@@ -64,6 +64,39 @@ export const fetchMyVendorServices = createAsyncThunk(
     }
 );
 
+// Public: fetch a service by id (sanitized)
+// GET /api/vendor/public/services/:serviceId
+export const fetchPublicServiceById = createAsyncThunk(
+    'vendor/fetchPublicServiceById',
+    async ({ serviceId }, { rejectWithValue }) => {
+        try {
+            const id = String(serviceId || '').trim();
+            if (!id) return rejectWithValue('Service ID is required');
+
+            const response = await fetch(`${API_BASE_URL}/api/vendor/public/services/${encodeURIComponent(id)}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                const msg =
+                    data?.error?.message ||
+                    data?.message ||
+                    `Failed to fetch service (HTTP ${response.status})`;
+                return rejectWithValue(msg);
+            }
+
+            const service = data?.data?.service || null;
+            return { serviceId: id, service };
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error — could not fetch service');
+        }
+    }
+);
+
 export const updateVendorService = createAsyncThunk(
     'vendor/updateVendorService',
     async ({ id, payload }, { dispatch, rejectWithValue }) => {
@@ -256,6 +289,11 @@ const vendorSlice = createSlice({
         myServices: [],
         myServicesStatus: 'idle', // idle | loading | succeeded | failed
         myServicesError: null,
+
+        publicServicesById: {},
+        publicServiceStatusById: {}, // { [serviceId]: idle|loading|succeeded|failed }
+        publicServiceErrorById: {},
+
         addServiceStatus: 'idle', // idle | loading | succeeded | failed
         addServiceError: null,
         updateServiceStatus: 'idle', // idle | loading | succeeded | failed
@@ -298,6 +336,26 @@ const vendorSlice = createSlice({
             .addCase(fetchMyVendorServices.rejected, (state, action) => {
                 state.myServicesStatus = 'failed';
                 state.myServicesError = action.payload || action.error.message;
+            })
+            .addCase(fetchPublicServiceById.pending, (state, action) => {
+                const serviceId = action.meta?.arg?.serviceId;
+                if (!serviceId) return;
+                state.publicServiceStatusById[serviceId] = 'loading';
+                state.publicServiceErrorById[serviceId] = null;
+            })
+            .addCase(fetchPublicServiceById.fulfilled, (state, action) => {
+                const serviceId = action.payload?.serviceId;
+                const service = action.payload?.service || null;
+                if (!serviceId) return;
+                state.publicServiceStatusById[serviceId] = 'succeeded';
+                state.publicServiceErrorById[serviceId] = null;
+                if (service) state.publicServicesById[serviceId] = service;
+            })
+            .addCase(fetchPublicServiceById.rejected, (state, action) => {
+                const serviceId = action.meta?.arg?.serviceId;
+                if (!serviceId) return;
+                state.publicServiceStatusById[serviceId] = 'failed';
+                state.publicServiceErrorById[serviceId] = action.payload || action.error.message;
             })
             .addCase(addVendorService.pending, (state) => {
                 state.addServiceStatus = 'loading';
@@ -384,6 +442,10 @@ export const selectAddServiceError = (state) => state.vendor.addServiceError;
 export const selectMyServices = (state) => state.vendor.myServices;
 export const selectMyServicesStatus = (state) => state.vendor.myServicesStatus;
 export const selectMyServicesError = (state) => state.vendor.myServicesError;
+
+export const selectPublicServicesById = (state) => state.vendor.publicServicesById;
+export const selectPublicServiceStatusById = (state) => state.vendor.publicServiceStatusById;
+export const selectPublicServiceErrorById = (state) => state.vendor.publicServiceErrorById;
 
 export const selectUpdateServiceStatus = (state) => state.vendor.updateServiceStatus;
 export const selectUpdateServiceError = (state) => state.vendor.updateServiceError;
