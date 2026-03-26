@@ -30,6 +30,29 @@ import {
     selectPublicServicesById,
     selectPublicServiceStatusById,
 } from '../../store/slices/vendorSlice';
+import { refreshAccessToken, selectUser } from '../../store/slices/authSlice';
+import { ensureEventDmConversation, fetchConversationMessages } from '../../utils/chatApi';
+
+const decodeJwtPayload = (token) => {
+    try {
+        const parts = String(token || '').split('.');
+        if (parts.length < 2) return null;
+        const base64Url = parts[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+        const json = atob(padded);
+        return JSON.parse(json);
+    } catch {
+        return null;
+    }
+};
+
+const resolveAuthId = ({ user, accessToken }) => {
+    const fromUser = String(user?.authId || '').trim();
+    if (fromUser) return fromUser;
+    const payload = decodeJwtPayload(accessToken);
+    return String(payload?.authId || payload?.sub || payload?.userId || payload?.id || '').trim();
+};
 
 const formatEventDateLabel = (value) => {
     if (!value) return 'TBD';
@@ -43,6 +66,9 @@ const EventDetails = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const dispatch = useDispatch();
+    const user = useSelector(selectUser);
+    const accessToken = useSelector((state) => state.auth.accessToken) || localStorage.getItem('accessToken');
+    const currentUserAuthId = resolveAuthId({ user, accessToken });
 
     // Determine active tab based on current path
     // path format: /vendor/event/:id/:tab
@@ -63,6 +89,11 @@ const EventDetails = () => {
     const [showRejectModal, setShowRejectModal] = useState(false);
     const [rejectReason, setRejectReason] = useState('');
     const [rejectSubmitting, setRejectSubmitting] = useState(false);
+    const [vendorChatUnreadCount, setVendorChatUnreadCount] = useState(0);
+
+    const managerAuthId = selected?.managerProfile?.authId != null
+        ? String(selected.managerProfile.authId).trim()
+        : String(selected?.assignedManagerId || '').trim();
 
     React.useEffect(() => {
         if (id) {
@@ -94,6 +125,70 @@ const EventDetails = () => {
             toast.error(String(selectedError));
         }
     }, [selectedStatus, selectedError]);
+
+    React.useEffect(() => {
+        const eventId = String(id || '').trim();
+        const viewerAuthId = String(currentUserAuthId || '').trim();
+        const managerId = String(managerAuthId || '').trim();
+
+        if (!eventId || !viewerAuthId || !managerId || selected?.summary?.summaryStatus !== 'ACCEPTED') {
+            setVendorChatUnreadCount(0);
+            return;
+        }
+
+        if (activeSubTab === 'chat') {
+            setVendorChatUnreadCount(0);
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadUnread = async () => {
+            try {
+                const convo = await ensureEventDmConversation({
+                    eventId,
+                    otherAuthId: managerId,
+                    dispatch,
+                    refreshAction: refreshAccessToken,
+                });
+
+                const convoId = String(convo?._id || convo?.id || '').trim();
+                if (!convoId) {
+                    if (!cancelled) setVendorChatUnreadCount(0);
+                    return;
+                }
+
+                const msgs = await fetchConversationMessages({
+                    conversationId: convoId,
+                    limit: 200,
+                    dispatch,
+                    refreshAction: refreshAccessToken,
+                });
+
+                if (cancelled) return;
+
+                const unread = (Array.isArray(msgs) ? msgs : []).filter((m) => {
+                    const sender = String(m?.senderAuthId || m?.senderId || '').trim();
+                    if (!sender || sender === viewerAuthId) return false;
+                    if (sender !== managerId) return false;
+                    const readBy = Array.isArray(m?.readBy) ? m.readBy.map((v) => String(v || '').trim()) : [];
+                    return !readBy.includes(viewerAuthId);
+                }).length;
+
+                setVendorChatUnreadCount(unread);
+            } catch {
+                if (!cancelled) setVendorChatUnreadCount(0);
+            }
+        };
+
+        loadUnread();
+        const timer = setInterval(loadUnread, 20000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+        };
+    }, [id, currentUserAuthId, managerAuthId, activeSubTab, dispatch, selected?.summary?.summaryStatus]);
 
     const handleShareInvoice = () => {
         setActiveChannel("internal");
@@ -650,9 +745,11 @@ const EventDetails = () => {
                             >
 
                                 <BsChatDots size={20} />
-                                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-3.5 h-3.5 px-0.5 rounded-full text-[8px] font-black shadow-lg bg-red-500 text-white">
-                                    3
-                                </span>
+                                {vendorChatUnreadCount > 0 ? (
+                                    <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-3.5 h-3.5 px-0.5 rounded-full text-[8px] font-black shadow-lg bg-red-500 text-white">
+                                        {vendorChatUnreadCount > 99 ? '99+' : vendorChatUnreadCount}
+                                    </span>
+                                ) : null}
                             </NavLink>
                         </>
                     )}

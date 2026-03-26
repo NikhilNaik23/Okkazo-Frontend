@@ -19,6 +19,29 @@ import {
   selectVendorEventRequestsError,
   selectVendorEventRequestsStatus,
 } from '../../store/slices/vendorEventsSlice';
+import { refreshAccessToken, selectUser } from '../../store/slices/authSlice';
+import { ensureEventDmConversation, fetchConversationMessages } from '../../utils/chatApi';
+
+const decodeJwtPayload = (token) => {
+  try {
+    const parts = String(token || '').split('.');
+    if (parts.length < 2) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const json = atob(padded);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+};
+
+const resolveAuthId = ({ user, accessToken }) => {
+  const fromUser = String(user?.authId || '').trim();
+  if (fromUser) return fromUser;
+  const payload = decodeJwtPayload(accessToken);
+  return String(payload?.authId || payload?.sub || payload?.userId || payload?.id || '').trim();
+};
 
 const formatDayMonth = (value) => {
   if (!value) return { day: '--', month: '---' };
@@ -112,8 +135,12 @@ const EventRequestsModal = ({ isOpen, onClose, requests }) => {
 const BookedEvents = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const user = useSelector(selectUser);
+  const accessToken = useSelector((state) => state.auth.accessToken) || localStorage.getItem('accessToken');
+  const currentUserId = resolveAuthId({ user, accessToken });
   const [searchQuery, setSearchQuery] = useState("");
   const [isRequestsModalOpen, setIsRequestsModalOpen] = useState(false);
+  const [unreadByEventId, setUnreadByEventId] = useState({});
 
   const requests = useSelector(selectVendorEventRequests);
   const requestsStatus = useSelector(selectVendorEventRequestsStatus);
@@ -129,24 +156,86 @@ const BookedEvents = () => {
     }
   }, [requestsStatus, requestsError]);
 
-  const uiRequests = (Array.isArray(requests) ? requests : []).map((row) => {
-    const { day, month } = formatDayMonth(row?.eventDate);
-    const hasRejected = (row?.vendorItems || []).some((v) => v?.status === 'REJECTED');
-    const isPending = (row?.vendorItems || []).some((v) => v?.status === 'YET_TO_SELECT');
+  const uiRequests = React.useMemo(
+    () => (Array.isArray(requests) ? requests : []).map((row) => {
+      const { day, month } = formatDayMonth(row?.eventDate);
+      const hasRejected = (row?.vendorItems || []).some((v) => v?.status === 'REJECTED');
+      const isPending = (row?.vendorItems || []).some((v) => v?.status === 'YET_TO_SELECT');
 
-    return {
-      id: row?.eventId,
-      title: row?.eventTitle || 'Event',
-      status: hasRejected ? 'REJECTED' : (isPending ? 'PENDING' : 'CONFIRMED'),
-      date: day,
-      month,
-      category: row?.eventType || row?.category || 'Event',
-      location: row?.locationName || 'TBA',
-      service: summarizeServiceLabel(row?.vendorItems),
-      image: row?.eventBannerUrl || '/vendor_hero.png',
-      managerUnreadCount: 0,
+      return {
+        id: row?.eventId,
+        title: row?.eventTitle || 'Event',
+        status: hasRejected ? 'REJECTED' : (isPending ? 'PENDING' : 'CONFIRMED'),
+        date: day,
+        month,
+        category: row?.eventType || row?.category || 'Event',
+        location: row?.locationName || 'TBA',
+        service: summarizeServiceLabel(row?.vendorItems),
+        image: row?.eventBannerUrl || '/vendor_hero.png',
+        managerUnreadCount: 0,
+        managerAuthId: String(row?.managerProfile?.authId || row?.assignedManagerId || '').trim(),
+      };
+    }),
+    [requests]
+  );
+
+  React.useEffect(() => {
+    const confirmedEvents = uiRequests.filter((e) => e.status === 'CONFIRMED' && e.id && e.managerAuthId);
+
+    if (!confirmedEvents.length || !currentUserId) {
+      setUnreadByEventId({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadUnreadCounts = async () => {
+      const entries = await Promise.all(
+        confirmedEvents.map(async (event) => {
+          try {
+            const convo = await ensureEventDmConversation({
+              eventId: event.id,
+              otherAuthId: event.managerAuthId,
+              dispatch,
+              refreshAction: refreshAccessToken,
+            });
+
+            const convoId = String(convo?._id || '').trim();
+            if (!convoId) return [String(event.id), 0];
+
+            const msgs = await fetchConversationMessages({
+              conversationId: convoId,
+              limit: 200,
+              dispatch,
+              refreshAction: refreshAccessToken,
+            });
+
+            const unread = (Array.isArray(msgs) ? msgs : []).filter((m) => {
+              const sender = String(m?.senderAuthId || '').trim();
+              if (!sender || sender !== event.managerAuthId) return false;
+              const readBy = Array.isArray(m?.readBy) ? m.readBy.map((v) => String(v || '').trim()) : [];
+              return !readBy.includes(currentUserId);
+            }).length;
+
+            return [String(event.id), unread];
+          } catch {
+            return [String(event.id), 0];
+          }
+        })
+      );
+
+      if (cancelled) return;
+      setUnreadByEventId(Object.fromEntries(entries));
     };
-  });
+
+    loadUnreadCounts();
+    const timer = setInterval(loadUnreadCounts, 20000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [uiRequests, currentUserId, dispatch]);
 
   const stats = {
     pending: uiRequests.filter(e => e.status === "PENDING").length,
@@ -243,9 +332,9 @@ const BookedEvents = () => {
               >
                 <div className="relative p-2.5 bg-white/90 backdrop-blur-md rounded-xl shadow-lg hover:bg-white transition-all text-[#0b2d49]">
                   <BsChatDots size={20} />
-                  {event.managerUnreadCount > 0 && (
+                  {Number(unreadByEventId[String(event.id)] || 0) > 0 && (
                     <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center ring-2 ring-white">
-                      {event.managerUnreadCount}
+                      {Number(unreadByEventId[String(event.id)] || 0) > 99 ? '99+' : Number(unreadByEventId[String(event.id)] || 0)}
                     </span>
                   )}
                 </div>

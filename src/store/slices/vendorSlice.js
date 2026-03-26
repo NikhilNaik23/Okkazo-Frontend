@@ -1,8 +1,8 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
-import { fetchWithAuth } from '../../utils/apiHandler';
+import { fetchWithAuth, fetchWithNgrok } from '../../utils/apiHandler';
 import { refreshAccessToken } from './authSlice';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
 const safeJson = async (response) => {
     try {
@@ -73,7 +73,7 @@ export const fetchPublicServiceById = createAsyncThunk(
             const id = String(serviceId || '').trim();
             if (!id) return rejectWithValue('Service ID is required');
 
-            const response = await fetch(`${API_BASE_URL}/api/vendor/public/services/${encodeURIComponent(id)}`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/vendor/public/services/${encodeURIComponent(id)}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -453,3 +453,4 @@ export const selectDeleteServiceStatus = (state) => state.vendor.deleteServiceSt
 export const selectDeleteServiceError = (state) => state.vendor.deleteServiceError;
 
 export default vendorSlice.reducer;
+

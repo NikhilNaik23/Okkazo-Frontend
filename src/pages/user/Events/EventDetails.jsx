@@ -147,11 +147,16 @@ const EventDetails = () => {
             return;
         }
 
+        const selectedEntries = Object.entries(ticketSelection).filter(([, qty]) => Number(qty || 0) > 0);
+        const primaryCategory = selectedEntries[0]?.[0] || 'General';
+
         // Pass selection state to checkout (could use location state or query params)
         // For query params, we might need a serialized format if complex
-        const selectionParam = JSON.stringify(ticketSelection);
-        navigate(`/user/checkout/${event.id}?qty=${totalTickets}&category=${encodeURIComponent(Object.keys(ticketSelection)[0] || 'General')}`, {
-            state: { event },
+        navigate(`/user/checkout/${event.id}?qty=${totalTickets}&category=${encodeURIComponent(primaryCategory)}`, {
+            state: {
+                event,
+                ticketSelection,
+            },
         });
     };
 

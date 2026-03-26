@@ -3,19 +3,16 @@ import { Link, useLocation } from "react-router-dom";
 import { MdLogout, MdClose } from "react-icons/md";
 import { adminMenuSections, adminBottomItems } from "../../../data/adminData";
 import { vendorNotificationsData } from "../../../data/vendorNotificationsData";
-import { chatMessages } from "../../../data/chatData";
+import { useStaffUnread } from "../../../context/useStaffUnread";
 
 const Navbar = ({ isOpen, onClose, onToggleNotifications }) => {
   const location = useLocation();
+  const { totalUnreadCount: unreadChatCount } = useStaffUnread();
 
   const menuSections = adminMenuSections;
   const bottomItems = adminBottomItems;
 
-  const currentUserId = 'manager';
   const unreadNotifications = vendorNotificationsData.new.some((n) => n.unread);
-  const unreadChatCount = chatMessages.filter(
-    (m) => m.receiverId === currentUserId && m.status !== 'read'
-  ).length;
 
   const handleLogout = () => {
     localStorage.clear();

@@ -38,7 +38,7 @@ import { fetchWithAuth } from '../../../utils/apiHandler';
 import { refreshAccessToken, selectUser } from '../../../store/slices/authSlice';
 import { ensureEventDmConversation, fetchConversationMessages } from '../../../utils/chatApi';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
 const safeJson = async (response) => {
     try {
@@ -459,7 +459,7 @@ const ManagerEventDetails = () => {
     const chatContactAuthIds = useMemo(() => {
         const ids = new Set();
 
-        const clientAuthId = String(client?.authId || '').trim();
+        const clientAuthId = String(client?.authId || rawEvent?.authId || '').trim();
         if (clientAuthId) ids.add(clientAuthId);
 
         const acceptedVendorAuthIds = (Array.isArray(vendorSelection?.vendors) ? vendorSelection.vendors : [])
@@ -469,7 +469,7 @@ const ManagerEventDetails = () => {
 
         for (const authId of acceptedVendorAuthIds) ids.add(authId);
         return Array.from(ids);
-    }, [client?.authId, vendorSelection?.vendors]);
+    }, [client?.authId, rawEvent?.authId, vendorSelection?.vendors]);
 
     useEffect(() => {
         const eventId = String(id || '').trim();
@@ -492,29 +492,33 @@ const ManagerEventDetails = () => {
         const loadUnreadCount = async () => {
             try {
                 const counts = await Promise.all(contactAuthIds.map(async (otherAuthId) => {
-                    const convo = await ensureEventDmConversation({
-                        eventId,
-                        otherAuthId,
-                        dispatch,
-                        refreshAction: refreshAccessToken,
-                    });
+                    try {
+                        const convo = await ensureEventDmConversation({
+                            eventId,
+                            otherAuthId,
+                            dispatch,
+                            refreshAction: refreshAccessToken,
+                        });
 
-                    const conversationId = String(convo?._id || convo?.id || '').trim();
-                    if (!conversationId) return 0;
+                        const conversationId = String(convo?._id || convo?.id || '').trim();
+                        if (!conversationId) return 0;
 
-                    const messages = await fetchConversationMessages({
-                        conversationId,
-                        limit: 200,
-                        dispatch,
-                        refreshAction: refreshAccessToken,
-                    });
+                        const messages = await fetchConversationMessages({
+                            conversationId,
+                            limit: 200,
+                            dispatch,
+                            refreshAction: refreshAccessToken,
+                        });
 
-                    return (Array.isArray(messages) ? messages : []).filter((msg) => {
-                        const sender = String(msg?.senderAuthId || msg?.senderId || '').trim();
-                        if (!sender || sender === managerAuthId) return false;
-                        const readBy = Array.isArray(msg?.readBy) ? msg.readBy.map((v) => String(v || '').trim()) : [];
-                        return !readBy.includes(managerAuthId);
-                    }).length;
+                        return (Array.isArray(messages) ? messages : []).filter((msg) => {
+                            const sender = String(msg?.senderAuthId || msg?.senderId || '').trim();
+                            if (!sender || sender === managerAuthId) return false;
+                            const readBy = Array.isArray(msg?.readBy) ? msg.readBy.map((v) => String(v || '').trim()) : [];
+                            return !readBy.includes(managerAuthId);
+                        }).length;
+                    } catch {
+                        return 0;
+                    }
                 }));
 
                 if (cancelled) return;

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, CheckCheck, Paperclip, Search, Send, Smile, Users, ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, CheckCheck, Paperclip, Search, Send, Smile, Users, ChevronDown, ChevronRight, MoreVertical } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import EmojiPicker from 'emoji-picker-react';
 import { io as createSocket } from 'socket.io-client';
@@ -12,8 +12,10 @@ import {
   fetchStaffChatContacts,
   markConversationRead,
   sendConversationMessage,
+  updateConversationMessage,
 } from '../../../utils/chatApi';
 import { CHAT_SOCKET_URL } from '../../../utils/chatConfig';
+import { useStaffUnread } from '../../../context/useStaffUnread';
 
 const decodeJwtPayload = (token) => {
   try {
@@ -67,21 +69,56 @@ const AdminChat = () => {
   const [onlineMap, setOnlineMap] = useState({});
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
+  const [socketJoined, setSocketJoined] = useState(false);
+  const [activeMessageMenu, setActiveMessageMenu] = useState(null);
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editInput, setEditInput] = useState('');
+
+  const { unreadByAuthId, totalUnreadCount, setActiveConversationAuthId } = useStaffUnread();
 
   const fileInputRef = useRef(null);
   const emojiPickerRef = useRef(null);
+  const messageMenuRef = useRef(null);
   const socketRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const stickToBottomRef = useRef(true);
+  const initialScrollDoneRef = useRef(false);
+
+  const scrollToBottom = (behavior = 'smooth') => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior, block: 'end' });
+      return;
+    }
+
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior,
+      });
+    }
+  };
+
+  const handleMessagesScroll = () => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickToBottomRef.current = distance < 80;
+  };
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
         setShowEmojiPicker(false);
       }
+      if (activeMessageMenu && messageMenuRef.current && !messageMenuRef.current.contains(event.target)) {
+        setActiveMessageMenu(null);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [activeMessageMenu]);
 
   useEffect(() => {
     let cancelled = false;
@@ -180,6 +217,11 @@ const AdminChat = () => {
   );
 
   useEffect(() => {
+    setActiveConversationAuthId(String(activeChannel || '').trim());
+    return () => setActiveConversationAuthId('');
+  }, [activeChannel, setActiveConversationAuthId]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const ensureAndLoadConversation = async () => {
@@ -221,13 +263,14 @@ const AdminChat = () => {
 
     const socket = createSocket(CHAT_SOCKET_URL, {
       auth: { token: accessToken },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
     });
 
     socketRef.current = socket;
 
     socket.on('connect', () => {
       setSocketConnected(true);
+      setSocketJoined(false);
       if (conversationId) {
         socket.emit('conversation:join', { conversationId });
       }
@@ -236,12 +279,19 @@ const AdminChat = () => {
       }
     });
 
+    socket.on('conversation:joined', ({ conversationId: joinedConversationId } = {}) => {
+      if (String(joinedConversationId || '').trim() !== String(conversationId || '').trim()) return;
+      setSocketJoined(true);
+    });
+
     socket.on('disconnect', () => {
       setSocketConnected(false);
+      setSocketJoined(false);
     });
 
     socket.on('connect_error', () => {
       setSocketConnected(false);
+      setSocketJoined(false);
     });
 
     socket.on('presence:update', ({ authId, online }) => {
@@ -281,17 +331,25 @@ const AdminChat = () => {
       );
     });
 
+    socket.on('message:updated', (updated) => {
+      const updatedId = msgId(updated);
+      if (!updatedId) return;
+      setMessages((prev) => prev.map((message) => (msgId(message) === updatedId ? { ...message, ...updated } : message)));
+    });
+
     return () => {
       socket.disconnect();
       socketRef.current = null;
       setSocketConnected(false);
+      setSocketJoined(false);
     };
-  }, [accessToken, conversationId, currentUserId, presenceAuthIds]);
+  }, [accessToken, conversationId, currentUserId]);
 
   useEffect(() => {
     if (!socketConnected || !conversationId) return;
     const socket = socketRef.current;
     if (!socket) return;
+    setSocketJoined(false);
     socket.emit('conversation:join', { conversationId });
   }, [socketConnected, conversationId]);
 
@@ -302,6 +360,53 @@ const AdminChat = () => {
     if (!presenceAuthIds.length) return;
     socket.emit('presence:watch', { authIds: presenceAuthIds });
   }, [socketConnected, presenceAuthIds]);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    if (socketConnected && socketJoined) return;
+
+    let stopped = false;
+
+    const poll = async () => {
+      try {
+        const list = await fetchConversationMessages({
+          conversationId,
+          limit: 120,
+          dispatch,
+          refreshAction: refreshAccessToken,
+        });
+
+        if (!stopped) {
+          setMessages(Array.isArray(list) ? list : []);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    poll();
+    const id = setInterval(poll, 2500);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
+  }, [conversationId, socketConnected, socketJoined, dispatch]);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    stickToBottomRef.current = true;
+    initialScrollDoneRef.current = false;
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    if (!messages.length) return;
+    if (!stickToBottomRef.current) return;
+
+    const behavior = initialScrollDoneRef.current ? 'smooth' : 'auto';
+    requestAnimationFrame(() => scrollToBottom(behavior));
+    initialScrollDoneRef.current = true;
+  }, [conversationId, messages.length]);
 
   const handleSend = async () => {
     const text = String(chatInput || '').trim();
@@ -321,6 +426,8 @@ const AdminChat = () => {
         return [...prev, sent];
       });
 
+      stickToBottomRef.current = true;
+
       setChatInput('');
       setShowEmojiPicker(false);
     } catch (error) {
@@ -331,9 +438,40 @@ const AdminChat = () => {
   const handleAttachClick = () => fileInputRef.current?.click();
   const handleEmojiClick = (emojiData) => setChatInput((prev) => prev + emojiData.emoji);
 
+  const handleStartEdit = (message) => {
+    const id = msgId(message);
+    if (!id) return;
+    setEditingMessageId(id);
+    setEditInput(String(message?.text || ''));
+    setActiveMessageMenu(null);
+  };
+
+  const submitEdit = async (message) => {
+    const id = msgId(message);
+    const text = String(editInput || '').trim();
+    if (!id || !text || !conversationId) return;
+
+    try {
+      const updated = await updateConversationMessage({
+        conversationId,
+        messageId: id,
+        text,
+        dispatch,
+        refreshAction: refreshAccessToken,
+      });
+
+      setMessages((prev) => prev.map((m) => (msgId(m) === id ? { ...m, ...updated } : m)));
+      setEditingMessageId(null);
+      toast.success('Message edited');
+    } catch (error) {
+      toast.error(error?.message || 'Failed to edit message');
+    }
+  };
+
   const renderSidebarItem = (contact) => {
     const id = String(contact?.authId || '');
     const isActive = activeChannel === id;
+    const unread = Number(unreadByAuthId[id] || 0);
 
     return (
       <button
@@ -352,6 +490,12 @@ const AdminChat = () => {
             {contact?.role === 'ADMIN' ? 'Administration' : (contact?.department || 'Manager')}
           </p>
         </div>
+
+        {unread > 0 && (
+          <span className={`inline-flex min-w-5 h-5 items-center justify-center px-1.5 rounded-full text-[10px] font-black leading-none ${isActive ? 'bg-white/20 text-[#d7a444]' : 'bg-[#0b2d49] text-white'}`}>
+            {unread > 99 ? '99+' : unread}
+          </span>
+        )}
       </button>
     );
   };
@@ -360,7 +504,14 @@ const AdminChat = () => {
     <div className="flex h-[calc(100vh)] bg-slate-50 overflow-hidden">
       <div className="w-[320px] bg-white border-r border-gray-100 flex flex-col shrink-0 shadow-sm z-10">
         <div className="p-5 border-b border-gray-100">
-          <h2 className="text-xl font-black text-gray-900 tracking-tight">Messages</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-black text-gray-900 tracking-tight">Messages</h2>
+            {totalUnreadCount > 0 && (
+              <span className="inline-flex min-w-6 h-6 items-center justify-center px-2 rounded-full text-[11px] font-black bg-[#0b2d49] text-white">
+                {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="p-4 border-b border-gray-100">
@@ -410,7 +561,11 @@ const AdminChat = () => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8 space-y-6">
+        <div
+          ref={messagesContainerRef}
+          onScroll={handleMessagesScroll}
+          className="flex-1 overflow-y-auto p-8 space-y-6"
+        >
           {!currentContact ? (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-400 h-full mt-20">
               <Users size={64} className="mb-6 opacity-20" />
@@ -434,8 +589,52 @@ const AdminChat = () => {
                       {isMe ? (
                         <div className="flex flex-col items-end gap-1.5">
                           <div className="flex items-end gap-3 max-w-[75%]">
-                            <div className="bg-[#0b2d49] text-white p-5 rounded-2xl rounded-tr-sm shadow-sm">
-                              <p className="text-[15px] font-medium leading-relaxed">{message?.text || ''}</p>
+                            <div className="bg-[#0b2d49] text-white p-5 pr-9 rounded-2xl rounded-tr-sm shadow-sm relative group/bubble">
+                              <div className="absolute top-1 right-1 z-20">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveMessageMenu(activeMessageMenu === id ? null : id);
+                                  }}
+                                  className={`p-1 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition-all opacity-0 group-hover/bubble:opacity-100 ${activeMessageMenu === id ? 'opacity-100 bg-black/10' : ''}`}
+                                >
+                                  <MoreVertical size={14} />
+                                </button>
+
+                                {activeMessageMenu === id && (
+                                  <div
+                                    ref={messageMenuRef}
+                                    className="absolute z-60 top-full right-0 mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 min-w-32 p-2 animate-in fade-in zoom-in-95 duration-200"
+                                  >
+                                    <button
+                                      onClick={() => handleStartEdit(message)}
+                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 rounded-xl transition-colors text-left"
+                                    >
+                                      Edit
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              {editingMessageId === id ? (
+                                <div className="flex flex-col gap-3">
+                                  <textarea
+                                    className="bg-white/10 text-white rounded-xl p-3 text-[15px] outline-none border border-white/20 min-w-62.5"
+                                    value={editInput}
+                                    onChange={(e) => setEditInput(e.target.value)}
+                                    autoFocus
+                                  />
+                                  <div className="flex justify-end gap-3 text-sm">
+                                    <button onClick={() => setEditingMessageId(null)} className="font-bold opacity-70 hover:opacity-100 transition-opacity">Cancel</button>
+                                    <button onClick={() => submitEdit(message)} className="font-bold text-blue-100 hover:text-white transition-colors">Save</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <p className="text-[15px] font-medium leading-relaxed">{message?.text || ''}</p>
+                                  {(message?.editedAt || message?.isEdited) && <span className="text-[10px] opacity-40 float-right mt-1.5 ml-3 italic">edited</span>}
+                                </>
+                              )}
                             </div>
                             <div className="w-10 h-10 rounded-full bg-blue-50 text-[#0b2d49] flex items-center justify-center text-xs font-bold shrink-0 border border-blue-100 uppercase shadow-sm">ME</div>
                           </div>
@@ -463,6 +662,7 @@ const AdminChat = () => {
                     </div>
                   );
                 })}
+                <div ref={messagesEndRef} />
               </div>
             </>
           )}

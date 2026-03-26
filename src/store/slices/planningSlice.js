@@ -2,7 +2,7 @@ import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { fetchWithAuth } from '../../utils/apiHandler';
 import { refreshAccessToken } from './authSlice';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -229,7 +229,7 @@ export const saveEventPlanning = createAsyncThunk(
 
 export const createOrder = createAsyncThunk(
     'planning/createOrder',
-    async ({ eventId, amount, orderType }, { dispatch, rejectWithValue }) => {
+    async ({ eventId, amount, orderType, notes }, { dispatch, rejectWithValue }) => {
         try {
             const response = await fetchWithAuth(`${API_BASE_URL}/api/orders/create`, {
                 method: 'POST',
@@ -238,6 +238,7 @@ export const createOrder = createAsyncThunk(
                     orderType: orderType || 'PLANNING EVENT', // required enum in PaymentOrder model
                     currency:  'INR',
                     ...(amount !== undefined && amount !== null ? { amount } : {}),
+                    ...(notes ? { notes } : {}),
                 }),
             }, { dispatch, refreshAction: refreshAccessToken });
 
@@ -252,6 +253,7 @@ export const createOrder = createAsyncThunk(
                 amount:          data.data?.amount,          // in paise
                 currency:        data.data?.currency,
                 keyId:           data.data?.keyId,           // backend field name is 'keyId'
+                ticketId:        data.data?.ticketId || null,
             };
         } catch (error) {
             return rejectWithValue(error.message || 'Failed to create order');
@@ -287,6 +289,7 @@ export const verifyPayment = createAsyncThunk(
             return {
                 transactionId: data.data?.transactionId || razorpayPaymentId,
                 eventId,
+                ticketId: data.data?.ticketId || null,
             };
         } catch (error) {
             return rejectWithValue(error.message || 'Payment verification failed');

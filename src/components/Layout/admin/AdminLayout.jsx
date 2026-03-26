@@ -21,12 +21,14 @@ import AdminChat from "../../../pages/Home/admin/AdminChat";
 import AdminNotificationsPanel from "../../Admin/Notifications/AdminNotificationsPanel";
 import AdminUserManagement from "../../../pages/Home/admin/AdminUserManagement";
 import ProtectedRoute from "../../Auth/ProtectedRoute";
+import { StaffUnreadProvider } from "../../../context/StaffUnreadContext";
 
 const AdminLayout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
     return (
+    <StaffUnreadProvider>
     <div className="h-screen overflow-hidden flex bg-[#e9eff1] text-[#0b2d49] font-sans">
             <Navbar
                 isOpen={isSidebarOpen}
@@ -92,6 +94,7 @@ const AdminLayout = () => {
                 />
       </main>
     </div>
+        </StaffUnreadProvider>
   );
 };
 export default AdminLayout;

@@ -14,13 +14,15 @@ import {
     fetchConversationMessages,
     sendConversationMessage,
     markConversationRead,
+    deleteConversationMessage,
+    updateConversationMessage,
 } from '../../../../utils/chatApi';
 import { CHAT_API_BASE_URL, CHAT_SOCKET_URL } from '../../../../utils/chatConfig';
 import { extractRichChatMessage, stripRichChatMessage } from '../../../../utils/richChat';
 import { fetchPlanningByEventId, fetchPlanningVendorSelectionByEventId, selectPlanningVendorSelectionByEventId } from '../../../../store/slices/planningSlice';
 import { computeMoneyRangeFromBase } from '../../../../utils/pricing';
 
-const EVENTS_API_BASE_URL = 'http://localhost:8080';
+const EVENTS_API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
 const formatMoneyShort = (value) => {
     const n = Number(value || 0);
@@ -246,6 +248,7 @@ const ChatTab = ({ eventId, client }) => {
     const [isVendorsOpen, setIsVendorsOpen] = useState(true);
     const [isInternalOpen, setIsInternalOpen] = useState(true);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    const [pendingFiles, setPendingFiles] = useState([]);
     
     // Call modal & interaction states
     const [activeMessageMenu, setActiveMessageMenu] = useState(null);
@@ -443,6 +446,19 @@ const ChatTab = ({ eventId, client }) => {
             }
         });
 
+        socket.on('message:deleted', ({ conversationId: convoId, messageId } = {}) => {
+            if (String(convoId || '').trim() !== String(conversationId)) return;
+            const deletedId = String(messageId || '').trim();
+            if (!deletedId) return;
+            setMessages((prev) => prev.filter((m) => String(m?._id || m?.id || '') !== deletedId));
+        });
+
+        socket.on('message:updated', (updated) => {
+            const updatedId = String(updated?._id || updated?.id || '').trim();
+            if (!updatedId) return;
+            setMessages((prev) => prev.map((m) => (String(m?._id || m?.id || '') === updatedId ? { ...m, ...updated } : m)));
+        });
+
         socket.on('messages:read', ({ conversationId: convoId, authId } = {}) => {
             const readerAuthId = String(authId || '').trim();
             if (!readerAuthId) return;
@@ -543,17 +559,20 @@ const ChatTab = ({ eventId, client }) => {
     const currentContact = contacts.find(c => c.id === activeChannel);
 
     const handleSend = async () => {
-        if (!chatInput.trim() || !conversationId) return;
+        if ((!chatInput.trim() && pendingFiles.length === 0) || !conversationId) return;
 
         try {
             const data = await sendConversationMessage({
                 conversationId,
                 text: chatInput.trim(),
+                files: pendingFiles,
                 dispatch,
                 refreshAction: refreshAccessToken,
             });
 
             setChatInput('');
+            setPendingFiles([]);
+            if (fileInputRef.current) fileInputRef.current.value = '';
 
             const msgId = String(data?._id || data?.id || '');
             setMessages((prev) => {
@@ -864,16 +883,42 @@ const ChatTab = ({ eventId, client }) => {
         );
     };
 
-    const handleDeleteMessage = (id) => {
+    const handleDeleteMessage = async (id) => {
         const deleteId = String(id);
-        setMessages((prev) => prev.filter(m => String(m?._id || m?.id || '') !== deleteId));
-        toast.success("Message deleted");
+        if (!deleteId || !conversationId) return;
+
+        try {
+            await deleteConversationMessage({
+                conversationId,
+                messageId: deleteId,
+                dispatch,
+                refreshAction: refreshAccessToken,
+            });
+            setMessages((prev) => prev.filter(m => String(m?._id || m?.id || '') !== deleteId));
+            toast.success("Message deleted");
+        } catch (error) {
+            toast.error(error?.message || 'Failed to delete message');
+        }
     };
 
-    const handleEditMessage = (id, newText) => {
+    const handleEditMessage = async (id, newText) => {
         const editId = String(id);
-        setMessages((prev) => prev.map(m => String(m?._id || m?.id || '') === editId ? { ...m, text: newText, isEdited: true } : m));
-        toast.success("Message edited");
+        if (!editId || !conversationId) return;
+
+        try {
+            const updated = await updateConversationMessage({
+                conversationId,
+                messageId: editId,
+                text: newText,
+                dispatch,
+                refreshAction: refreshAccessToken,
+            });
+
+            setMessages((prev) => prev.map((m) => (String(m?._id || m?.id || '') === editId ? { ...m, ...updated } : m)));
+            toast.success('Message edited');
+        } catch (error) {
+            toast.error(error?.message || 'Failed to edit message');
+        }
     };
 
     const handleEmojiClick = (emojiData) => {
@@ -884,32 +929,26 @@ const ChatTab = ({ eventId, client }) => {
         fileInputRef.current?.click();
     };
 
-    const handleFileChange = async (e) => {
+    const handleFileChange = (e) => {
         const fileList = Array.from(e.target.files || []);
-        if (!fileList.length || !conversationId) return;
+        if (!fileList.length) return;
 
-        try {
-            const data = await sendConversationMessage({
-                conversationId,
-                text: chatInput.trim(),
-                files: fileList,
-                dispatch,
-                refreshAction: refreshAccessToken,
-            });
+        setPendingFiles((prev) => {
+            const next = [...prev];
+            for (const file of fileList) {
+                if (!next.some((f) => f.name === file.name && f.size === file.size && f.lastModified === file.lastModified)) {
+                    next.push(file);
+                }
+            }
+            return next;
+        });
 
-            setChatInput('');
+        // allow re-selecting same file
+        e.target.value = '';
+    };
 
-            const msgId = String(data?._id || data?.id || '');
-            setMessages((prev) => {
-                if (msgId && prev.some((m) => String(m?._id || m?.id || '') === msgId)) return prev;
-                return [...prev, data];
-            });
-        } catch (err) {
-            toast.error(err?.message || 'Failed to upload');
-        } finally {
-            // allow re-uploading the same file
-            e.target.value = '';
-        }
+    const handleRemovePendingFile = (idx) => {
+        setPendingFiles((prev) => prev.filter((_, i) => i !== idx));
     };
 
     const handleStartEdit = (msg) => {
@@ -919,11 +958,10 @@ const ChatTab = ({ eventId, client }) => {
         setActiveMessageMenu(null);
     };
 
-    const submitEdit = (id) => {
-        if (editInput.trim()) {
-            handleEditMessage(id, editInput);
-            setEditingMessageId(null);
-        }
+    const submitEdit = async (id) => {
+        if (!editInput.trim()) return;
+        await handleEditMessage(id, editInput);
+        setEditingMessageId(null);
     };
 
     const renderMessageActions = (msg, isMe) => {
@@ -1275,7 +1313,7 @@ const ChatTab = ({ eventId, client }) => {
                                                                         <p className="text-sm font-medium leading-relaxed">{msg?.text}</p>
                                                                     )}
                                                                     {renderAttachments(msg?.attachments)}
-                                                                    {msg.isEdited && <span className="text-[9px] opacity-40 float-right mt-1 ml-2 italic">edited</span>}
+                                                                    {(msg?.editedAt || msg?.isEdited) && <span className="text-[9px] opacity-40 float-right mt-1 ml-2 italic">edited</span>}
                                                                 </>
                                                             )}
                                                         </div>
@@ -1369,12 +1407,30 @@ const ChatTab = ({ eventId, client }) => {
                             />
                             <button
                                 onClick={handleSend}
-                                disabled={!chatInput.trim()}
+                                disabled={!chatInput.trim() && pendingFiles.length === 0}
                                 className="p-3 bg-[#0b2d49] hover:bg-[#1a3b55] text-white rounded-full transition-all disabled:opacity-50 disabled:scale-95 shadow-md flex items-center justify-center shrink-0"
                             >
                                 <Send size={18} />
                             </button>
                         </div>
+
+                        {pendingFiles.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                {pendingFiles.map((file, idx) => (
+                                    <div key={`${file.name}-${file.size}-${file.lastModified}-${idx}`} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-100 border border-gray-200 text-xs font-semibold text-gray-700">
+                                        <span className="max-w-48 truncate">{file.name}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemovePendingFile(idx)}
+                                            className="text-rose-600 hover:text-rose-700"
+                                            aria-label="Remove attachment"
+                                        >
+                                            x
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 

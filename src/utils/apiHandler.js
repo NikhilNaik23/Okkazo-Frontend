@@ -6,6 +6,20 @@
  * 2. If the request fails with 401 (Unauthorized), try to refresh the token and retry once.
  * 3. Only if both tokens fail or are missing, return the error.
  */
+const isNgrokUrl = (url) => /https:\/\/[\w-]+\.ngrok(?:-free)?\.(?:app|dev)(?:\/|$)/i.test(String(url || ''));
+
+export const fetchWithNgrok = (url, options = {}) => {
+    const headers = {
+        ...(options.headers || {}),
+        ...(isNgrokUrl(url) ? { 'ngrok-skip-browser-warning': 'true' } : {}),
+    };
+
+    return fetch(url, {
+        ...options,
+        headers,
+    });
+};
+
 export const fetchWithAuth = async (url, options = {}, { dispatch, refreshAction }) => {
     let accessToken = localStorage.getItem('accessToken');
     const refreshToken = localStorage.getItem('refreshToken');
@@ -16,6 +30,7 @@ export const fetchWithAuth = async (url, options = {}, { dispatch, refreshAction
         const headers = {
             ...options.headers,
             ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            ...(isNgrokUrl(url) ? { 'ngrok-skip-browser-warning': 'true' } : {}),
         };
 
         // If body is FormData, don't set Content-Type header to let browser set boundary
@@ -23,7 +38,7 @@ export const fetchWithAuth = async (url, options = {}, { dispatch, refreshAction
             headers['Content-Type'] = 'application/json';
         }
 
-        return fetch(url, { ...options, headers });
+        return fetchWithNgrok(url, { ...options, headers });
     };
 
     // 1. Initial Check: If no access token but we have a refresh token, try to refresh first

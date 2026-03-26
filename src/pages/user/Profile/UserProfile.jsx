@@ -25,7 +25,6 @@ const UserProfile = () => {
     // Fetch user data and map to local state
     useEffect(() => {
         if (!isAuthenticated) {
-            toast.error("Please login to view your profile");
             navigate("/login");
             return;
         }
