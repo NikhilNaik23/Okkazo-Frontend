@@ -5,10 +5,12 @@ import { toast, Toaster } from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useDispatch } from "react-redux";
-import { myOrganizedEvents, myTickets as myTicketsData } from "../../../data/myEventsData";
+import { myOrganizedEvents } from "../../../data/myEventsData";
 import { promotedCampaigns } from "../../../data/myEventsDashboardData";
 import { fetchMyPlannings, fetchPlanningByEventId } from "../../../store/slices/planningSlice";
 import { fetchMyPromotes } from "../../../store/slices/promoteSlice";
+import { fetchWithAuth } from "../../../utils/apiHandler";
+import { refreshAccessToken } from "../../../store/slices/authSlice";
 import {
     OrganizedEventCard,
     CampaignCard,
@@ -19,6 +21,43 @@ import {
 } from "../../../components/User/Dashboard";
 
 const MotionDiv = motion.div;
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
+const safeJson = async (response) => {
+    try {
+        return await response.json();
+    } catch {
+        return null;
+    }
+};
+
+const mapApiTicketToCard = (ticket, idx) => {
+    const startAt = ticket?.schedule?.startAt ? new Date(ticket.schedule.startAt) : null;
+    const validDate = startAt && !Number.isNaN(startAt.getTime()) ? startAt : null;
+
+    const month = validDate
+        ? validDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
+        : 'TBA';
+    const day = validDate
+        ? String(validDate.getDate()).padStart(2, '0')
+        : '00';
+
+    const tierText = Array.isArray(ticket?.tickets?.tiers) && ticket.tickets.tiers.length > 0
+        ? ticket.tickets.tiers.map((tier) => `${tier?.name || 'Tier'} x${Number(tier?.noOfTickets || 0)}`).join(', ')
+        : 'General Admission';
+
+    return {
+        id: ticket?.ticketId || `ticket-${idx}`,
+        title: ticket?.eventTitle || 'Event Ticket',
+        location: ticket?.venue?.locationName || 'TBA',
+        image: ticket?.eventBanner?.url || myOrganizedEvents?.[idx % (myOrganizedEvents.length || 1)]?.image,
+        statusTag: 'Confirmed Guest',
+        month,
+        day,
+        tierText,
+        scheduleStartAt: validDate ? validDate.toISOString() : null,
+    };
+};
 
 const normalizePromoteStatus = (value) =>
     String(value || '')
@@ -279,13 +318,19 @@ const MyEvents = () => {
                     setOrganizedEvents(myOrganizedEvents);
                 }
 
-                const enhancedTickets = myTicketsData.map((t, i) => ({
-                    ...t,
-                    statusTag: i === 0 ? "Confirmed Guest" : i === 1 ? "Premium Access" : "VIP Access",
-                    month: t.date.split(' ')[0],
-                    day: t.date.split(' ')[1] || "01"
-                }));
-                setMyTickets(enhancedTickets);
+                const ticketsResponse = await fetchWithAuth(
+                    `${API_BASE_URL}/api/events/tickets/my`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+
+                const ticketsData = await safeJson(ticketsResponse);
+                if (ticketsResponse.ok && ticketsData?.success) {
+                    const items = Array.isArray(ticketsData?.data?.tickets) ? ticketsData.data.tickets : [];
+                    setMyTickets(items.map((ticket, idx) => mapApiTicketToCard(ticket, idx)));
+                } else {
+                    setMyTickets([]);
+                }
 
                 const promotesResult = await dispatch(fetchMyPromotes());
                 if (promotesResult.meta?.requestStatus === 'fulfilled') {
@@ -368,6 +413,18 @@ const MyEvents = () => {
         t.title.toLowerCase().includes(searchQuery) ||
         t.location.toLowerCase().includes(searchQuery)
     );
+
+    const nowMs = Date.now();
+    const upcomingTickets = filteredTickets.filter((ticket) => {
+        if (!ticket?.scheduleStartAt) return true;
+        return new Date(ticket.scheduleStartAt).getTime() >= nowMs;
+    });
+    const pastTickets = filteredTickets.filter((ticket) => {
+        if (!ticket?.scheduleStartAt) return false;
+        return new Date(ticket.scheduleStartAt).getTime() < nowMs;
+    });
+    const [ticketTimeline, setTicketTimeline] = useState('upcoming');
+    const displayedTickets = ticketTimeline === 'past' ? pastTickets : upcomingTickets;
     const filteredSaved = savedEvents.filter(s =>
         s.title.toLowerCase().includes(searchQuery) ||
         (s.location && s.location.toLowerCase().includes(searchQuery))
@@ -871,20 +928,30 @@ const MyEvents = () => {
                                 <div className="flex flex-col md:flex-row items-end justify-between gap-8 mb-12">
                                     <h1 className="text-5xl md:text-6xl font-serif-premium text-[#09637E] italic">Upcoming Journeys</h1>
                                     <div className="flex gap-4 items-center mb-2">
-                                        <button className="text-xs font-black uppercase tracking-widest text-[#09637E] border-b-2 border-[#09637E] pb-1">Upcoming</button>
-                                        <button className="text-xs font-black uppercase tracking-widest text-gray-400 hover:text-[#09637E] transition-colors pb-1">Past Events</button>
+                                        <button
+                                            onClick={() => setTicketTimeline('upcoming')}
+                                            className={`text-xs font-black uppercase tracking-widest pb-1 ${ticketTimeline === 'upcoming' ? 'text-[#09637E] border-b-2 border-[#09637E]' : 'text-gray-400 hover:text-[#09637E] transition-colors'}`}
+                                        >
+                                            Upcoming
+                                        </button>
+                                        <button
+                                            onClick={() => setTicketTimeline('past')}
+                                            className={`text-xs font-black uppercase tracking-widest pb-1 ${ticketTimeline === 'past' ? 'text-[#09637E] border-b-2 border-[#09637E]' : 'text-gray-400 hover:text-[#09637E] transition-colors'}`}
+                                        >
+                                            Past Events
+                                        </button>
                                     </div>
                                 </div>
 
-                                {filteredTickets.length > 0 ? (
+                                {displayedTickets.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-24">
-                                        {filteredTickets.map((ticket, idx) => (
+                                        {displayedTickets.map((ticket, idx) => (
                                             <TicketCard key={ticket.id} ticket={ticket} idx={idx} />
                                         ))}
                                     </div>
                                 ) : (
                                     <div className="py-20 text-center opacity-40">
-                                        <p className="font-serif-premium text-2xl">No upcoming journeys match your search.</p>
+                                        <p className="font-serif-premium text-2xl">No {ticketTimeline === 'past' ? 'past events' : 'upcoming journeys'} match your search.</p>
                                     </div>
                                 )}
 

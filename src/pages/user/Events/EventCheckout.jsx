@@ -1,12 +1,41 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import { BsArrowLeft, BsCheckCircleFill, BsQrCode, BsCalendarEvent } from "react-icons/bs";
 import { toast, Toaster } from "react-hot-toast";
 import PaymentMethod from "../../../components/Forms/Checkout/PaymentMethod";
 import CheckoutOrderSummary from "../../../components/Forms/Checkout/CheckoutOrderSummary";
 import { allEvents, popularEvents } from "../../../data/eventsData";
+import { fetchWithAuth } from "../../../utils/apiHandler";
+import { refreshAccessToken } from "../../../store/slices/authSlice";
+import { createOrder, verifyPayment } from "../../../store/slices/planningSlice";
+
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
+const loadRazorpayScript = () =>
+    new Promise((resolve) => {
+        if (window.Razorpay) {
+            resolve(true);
+            return;
+        }
+
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
+    });
+
+const safeJson = async (response) => {
+    try {
+        return await response.json();
+    } catch {
+        return null;
+    }
+};
 
 const EventCheckout = () => {
+    const dispatch = useDispatch();
     const { eventId } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
@@ -16,6 +45,9 @@ const EventCheckout = () => {
 
     const [event, setEvent] = useState(null);
     const [isSuccess, setIsSuccess] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [ticketId, setTicketId] = useState(null);
+    const [ticketQrToken, setTicketQrToken] = useState(null);
 
     useEffect(() => {
         const stateEvent = location?.state?.event;
@@ -44,34 +76,197 @@ const EventCheckout = () => {
         }
     }, [eventId, navigate, selectedCategory]);
 
-    const handleConfirmPayment = () => {
-        toast.promise(
-            new Promise((resolve) => setTimeout(resolve, 2000)),
-            {
-                loading: 'Processing payment...',
-                success: 'Payment successful! Generating your tickets...',
-                error: 'Payment failed. Please try again.',
-            }
-        ).then(() => {
-            setIsSuccess(true);
-        });
-    };
-
-    if (!event && !isSuccess) return null;
-
-    // Helper to parse price reliably
     const getNumericPrice = (p) => {
-        if (!p || typeof p !== 'string') return 0;
+        if (p === null || p === undefined) return 0;
+        if (typeof p === 'number') return Number.isFinite(p) ? p : 0;
+        if (typeof p !== 'string') return 0;
         const numeric = p.replace(/[^0-9.]/g, '');
         return numeric ? parseFloat(numeric) : 0;
     };
 
-    const ticketPrice = getNumericPrice(event?.price);
-    const subtotal = ticketPrice * quantity;
-    const totalFees = subtotal === 0 ? 0 : 622.50; // Service + Processing fees waived for free events
+    const buildRequestedTiers = () => {
+        const selected = location?.state?.ticketSelection;
+        const selectedEntries = Object.entries(selected || {}).filter(([, qty]) => Number(qty || 0) > 0);
+
+        if (selectedEntries.length > 0) {
+            const categoryPriceMap = new Map(
+                (Array.isArray(event?.categories) ? event.categories : []).map((cat) => [String(cat?.name || '').trim(), getNumericPrice(cat?.price)])
+            );
+
+            return selectedEntries.map(([name, qty]) => ({
+                name,
+                quantity: Number(qty || 0),
+                price: categoryPriceMap.get(String(name).trim()) || 0,
+            }));
+        }
+
+        return [
+            {
+                name: selectedCategory,
+                quantity,
+                price: getNumericPrice(event?.price),
+            },
+        ];
+    };
+
+    const selectedTierSummary = buildRequestedTiers().filter((tier) => Number(tier?.quantity || 0) > 0);
+    const selectedTicketCount = selectedTierSummary.reduce((sum, tier) => sum + Number(tier?.quantity || 0), 0);
+    const subtotal = selectedTierSummary.reduce(
+        (sum, tier) => sum + (Number(tier?.price || 0) * Number(tier?.quantity || 0)),
+        0
+    );
+    const serviceFee = subtotal === 0 ? 0 : subtotal * 0.2;
+    const processingFee = subtotal === 0 ? 0 : subtotal * 0.2;
+    const totalFees = serviceFee + processingFee;
+    const totalPayable = subtotal + totalFees;
+    const isFreeCheckout = totalPayable <= 0;
+    const ticketsDisplayText = selectedTierSummary
+        .map((tier) => `${tier.quantity} x ${tier.name}`)
+        .join(', ');
+
+    const handleConfirmPayment = async () => {
+        if (!event || isProcessing) return;
+
+        const requestedTiers = buildRequestedTiers().filter((tier) => Number(tier?.quantity || 0) > 0);
+        if (!requestedTiers.length) {
+            toast.error('Please select at least one ticket before checkout.');
+            return;
+        }
+
+        setIsProcessing(true);
+
+        try {
+            const prepareResponse = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/tickets/purchase/prepare`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        eventId,
+                        tiers: requestedTiers.map((tier) => ({
+                            name: tier.name,
+                            quantity: Number(tier.quantity || 0),
+                        })),
+                    }),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const prepareData = await safeJson(prepareResponse);
+            if (!prepareResponse.ok || !prepareData?.success) {
+                throw new Error(prepareData?.message || 'Failed to initialize ticket purchase');
+            }
+
+            const preparedTicket = prepareData.data;
+            if (Number(preparedTicket?.amountInPaise || 0) <= 0) {
+                const confirmResponse = await fetchWithAuth(
+                    `${API_BASE_URL}/api/events/tickets/purchase/confirm-free`,
+                    {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            eventId,
+                            ticketId: preparedTicket?.ticketId,
+                        }),
+                    },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+
+                const confirmData = await safeJson(confirmResponse);
+                if (!confirmResponse.ok || !confirmData?.success) {
+                    throw new Error(confirmData?.message || 'Failed to confirm free ticket');
+                }
+
+                const confirmedTicket = confirmData?.data || null;
+                const resolvedTicketId = confirmedTicket?.ticketId || preparedTicket?.ticketId || null;
+                setTicketId(resolvedTicketId);
+                setTicketQrToken(confirmedTicket?.qrToken || preparedTicket?.qrToken || null);
+                setIsSuccess(true);
+                toast.success('Free ticket confirmed successfully!');
+                return;
+            }
+
+            const orderResult = await dispatch(createOrder({
+                eventId,
+                orderType: 'TICKET SALE',
+                amount: Number(preparedTicket?.amountInInr || 0),
+                notes: {
+                    ticketId: preparedTicket?.ticketId,
+                    ticketQuantity: preparedTicket?.quantity,
+                    ticketTiers: JSON.stringify(preparedTicket?.tiers || []),
+                    eventTitle: preparedTicket?.eventTitle,
+                    eventLocation: preparedTicket?.eventLocation,
+                    ticketLink: preparedTicket?.checkoutLink,
+                },
+            }));
+
+            if (createOrder.rejected.match(orderResult)) {
+                throw new Error(orderResult.payload || 'Failed to create payment order');
+            }
+
+            const { razorpayOrderId: rzpOrderId, amount, currency, keyId: rzpKeyId } = orderResult.payload || {};
+
+            const sdkLoaded = await loadRazorpayScript();
+            if (!sdkLoaded) {
+                throw new Error('Failed to load payment gateway. Check your internet connection and try again.');
+            }
+
+            await new Promise((resolve) => {
+                const options = {
+                    key: rzpKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
+                    amount,
+                    currency: currency || 'INR',
+                    name: 'Okkazo',
+                    description: `Ticket Purchase - ${event?.title || 'Event'}`,
+                    order_id: rzpOrderId,
+                    modal: {
+                        ondismiss: () => {
+                            toast.error('Payment was cancelled. You can try again.');
+                            resolve();
+                        },
+                    },
+                    handler: async (response) => {
+                        const verifyResult = await dispatch(
+                            verifyPayment({
+                                razorpayOrderId: response.razorpay_order_id,
+                                razorpayPaymentId: response.razorpay_payment_id,
+                                razorpaySignature: response.razorpay_signature,
+                                eventId,
+                            })
+                        );
+
+                        if (verifyPayment.rejected.match(verifyResult)) {
+                            toast.error(verifyResult.payload || 'Payment verification failed. Contact support.');
+                            resolve();
+                            return;
+                        }
+
+                        const resolvedTicketId = verifyResult?.payload?.ticketId || preparedTicket?.ticketId || null;
+                        setTicketId(resolvedTicketId);
+                        setTicketQrToken(preparedTicket?.qrToken || null);
+                        setIsSuccess(true);
+                        toast.success('Payment successful! Your ticket is confirmed.');
+                        resolve();
+                    },
+                };
+
+                try {
+                    const rzp = new window.Razorpay(options);
+                    rzp.open();
+                } catch (error) {
+                    toast.error(error?.message || 'Failed to open payment gateway. Please try again.');
+                    resolve();
+                }
+            });
+        } catch (error) {
+            toast.error(error?.message || 'Payment failed. Please try again.');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    if (!event && !isSuccess) return null;
 
     // Generate QR Content
-    const qrContent = `Booking for ${event?.title}. Tickets: ${quantity}. Ref: ${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const qrContent = ticketQrToken || `ticketId:${ticketId || 'PENDING'}|eventId:${eventId}|event:${event?.title || ''}`;
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrContent)}`;
 
     return (
@@ -120,21 +315,29 @@ const EventCheckout = () => {
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div className="bg-[#F8FAFC] p-5 rounded-3xl border border-[#E2E8F0]">
                                                     <p className="text-[10px] font-black text-[#64748B] uppercase tracking-widest mb-1">Tickets</p>
-                                                    <p className="text-2xl font-black text-[#09637E]">{quantity} <span className="text-sm text-[#94A3B8] font-medium">x {selectedCategory}</span></p>
+                                                    <p className="text-2xl font-black text-[#09637E]">{selectedTicketCount || quantity}</p>
+                                                    <p className="text-xs text-[#94A3B8] font-medium mt-1">{ticketsDisplayText || `${quantity} x ${selectedCategory}`}</p>
                                                 </div>
                                                 <div className="bg-[#F8FAFC] p-5 rounded-3xl border border-[#E2E8F0]">
                                                     <p className="text-[10px] font-black text-[#64748B] uppercase tracking-widest mb-1">Total Paid</p>
-                                                    <p className="text-2xl font-black text-[#088395]">₹{(subtotal + totalFees).toLocaleString()}</p>
+                                                    <p className="text-2xl font-black text-[#088395]">₹{totalPayable.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                                                 </div>
                                             </div>
+
+                                            {ticketId ? (
+                                                <div className="mt-4 bg-[#F8FAFC] p-4 rounded-2xl border border-[#E2E8F0]">
+                                                    <p className="text-[10px] font-black text-[#64748B] uppercase tracking-widest mb-1">Ticket ID</p>
+                                                    <p className="text-sm font-bold text-[#09637E] break-all">{ticketId}</p>
+                                                </div>
+                                            ) : null}
                                         </div>
 
                                         <button
-                                            onClick={() => navigate("/user/dashboard")}
+                                            onClick={() => navigate(ticketId ? `/user/ticket/${encodeURIComponent(ticketId)}` : "/user/dashboard")}
                                             className="w-full group relative overflow-hidden bg-[#09637E] text-white px-8 py-5 rounded-2xl font-bold uppercase tracking-widest text-xs transition-all shadow-xl shadow-[#09637E]/20 hover:-translate-y-1 active:scale-95"
                                         >
                                             <span className="relative z-10 flex items-center justify-center gap-3">
-                                                Back to Dashboard <BsArrowLeft className="rotate-180 transition-transform group-hover:translate-x-1" size={16} />
+                                                {ticketId ? 'View Ticket QR' : 'Back to Dashboard'} <BsArrowLeft className="rotate-180 transition-transform group-hover:translate-x-1" size={16} />
                                             </span>
                                             <div className="absolute inset-0 bg-[#088395] transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-500"></div>
                                         </button>
@@ -202,14 +405,23 @@ const EventCheckout = () => {
                                     Since PaymentMethod has its own container styling, we just place it here.
                                     To make it look 'premium', we rely on the clean white look it already has, ensuring it sits well against the background. */}
                                 <div className="h-full transform transition-all hover:scale-[1.005] duration-500">
-                                    <PaymentMethod onConfirm={handleConfirmPayment} />
+                                    <PaymentMethod
+                                        onConfirm={handleConfirmPayment}
+                                        isProcessing={isProcessing}
+                                        isFreeCheckout={isFreeCheckout}
+                                    />
                                 </div>
                             </div>
 
                             {/* Right: Summary Card (5 Cols) */}
                             <div className="lg:col-span-4 lg:sticky lg:top-32 animate-in fade-in slide-in-from-right-8 duration-700 delay-200">
                                 <div className="transform transition-all hover:translate-y-[-5px] duration-500">
-                                    <CheckoutOrderSummary event={event} quantity={quantity} category={selectedCategory} />
+                                    <CheckoutOrderSummary
+                                        event={event}
+                                        quantity={quantity}
+                                        category={selectedCategory}
+                                        ticketSelection={location?.state?.ticketSelection || {}}
+                                    />
                                 </div>
 
                                 {/* Trust Badges / Extra Info */}

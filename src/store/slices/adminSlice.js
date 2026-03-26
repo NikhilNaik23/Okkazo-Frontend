@@ -1,8 +1,8 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { fetchWithAuth } from '../../utils/apiHandler';
+import { fetchWithAuth, fetchWithNgrok } from '../../utils/apiHandler';
 import { refreshAccessToken } from './authSlice';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
 const isPendingInvite = (member) => typeof member?.authId === 'string' && member.authId.startsWith('pending:');
 
@@ -37,7 +37,7 @@ export const fetchTeamAccess = createAsyncThunk(
             params.append('page', page);
             params.append('limit', limit);
 
-            const response = await fetch(`${API_BASE_URL}/api/users/team-access?${params.toString()}`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/users/team-access?${params.toString()}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -108,7 +108,7 @@ export const blockTeamMember = createAsyncThunk(
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/users/team-access/${authId}/block`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/users/team-access/${authId}/block`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -134,7 +134,7 @@ export const unblockTeamMember = createAsyncThunk(
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/users/team-access/${authId}/unblock`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/users/team-access/${authId}/unblock`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -161,7 +161,7 @@ export const createManager = createAsyncThunk(
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/admin/managers`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/admin/managers`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -174,8 +174,12 @@ export const createManager = createAsyncThunk(
             if (!response.ok) return rejectWithValue(data.message || 'Failed to create manager');
 
             // Backend returns 202 and processes creation asynchronously (Kafka).
-            // We still trigger a refresh, but the UI will also optimistically show the invite.
-            dispatch(fetchTeamAccess({ page: 1, limit: 50 }));
+            // Trigger immediate + delayed refreshes so Team Access updates as soon as
+            // backend persistence completes.
+            const refreshArgs = { page: 1, limit: 50 };
+            dispatch(fetchTeamAccess(refreshArgs));
+            setTimeout(() => dispatch(fetchTeamAccess(refreshArgs)), 1500);
+            setTimeout(() => dispatch(fetchTeamAccess(refreshArgs)), 4000);
 
             return data.data;
         } catch (error) {
@@ -202,7 +206,7 @@ export const fetchVendorApplications = createAsyncThunk(
 
             const url = `${API_BASE_URL}/api/vendor/applications${params.toString() ? `?${params.toString()}` : ''}`;
 
-            const response = await fetch(url, {
+            const response = await fetchWithNgrok(url, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -234,7 +238,7 @@ export const fetchVendorApplicationById = createAsyncThunk(
                 return rejectWithValue('No access token found');
             }
 
-            const response = await fetch(`${API_BASE_URL}/api/vendor/registration/status/${applicationId}`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/vendor/registration/status/${applicationId}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -263,7 +267,7 @@ export const approveVendorApplication = createAsyncThunk(
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/approve`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/vendor/applications/${applicationId}/approve`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -290,7 +294,7 @@ export const rejectVendorApplication = createAsyncThunk(
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/reject`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/vendor/applications/${applicationId}/reject`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -318,7 +322,7 @@ export const requestVendorDocuments = createAsyncThunk(
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/request-documents`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/vendor/applications/${applicationId}/request-documents`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -346,7 +350,7 @@ export const verifyDocument = createAsyncThunk(
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/documents/verify`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/vendor/applications/${applicationId}/documents/verify`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -374,7 +378,7 @@ export const rejectDocument = createAsyncThunk(
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/vendor/applications/${applicationId}/documents/reject`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/vendor/applications/${applicationId}/documents/reject`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -408,7 +412,7 @@ export const fetchVendorServicesByAuthId = createAsyncThunk(
             if (skip != null) params.append('skip', String(skip));
 
             const url = `${API_BASE_URL}/api/vendor/services/vendor/${encodeURIComponent(String(vendorAuthId))}${params.toString() ? `?${params.toString()}` : ''}`;
-            const response = await fetch(url, {
+            const response = await fetchWithNgrok(url, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -444,8 +448,8 @@ export const fetchAdminEventDashboard = createAsyncThunk(
             };
 
             const [promoteRes, planningRes] = await Promise.all([
-                fetch(`${API_BASE_URL}/api/events/promote/admin/dashboard?${params.toString()}`, { method: 'GET', headers }),
-                fetch(`${API_BASE_URL}/api/events/planning/admin/dashboard?${params.toString()}`, { method: 'GET', headers }),
+                fetchWithNgrok(`${API_BASE_URL}/api/events/promote/admin/dashboard?${params.toString()}`, { method: 'GET', headers }),
+                fetchWithNgrok(`${API_BASE_URL}/api/events/planning/admin/dashboard?${params.toString()}`, { method: 'GET', headers }),
             ]);
 
             const [promoteJson, planningJson] = await Promise.all([
@@ -483,7 +487,7 @@ export const fetchManagerAutoAssignConfig = createAsyncThunk(
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/events/config/manager-autoassign`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/events/config/manager-autoassign`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -507,7 +511,7 @@ export const setManagerAutoAssignEnabled = createAsyncThunk(
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/events/config/manager-autoassign`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/events/config/manager-autoassign`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -537,7 +541,7 @@ export const fetchAdminEventRequestById = createAsyncThunk(
                 'Authorization': `Bearer ${accessToken}`,
             };
 
-            const promoteRes = await fetch(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}`, {
+            const promoteRes = await fetchWithNgrok(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}`, {
                 method: 'GET',
                 headers,
             });
@@ -549,7 +553,7 @@ export const fetchAdminEventRequestById = createAsyncThunk(
                 return rejectWithValue(promoteJson.message || 'Failed to fetch event request');
             }
 
-            const planningRes = await fetch(`${API_BASE_URL}/api/events/planning/${encodeURIComponent(eventId)}`, {
+            const planningRes = await fetchWithNgrok(`${API_BASE_URL}/api/events/planning/${encodeURIComponent(eventId)}`, {
                 method: 'GET',
                 headers,
             });
@@ -571,7 +575,7 @@ export const fetchPromoteEventRequestById = createAsyncThunk(
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -596,7 +600,7 @@ export const decidePromoteEventRequest = createAsyncThunk(
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}/decision`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}/decision`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -624,7 +628,7 @@ export const assignPromoteEventManager = createAsyncThunk(
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}/assign`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}/assign`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -653,7 +657,7 @@ export const assignPlanningEventManager = createAsyncThunk(
             const accessToken = localStorage.getItem('accessToken');
             if (!accessToken) return rejectWithValue('No access token found');
 
-            const response = await fetch(`${API_BASE_URL}/api/events/planning/${encodeURIComponent(eventId)}/status`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/events/planning/${encodeURIComponent(eventId)}/status`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
@@ -683,7 +687,7 @@ export const unassignPromoteEventManager = createAsyncThunk(
             if (!accessToken) return rejectWithValue('No access token found');
             if (!eventId) return rejectWithValue('Event ID is required');
 
-            const response = await fetch(
+            const response = await fetchWithNgrok(
                 `${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}/unassign-manager`,
                 {
                     method: 'PATCH',
@@ -715,7 +719,7 @@ export const unassignPlanningEventManager = createAsyncThunk(
             if (!accessToken) return rejectWithValue('No access token found');
             if (!eventId) return rejectWithValue('Event ID is required');
 
-            const response = await fetch(
+            const response = await fetchWithNgrok(
                 `${API_BASE_URL}/api/events/planning/${encodeURIComponent(eventId)}/unassign-manager`,
                 {
                     method: 'PATCH',
@@ -750,7 +754,7 @@ export const fetchUnavailableEventManagers = createAsyncThunk(
                 ? `?eventId=${encodeURIComponent(String(eventId).trim())}`
                 : '';
 
-            const response = await fetch(`${API_BASE_URL}/api/events/promote/admin/unavailable-managers${query}`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/events/promote/admin/unavailable-managers${query}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -776,7 +780,7 @@ export const fetchEventVendorSelection = createAsyncThunk(
             if (!accessToken) return rejectWithValue('No access token found');
             if (!eventId) return rejectWithValue('Event ID is required');
 
-            const response = await fetch(
+            const response = await fetchWithNgrok(
                 `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(eventId)}?includeVendors=true`,
                 {
                     method: 'GET',
@@ -823,7 +827,7 @@ export const fetchEventVendorAlternatives = createAsyncThunk(
             const responses = await Promise.all(
                 uniqueServices.map(async (service) => {
                     const url = `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(eventId)}/alternatives?service=${encodeURIComponent(service)}&limit=8`;
-                    const response = await fetch(url, { method: 'GET', headers });
+                    const response = await fetchWithNgrok(url, { method: 'GET', headers });
                     const data = await response.json().catch(() => ({}));
                     if (!response.ok) {
                         return {
@@ -857,7 +861,7 @@ export const fetchEventTransactionsForAdmin = createAsyncThunk(
             if (!accessToken) return rejectWithValue('No access token found');
             if (!eventId) return rejectWithValue('Event ID is required');
 
-            const response = await fetch(`${API_BASE_URL}/api/orders/admin/${encodeURIComponent(eventId)}`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/orders/admin/${encodeURIComponent(eventId)}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',

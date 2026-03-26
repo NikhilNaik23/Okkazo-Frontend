@@ -20,15 +20,17 @@ import { refreshAccessToken, selectUser } from "../../../store/slices/authSlice"
 import { fetchWithAuth } from "../../../utils/apiHandler";
 import {
     ensureEventConversation,
+    ensureEventDmConversation,
     fetchConversationMessages,
     sendConversationMessage,
     markConversationRead,
+    updateConversationMessage,
 } from "../../../utils/chatApi";
 import { CHAT_API_BASE_URL, CHAT_SOCKET_URL } from "../../../utils/chatConfig";
 import { extractRichChatMessage, stripRichChatMessage } from "../../../utils/richChat";
 import { computeMoneyRangeFromBase } from "../../../utils/pricing";
 
-const EVENTS_API_BASE_URL = 'http://localhost:8080';
+const EVENTS_API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
 const formatMoneyShort = (value) => {
     const n = Number(value || 0);
@@ -107,6 +109,8 @@ const UserEventManagement = () => {
     const [chatMessage, setChatMessage] = useState("");
     const [messages, setMessages] = useState([]);
     const [conversationId, setConversationId] = useState(null);
+    const [editingMessageId, setEditingMessageId] = useState(null);
+    const [editInput, setEditInput] = useState('');
     const [managerSyncUnreadCount, setManagerSyncUnreadCount] = useState(0);
     const [managerOnline, setManagerOnline] = useState(false);
     const socketRef = useRef(null);
@@ -639,7 +643,7 @@ const UserEventManagement = () => {
         const name = profile?.name || profile?.fullName || 'Event Manager';
         const role = profile?.assignedRole || profile?.department || profile?.role || 'Manager';
         const email = profile?.email || null;
-        const authId = profile?.authId || null;
+        const authId = profile?.authId || event?.assignedManagerId || null;
         const phone = profile?.phone || null;
 
         return {
@@ -650,10 +654,30 @@ const UserEventManagement = () => {
             phone,
             badge: toManagerBadge(name),
         };
-    }, [event?.managerProfile]);
+    }, [event?.managerProfile, event?.assignedManagerId]);
 
     const managerAuthId = String(managerDetails?.authId || '').trim();
     const hasManagerAssigned = Boolean(event?.assignedManagerId);
+
+    const ensureActiveUserChatConversation = async (resolvedEventId) => {
+        const safeEventId = String(resolvedEventId || '').trim();
+
+        if (managerAuthId) {
+            return ensureEventDmConversation({
+                eventId: safeEventId,
+                otherAuthId: managerAuthId,
+                dispatch,
+                refreshAction: refreshAccessToken,
+            });
+        }
+
+        // Fallback for legacy data where manager authId is temporarily unavailable.
+        return ensureEventConversation({
+            eventId: safeEventId,
+            dispatch,
+            refreshAction: refreshAccessToken,
+        });
+    };
 
     // Roadmap Status Logic
     const normalizedStatus = String(event?.status || '').toUpperCase().replace(/_/g, ' ').trim();
@@ -762,7 +786,7 @@ const UserEventManagement = () => {
         let cancelled = false;
         const load = async () => {
             try {
-                const convo = await ensureEventConversation({ eventId, dispatch, refreshAction: refreshAccessToken });
+                const convo = await ensureActiveUserChatConversation(eventId);
                 const convoId = String(convo?._id || convo?.id || '').trim();
                 if (!convoId) throw new Error('Invalid conversation');
                 if (cancelled) return;
@@ -782,7 +806,7 @@ const UserEventManagement = () => {
         return () => {
             cancelled = true;
         };
-    }, [activeTab, eventId, dispatch]);
+    }, [activeTab, eventId, dispatch, managerAuthId]);
 
     useEffect(() => {
         if (activeTab !== 'chat') return;
@@ -860,6 +884,12 @@ const UserEventManagement = () => {
             }));
         });
 
+        socket.on('message:updated', (updated) => {
+            const updatedId = String(updated?._id || updated?.id || '').trim();
+            if (!updatedId) return;
+            setMessages((prev) => prev.map((m) => (String(m?._id || m?.id || '') === updatedId ? { ...m, ...updated } : m)));
+        });
+
         return () => {
             socket.disconnect();
             socketRef.current = null;
@@ -908,11 +938,7 @@ const UserEventManagement = () => {
 
         const loadUnread = async () => {
             try {
-                const convo = await ensureEventConversation({
-                    eventId: resolvedEventId,
-                    dispatch,
-                    refreshAction: refreshAccessToken,
-                });
+                const convo = await ensureActiveUserChatConversation(resolvedEventId);
 
                 const convoId = String(convo?._id || convo?.id || '').trim();
                 if (!convoId) {
@@ -977,6 +1003,35 @@ const UserEventManagement = () => {
 
     const handleAttachClick = () => {
         fileInputRef.current?.click();
+    };
+
+    const handleStartEdit = (message) => {
+        const id = String(message?._id || message?.id || '').trim();
+        if (!id) return;
+        setEditingMessageId(id);
+        setEditInput(String(message?.text || ''));
+    };
+
+    const handleSubmitEdit = async (message) => {
+        const id = String(message?._id || message?.id || '').trim();
+        const text = String(editInput || '').trim();
+        if (!id || !text || !conversationId) return;
+
+        try {
+            const updated = await updateConversationMessage({
+                conversationId,
+                messageId: id,
+                text,
+                dispatch,
+                refreshAction: refreshAccessToken,
+            });
+
+            setMessages((prev) => prev.map((m) => (String(m?._id || m?.id || '') === id ? { ...m, ...updated } : m)));
+            setEditingMessageId(null);
+            toast.success('Message edited');
+        } catch (error) {
+            toast.error(error?.message || 'Failed to edit message');
+        }
     };
 
     const handleFileChange = async (e) => {
@@ -1593,7 +1648,22 @@ const UserEventManagement = () => {
                                             return (
                                                 <div key={msgId} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                                                     <div className={`max-w-[60%] p-5 rounded-2xl text-sm leading-relaxed shadow-sm ${isMe ? 'bg-primary text-white rounded-br-none' : 'bg-white text-[#0b2d49] border border-gray-100 rounded-bl-none'}`}>
-                                                        {renderRichAlternatives(msg, isMe) || (msg?.text ? <p>{msg.text}</p> : null)}
+                                                        {editingMessageId === msgId ? (
+                                                            <div className="space-y-3">
+                                                                <textarea
+                                                                    className={`w-full rounded-xl p-3 text-sm outline-none border ${isMe ? 'bg-white/10 text-white border-white/20' : 'bg-gray-50 text-[#0b2d49] border-gray-200'}`}
+                                                                    value={editInput}
+                                                                    onChange={(e) => setEditInput(e.target.value)}
+                                                                    autoFocus
+                                                                />
+                                                                <div className="flex justify-end gap-3 text-[10px] font-black uppercase tracking-widest">
+                                                                    <button type="button" onClick={() => setEditingMessageId(null)} className={isMe ? 'text-white/70' : 'text-[#0b2d49]/60'}>Cancel</button>
+                                                                    <button type="button" onClick={() => handleSubmitEdit(msg)} className={isMe ? 'text-white' : 'text-[#0b2d49]'}>Save</button>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            renderRichAlternatives(msg, isMe) || (msg?.text ? <p>{msg.text}</p> : null)
+                                                        )}
                                                         {attachments.length > 0 && (
                                                             <div className="mt-3 space-y-2">
                                                                 {attachments.map((a) => {
@@ -1628,7 +1698,21 @@ const UserEventManagement = () => {
                                                                 })}
                                                             </div>
                                                         )}
-                                                        <p className={`text-[9px] mt-2 font-bold uppercase tracking-widest text-right ${isMe ? 'text-white/60' : 'text-gray-300'}`}>{time}</p>
+                                                        <div className="mt-2 flex items-center justify-end gap-3">
+                                                            {(msg?.editedAt || msg?.isEdited) ? (
+                                                                <span className={`text-[9px] font-bold uppercase tracking-widest ${isMe ? 'text-white/60' : 'text-gray-300'}`}>edited</span>
+                                                            ) : null}
+                                                            <p className={`text-[9px] font-bold uppercase tracking-widest ${isMe ? 'text-white/60' : 'text-gray-300'}`}>{time}</p>
+                                                            {isMe && editingMessageId !== msgId ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleStartEdit(msg)}
+                                                                    className={`text-[9px] font-black uppercase tracking-widest ${isMe ? 'text-white/70 hover:text-white' : 'text-[#0b2d49]/60 hover:text-[#0b2d49]'}`}
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                            ) : null}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             );

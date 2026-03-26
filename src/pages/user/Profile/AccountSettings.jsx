@@ -1,10 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
-import { BsShieldLock, BsBell, BsLink45Deg, BsGoogle, BsFacebook, BsApple, BsEnvelope } from "react-icons/bs";
+import { BsShieldLock, BsBell, BsLink45Deg, BsGoogle, BsEnvelope } from "react-icons/bs";
+import { fetchCurrentUser, selectAuthProvider, selectIsAuthenticated, selectUser } from "../../../store/slices/authSlice";
 
 const AccountSettings = () => {
     const navigate = useNavigate();
+    const dispatch = useDispatch();
+    const authUser = useSelector(selectUser);
+    const authProvider = useSelector(selectAuthProvider);
+    const isAuthenticated = useSelector(selectIsAuthenticated);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
 
@@ -17,12 +23,18 @@ const AccountSettings = () => {
     });
 
     useEffect(() => {
-        // Simulate initial fetch
-        const timer = setTimeout(() => {
-            setIsLoading(false);
-        }, 800);
-        return () => clearTimeout(timer);
-    }, []);
+        if (isAuthenticated && !authUser) {
+            dispatch(fetchCurrentUser());
+        }
+    }, [dispatch, isAuthenticated, authUser]);
+
+    useEffect(() => {
+        setIsLoading(!authUser);
+    }, [authUser]);
+
+    const provider = String(authUser?.authProvider || authProvider || "").toUpperCase();
+    const hasGoogle = provider === "SIGN_IN_WITH_GOOGLE" || provider === "BOTH";
+    const hasEmailPassword = provider === "EMAIL" || provider === "BOTH" || provider === "";
 
     const toggleSetting = (key) => {
         setSettings(prev => ({ ...prev, [key]: !prev[key] }));
@@ -150,10 +162,14 @@ const AccountSettings = () => {
                                             </div>
                                             <div>
                                                 <p className="text-sm font-bold text-[#09637E]">Google</p>
-                                                <p className="text-xs text-[#09637E]/60">alex.morgan@gmail.com</p>
+                                                <p className="text-xs text-[#09637E]/60">
+                                                    {hasGoogle ? (authUser?.email || "Connected") : "Not linked"}
+                                                </p>
                                             </div>
                                         </div>
-                                        <button className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/40 hover:text-red-500 transition-colors">Disconnect</button>
+                                        <span className={`text-[10px] font-black uppercase tracking-widest ${hasGoogle ? "text-[#09637E]/70" : "text-[#09637E]/40"}`}>
+                                            {hasGoogle ? "Connected" : "Not Linked"}
+                                        </span>
                                     </div>
 
                                     <div className="bg-white/40 backdrop-blur-sm p-6 rounded-[20px] border border-white/60 flex items-center justify-between hover:bg-white/60 transition-colors group">
@@ -163,9 +179,14 @@ const AccountSettings = () => {
                                             </div>
                                             <div>
                                                 <p className="text-sm font-bold text-[#09637E]">Email & Password</p>
-                                                <p className="text-xs text-[#09637E]/60">Connected</p>
+                                                <p className="text-xs text-[#09637E]/60">
+                                                    {hasEmailPassword ? "Connected" : "Not linked"}
+                                                </p>
                                             </div>
                                         </div>
+                                        <span className={`text-[10px] font-black uppercase tracking-widest ${hasEmailPassword ? "text-[#09637E]/70" : "text-[#09637E]/40"}`}>
+                                            {hasEmailPassword ? "Connected" : "Not Linked"}
+                                        </span>
                                     </div>
 
                                     {/* Action Bar (Aligned to right column bottom for visual balance) */}

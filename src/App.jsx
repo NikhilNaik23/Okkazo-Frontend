@@ -145,7 +145,7 @@ const App = () => {
 
     const socket = createSocket(CHAT_SOCKET_URL, {
       auth: { token: accessToken },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
     });
 
     presenceSocketRef.current = socket;
@@ -313,9 +313,9 @@ const App = () => {
           <Route
             path="/admin/*"
             element={
-              // <ProtectedRoute allowedRoles={['ADMIN']}>
+              <ProtectedRoute allowedRoles={['ADMIN']}>
               <AdminLayout />
-              // </ProtectedRoute> 
+              </ProtectedRoute> 
             }
           />
 
@@ -323,10 +323,10 @@ const App = () => {
           <Route
             path="/manager"
             element={
-              // <ProtectedRoute allowedRoles={['MANAGER']}>
+              <ProtectedRoute allowedRoles={['MANAGER']}>
 
               <ManagerLayout />
-              // </ProtectedRoute>
+              </ProtectedRoute>
             }
           >
             <Route index element={<Navigate to="dashboard" replace />} />
@@ -348,9 +348,9 @@ const App = () => {
           <Route
             path="/user"
             element={
-              // <ProtectedRoute allowedRoles={['USER']}>
+              <ProtectedRoute allowedRoles={['USER']}>
               <UserLayout />
-              // </ProtectedRoute>
+              </ProtectedRoute>
             }
           >
             <Route index element={<Navigate to="dashboard" replace />} />
@@ -361,7 +361,14 @@ const App = () => {
             <Route path="event/:eventId" element={<EventDetails />} />
             <Route path="checkout/:eventId" element={<EventCheckout />} />
             <Route path="my-events" element={<MyEvents />} />
-            <Route path="ticket/:id" element={<TicketDetails />} />
+            <Route
+              path="ticket/:id"
+              element={
+                <ProtectedRoute allowedRoles={['USER']}>
+                  <TicketDetails />
+                </ProtectedRoute>
+              }
+            />
             <Route path="event-management/:eventId" element={<UserEventManagement />} />
             <Route path="profile" element={<UserProfile />} />
             <Route path="notifications" element={<Notifications />} />
@@ -390,9 +397,9 @@ const App = () => {
           <Route
             path="/vendor"
             element={
-              // <ProtectedRoute allowedRoles={['VENDOR']}>
+              <ProtectedRoute allowedRoles={['VENDOR']}>
               <VendorLayout />
-              //  </ProtectedRoute> 
+               </ProtectedRoute> 
             }
           >
             <Route index element={<Navigate to="dashboard" replace />} />

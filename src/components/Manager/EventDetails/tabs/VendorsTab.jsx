@@ -16,7 +16,7 @@ import { ensureEventConversation, sendConversationMessage } from '../../../../ut
 import { encodeRichChatMessage } from '../../../../utils/richChat';
 import { computeMoneyRangeFromBase } from '../../../../utils/pricing';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 const DEFAULT_VENDOR_RADIUS_KM = 120;
 
 const safeJson = async (response) => {

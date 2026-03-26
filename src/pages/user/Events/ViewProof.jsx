@@ -11,10 +11,11 @@ import {
     fetchConversationMessages,
     sendConversationMessage,
     markConversationRead,
+    updateConversationMessage,
 } from '../../../utils/chatApi';
 import { CHAT_SOCKET_URL } from '../../../utils/chatConfig';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
 const toManagerBadge = (name) => {
     const text = String(name || '').trim();
@@ -40,6 +41,8 @@ const EventCommandCenter = () => {
     const [activeTab, setActiveTab] = useState("command_center"); // command_center | manager_sync
     const [chatMessage, setChatMessage] = useState("");
     const [messages, setMessages] = useState([]);
+    const [editingMessageId, setEditingMessageId] = useState(null);
+    const [editInput, setEditInput] = useState('');
     const [conversationId, setConversationId] = useState(null);
     const [managerSyncUnreadCount, setManagerSyncUnreadCount] = useState(0);
     const socketRef = useRef(null);
@@ -388,6 +391,12 @@ const EventCommandCenter = () => {
             }
         });
 
+        socket.on('message:updated', (updated) => {
+            const updatedId = String(updated?._id || updated?.id || '').trim();
+            if (!updatedId) return;
+            setMessages((prev) => prev.map((m) => (String(m?._id || m?.id || '') === updatedId ? { ...m, ...updated } : m)));
+        });
+
         socket.on('presence:update', ({ authId, online } = {}) => {
             const managerAuthId = String(manager?.authId || '').trim();
             if (!managerAuthId) return;
@@ -523,6 +532,35 @@ const EventCommandCenter = () => {
             .catch((err) => {
                 toast.error(err?.message || 'Failed to send message');
             });
+    };
+
+    const handleStartEdit = (message) => {
+        const id = String(message?._id || message?.id || '').trim();
+        if (!id) return;
+        setEditingMessageId(id);
+        setEditInput(String(message?.text || ''));
+    };
+
+    const handleSubmitEdit = async (message) => {
+        const id = String(message?._id || message?.id || '').trim();
+        const text = String(editInput || '').trim();
+        if (!id || !text || !conversationId) return;
+
+        try {
+            const updated = await updateConversationMessage({
+                conversationId,
+                messageId: id,
+                text,
+                dispatch,
+                refreshAction: refreshAccessToken,
+            });
+
+            setMessages((prev) => prev.map((m) => (String(m?._id || m?.id || '') === id ? { ...m, ...updated } : m)));
+            setEditingMessageId(null);
+            toast.success('Message edited');
+        } catch (error) {
+            toast.error(error?.message || 'Failed to edit message');
+        }
     };
 
     if (!campaign) {
@@ -797,8 +835,37 @@ const EventCommandCenter = () => {
                                             ? 'bg-[#09637E] text-white rounded-tr-none'
                                             : 'bg-white text-[#09637E] border border-[#09637E]/5 rounded-tl-none'
                                             }`}>
-                                            <p>{msg?.text || ''}</p>
+                                            {editingMessageId === msgId ? (
+                                                <div className="space-y-3">
+                                                    <textarea
+                                                        className={`w-full rounded-xl p-3 text-sm outline-none border ${isMe ? 'bg-white/10 text-white border-white/20' : 'bg-gray-50 text-[#0b2d49] border-gray-200'}`}
+                                                        value={editInput}
+                                                        onChange={(e) => setEditInput(e.target.value)}
+                                                        autoFocus
+                                                    />
+                                                    <div className="flex justify-end gap-3 text-[10px] font-black uppercase tracking-widest">
+                                                        <button type="button" onClick={() => setEditingMessageId(null)} className={isMe ? 'text-white/70' : 'text-[#0b2d49]/60'}>Cancel</button>
+                                                        <button type="button" onClick={() => handleSubmitEdit(msg)} className={isMe ? 'text-white' : 'text-[#0b2d49]'}>Save</button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p>{msg?.text || ''}</p>
+                                            )}
                                             <p className={`text-[9px] mt-2 text-right ${isMe ? 'text-white/60' : 'text-[#09637E]/40'}`}>{time}</p>
+                                            <div className="flex items-center justify-end gap-3 mt-1">
+                                                {(msg?.editedAt || msg?.isEdited) ? (
+                                                    <span className={`text-[9px] font-bold uppercase tracking-widest ${isMe ? 'text-white/60' : 'text-[#09637E]/40'}`}>edited</span>
+                                                ) : null}
+                                                {isMe && editingMessageId !== msgId ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleStartEdit(msg)}
+                                                        className={`text-[9px] font-black uppercase tracking-widest ${isMe ? 'text-white/70 hover:text-white' : 'text-[#0b2d49]/60 hover:text-[#0b2d49]'}`}
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                ) : null}
+                                            </div>
                                         </div>
                                     </div>
                                 )})}

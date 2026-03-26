@@ -13,7 +13,7 @@ import { useDispatch } from 'react-redux';
 import { fetchWithAuth } from '../../utils/apiHandler';
 import { refreshAccessToken } from '../../store/slices/authSlice';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
 const safeJson = async (response) => {
     try {

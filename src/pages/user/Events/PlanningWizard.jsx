@@ -121,10 +121,28 @@ const PlanningWizard = () => {
 
             // Ensure we have an id early so step components relying on it don't crash.
             setFormData((prev) => ({
-                ...prev,
-                id: prev?.id || eventId,
-                vendors: prev?.vendors || {},
-                services: Array.isArray(prev?.services) ? prev.services : [],
+                ...(String(prev?.id || '').trim() === String(eventId).trim() ? prev : {
+                    title: "",
+                    type: "Birthday",
+                    listingType: "Private",
+                    location: "",
+                    lat: null,
+                    lng: null,
+                    locationValid: false,
+                    date: "",
+                    startTime: "",
+                    endTime: "",
+                    guests: "",
+                    services: [],
+                    vendors: {},
+                    platformFeePaid: false,
+                    tickets: [{ id: DEFAULT_TICKET_TIER_ID, name: "General Admission", price: null, quantity: "" }],
+                    totalCapacity: "",
+                    ticketType: "paid",
+                    eventDescription: "",
+                    promotions: {},
+                }),
+                id: eventId,
             }));
 
             const handleStepLogic = (data) => {

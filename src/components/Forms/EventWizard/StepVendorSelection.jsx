@@ -24,7 +24,7 @@ import { toast } from 'react-hot-toast';
 // Extracted Components
 import { VendorDetailsModal, VendorCard, SelectionSidebar } from './VendorSelection';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
 // Fetch vendors/services within a reasonable driving radius from the event location.
 // Backend only enables geo filtering when `radiusKm` is present in the query.
@@ -39,6 +39,21 @@ const safeJson = async (response) => {
 };
 
 const DEFAULT_MAX_PRICE_MULTIPLIER = 1.5;
+
+const SERVICE_ALIASES = {
+    catering: 'Catering & Drinks',
+    'catering and drinks': 'Catering & Drinks',
+    'catering & drink': 'Catering & Drinks',
+};
+
+const canonicalizeServiceLabel = (value) => {
+    const raw = value == null ? '' : String(value).trim();
+    if (!raw) return '';
+
+    const key = raw.toLowerCase();
+    const alias = SERVICE_ALIASES[key];
+    return alias || raw;
+};
 
 const normalizeSelectedVendorPricing = (vendor, priceMultiplier) => {
     const v = vendor && typeof vendor === 'object' ? vendor : {};
@@ -228,7 +243,8 @@ const mapBackendVendorToCard = (vendor, category, index = 0, eventLat, eventLng)
 
 const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTab, setActiveServiceTab, handleSelectVendor, handleChange, minDateString }) => {
     const dispatch = useDispatch();
-    const activeCategory = formData.services[activeServiceTab] || "Venue";
+    const activeCategoryRaw = formData.services[activeServiceTab] || "Venue";
+    const activeCategory = canonicalizeServiceLabel(activeCategoryRaw);
     const eventId = formData?.id;
     const eventLat = formData?.lat;
     const eventLng = formData?.lng;
@@ -261,17 +277,23 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
 
         const chosen = formData?.vendors || {};
         return services.every((service) => {
-            const v = chosen?.[service];
+            const v = chosen?.[service] || chosen?.[canonicalizeServiceLabel(service)];
             return Boolean(v && (v.vendorAuthId || v.authId || v.id));
         });
     }, [formData?.services, formData?.vendors]);
+
+    const selectedVendorForActiveCategory = formData?.vendors?.[activeCategoryRaw] || formData?.vendors?.[activeCategory];
+    const hasSelectedVendorForService = useCallback(
+        (serviceLabel) => Boolean(formData?.vendors?.[serviceLabel] || formData?.vendors?.[canonicalizeServiceLabel(serviceLabel)]),
+        [formData?.vendors]
+    );
 
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedVendorForDetails, setSelectedVendorForDetails] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
 
-    const [, setVendorsLoading] = useState(false);
-    const [, setVendorsError] = useState(null);
+    const [vendorsLoading, setVendorsLoading] = useState(false);
+    const [vendorsError, setVendorsError] = useState(null);
     const [vendorsByCategory, setVendorsByCategory] = useState({});
     const [vendorsRefreshKey, setVendorsRefreshKey] = useState(0);
 
@@ -291,7 +313,8 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     const prevPriceMultiplierRef = useRef(priceMultiplier);
 
     const persistVendorSelection = useCallback(async ({ category, vendor }) => {
-        if (!eventId || !category || !vendor) return true;
+        const normalizedCategory = canonicalizeServiceLabel(category);
+        if (!eventId || !normalizedCategory || !vendor) return true;
 
         const vendorAuthId = vendor.vendorAuthId || vendor.authId;
         if (!vendorAuthId) return true;
@@ -318,7 +341,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
             {
                 method: 'PATCH',
                 body: JSON.stringify({
-                    service: category,
+                    service: normalizedCategory,
                     vendorAuthId,
                     ...(selectedServiceId ? { serviceId: selectedServiceId } : {}),
                     servicePrice: {
@@ -402,14 +425,10 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         handleSelectVendor(category, adjustedVendor);
     };
 
-    // Auto-refresh vendor list (helps with concurrent selections)
+    // Refresh list only when tab becomes visible; avoid aggressive interval polling.
     useEffect(() => {
         if (!eventId || !activeCategory) return;
         if (isVendorStepComplete) return;
-
-        const interval = setInterval(() => {
-            setVendorsRefreshKey((k) => k + 1);
-        }, 10000);
 
         const onVisibility = () => {
             if (document.visibilityState === 'visible') {
@@ -419,7 +438,6 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         document.addEventListener('visibilitychange', onVisibility);
 
         return () => {
-            clearInterval(interval);
             document.removeEventListener('visibilitychange', onVisibility);
         };
     }, [activeCategory, eventId, isVendorStepComplete]);
@@ -515,6 +533,59 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                         setActiveServiceTab(0);
                     }
                 }
+
+                if (!cancelled) {
+                    const knownServices = Array.isArray(formData.services) ? formData.services : [];
+                    const nextVendors = {};
+
+                    const resolveServiceKey = (serviceValue) => {
+                        const normalized = canonicalizeServiceLabel(serviceValue);
+                        const exact = knownServices.find((s) => String(s || '').trim() === String(serviceValue || '').trim());
+                        if (exact) return exact;
+
+                        const canonicalMatch = knownServices.find(
+                            (s) => canonicalizeServiceLabel(s) === normalized
+                        );
+                        return canonicalMatch || normalized;
+                    };
+
+                    for (const item of (Array.isArray(selection?.vendors) ? selection.vendors : [])) {
+                        const vendorAuthId = item?.vendorAuthId ? String(item.vendorAuthId).trim() : '';
+                        if (!vendorAuthId) continue;
+
+                        const key = resolveServiceKey(item?.service);
+                        if (!key) continue;
+
+                        const normalizedService = canonicalizeServiceLabel(item?.service);
+                        const serviceId = item?.serviceId ? String(item.serviceId).trim() : null;
+                        const hydratedId = normalizedService === 'Venue' && serviceId ? serviceId : vendorAuthId;
+
+                        const current = (formData?.vendors || {})[key] || {};
+                        const lineMin = Number(item?.servicePrice?.min ?? 0);
+                        const lineMax = Number(item?.servicePrice?.max ?? 0);
+
+                        nextVendors[key] = {
+                            ...current,
+                            id: hydratedId,
+                            vendorAuthId,
+                            authId: vendorAuthId,
+                            serviceId,
+                            category: normalizedService,
+                            name: current?.name || current?.vendorBusinessName || 'Selected Vendor',
+                            vendorBusinessName: current?.vendorBusinessName || current?.name || null,
+                            pricingUnit: current?.pricingUnit || (normalizedService === 'Catering & Drinks' ? 'PER_PLATE' : 'EVENT'),
+                            unitPrice: Number.isFinite(lineMin) && lineMin > 0 ? lineMin : Number(current?.unitPrice || 0),
+                            priceMin: Number.isFinite(lineMin) && lineMin > 0 ? lineMin : Number(current?.priceMin || 0),
+                            priceMax: Number.isFinite(lineMax) && lineMax > 0 ? lineMax : Number(current?.priceMax || 0),
+                        };
+                    }
+
+                    const normalizedCurrent = JSON.stringify(formData?.vendors || {});
+                    const normalizedNext = JSON.stringify(nextVendors);
+                    if (normalizedCurrent !== normalizedNext) {
+                        handleChange('vendors', nextVendors);
+                    }
+                }
             } catch (e) {
                 console.error('Failed to ensure vendor selection:', e);
             }
@@ -534,7 +605,8 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         }
 
         searchDebounceRef.current = setTimeout(async () => {
-            setVendorsLoading(true);
+            const hasCachedForCategory = Array.isArray(vendorsByCategory[activeCategory]) && vendorsByCategory[activeCategory].length > 0;
+            setVendorsLoading(!hasCachedForCategory);
             setVendorsError(null);
 
             try {
@@ -597,11 +669,9 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     const filteredVendors = useMemo(() => {
         const fetched = vendorsByCategory[activeCategory];
 
-        // If we already fetched for this category (even if empty), don't fall back to global dummy data.
-        const hasFetchedCategory = Object.prototype.hasOwnProperty.call(vendorsByCategory, activeCategory);
-        let allVendors = Array.isArray(fetched)
-            ? fetched
-            : (!hasFetchedCategory ? (dummyVendors[activeCategory] || []) : []);
+        // Never fall back to static dummy vendors on the live selection step.
+        // The list should reflect only currently available backend vendors.
+        let allVendors = Array.isArray(fetched) ? fetched : [];
 
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
@@ -662,10 +732,10 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         return allVendors;
     }, [activeCategory, attendeeInfo.attendeeCount, searchQuery, sortOption, priceRange, vendorsByCategory]);
 
-    const totalPages = Math.ceil(filteredVendors.length / ITEMS_PER_PAGE);
+    const totalPages = Math.max(1, Math.ceil(filteredVendors.length / ITEMS_PER_PAGE));
     const paginatedVendors = filteredVendors.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-    const allServicesSelected = formData.services?.every(service => formData.vendors[service]);
+    const allServicesSelected = formData.services?.every((service) => hasSelectedVendorForService(service));
     const attendeeCountForPricing = Math.max(1, attendeeInfo.attendeeCount || 0);
 
     const getVendorLineMin = (v) => {
@@ -699,8 +769,8 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                     <VendorDetailsModal
                         vendor={selectedVendorForDetails}
                         onClose={() => setSelectedVendorForDetails(null)}
-                        onSelect={(v) => handleSelectVendorWrapper(activeCategory, v || selectedVendorForDetails)}
-                        isSelected={formData.vendors[activeCategory]?.id === selectedVendorForDetails.id}
+                        onSelect={(v) => handleSelectVendorWrapper(activeCategoryRaw, v || selectedVendorForDetails)}
+                        isSelected={selectedVendorForActiveCategory?.id === selectedVendorForDetails.id}
                         priceMultiplier={priceMultiplier}
                         attendeeCount={attendeeInfo.attendeeCount}
                         attendeeLabel={attendeeInfo.attendeeLabel}
@@ -744,7 +814,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                             <div className="flex items-center gap-3 mb-6 pb-2">
                                 <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide flex-1">
                                     {formData.services.map((service, idx) => {
-                                        const isSelected = !!formData.vendors[service];
+                                        const isSelected = hasSelectedVendorForService(service);
                                         const isActive = activeServiceTab === idx;
 
                                         return (
@@ -933,18 +1003,33 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                         </div>
 
                         {/* Vendors Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-                            {paginatedVendors.map(vendor => (
-                                <VendorCard
-                                    key={vendor.id}
-                                    vendor={vendor}
-                                    isSelected={formData.vendors[activeCategory]?.id === vendor.id}
-                                    onSelect={() => handleSelectVendorWrapper(activeCategory, vendor)}
-                                    onViewDetails={() => setSelectedVendorForDetails(vendor)}
-                                    priceMultiplier={priceMultiplier}
-                                />
-                            ))}
-                        </div>
+                        {vendorsLoading ? (
+                            <div className="rounded-3xl border border-primary/10 bg-white p-8 text-center text-primary/60 font-semibold">
+                                Loading available vendors...
+                            </div>
+                        ) : vendorsError ? (
+                            <div className="rounded-3xl border border-red-200 bg-red-50 p-8 text-center">
+                                <p className="text-red-700 font-bold">Failed to load vendors</p>
+                                <p className="text-red-600 text-sm mt-2">{vendorsError}</p>
+                            </div>
+                        ) : paginatedVendors.length === 0 ? (
+                            <div className="rounded-3xl border border-primary/10 bg-white p-8 text-center text-primary/70">
+                                No available {activeCategory.toLowerCase()} vendors for this date.
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+                                {paginatedVendors.map(vendor => (
+                                    <VendorCard
+                                        key={vendor.id}
+                                        vendor={vendor}
+                                        isSelected={selectedVendorForActiveCategory?.id === vendor.id}
+                                        onSelect={() => handleSelectVendorWrapper(activeCategoryRaw, vendor)}
+                                        onViewDetails={() => setSelectedVendorForDetails(vendor)}
+                                        priceMultiplier={priceMultiplier}
+                                    />
+                                ))}
+                            </div>
+                        )}
 
                         {/* Pagination Footer */}
                         <div className="mt-20 flex items-center justify-between border-t border-primary/5 pt-8">

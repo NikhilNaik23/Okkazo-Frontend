@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { FcGoogle } from "react-icons/fc";
 import { BsEye, BsEyeSlash } from "react-icons/bs";
 import { ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "react-hot-toast";
+import { useGoogleLogin } from "@react-oauth/google";
 import {
   loginUser,
+  loginWithGoogle,
   clearError,
   selectIsLoading,
   selectError,
@@ -17,8 +19,37 @@ import {
   selectVendorApplicationLoading
 } from "../../../store/slices/authSlice";
 
+const GoogleSignInButton = ({ dispatch, isLoading }) => {
+  const googleSignIn = useGoogleLogin({
+    scope: "openid email profile",
+    onSuccess: async (tokenResponse) => {
+      if (!tokenResponse?.access_token) {
+        toast.error("Google sign-in failed. Please try again.");
+        return;
+      }
+      await dispatch(loginWithGoogle({ accessToken: tokenResponse.access_token }));
+    },
+    onError: () => {
+      toast.error("Google sign-in cancelled or failed.");
+    },
+  });
+
+  return (
+    <button
+      type="button"
+      onClick={() => googleSignIn()}
+      disabled={isLoading}
+      className="w-full bg-white border border-gray-100 hover:border-[#7AB2B2]/30 hover:bg-[#7AB2B2]/5 text-[#09637E] font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-3 transition-all duration-300 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+    >
+      <FcGoogle className="text-2xl" />
+      Sign in with Google
+    </button>
+  );
+};
+
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useDispatch();
 
   const isLoading = useSelector(selectIsLoading);
@@ -28,15 +59,28 @@ const Login = () => {
   const vendorApplication = useSelector(selectVendorApplication);
   const vendorApplicationLoading = useSelector(selectVendorApplicationLoading);
 
+  const requestedPath = location.state?.from?.pathname
+    ? `${location.state.from.pathname}${location.state?.from?.search || ''}`
+    : null;
+
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
 
+  const googleClientId =
+    import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+    import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
+
   // Redirect after successful login based on role
   useEffect(() => {
     if (isAuthenticated && userRole && !vendorApplicationLoading) {
+      if (requestedPath) {
+        navigate(requestedPath, { replace: true });
+        return;
+      }
+
       if (userRole === 'VENDOR') {
         // For vendors, check their application status
         if (vendorApplication) {
@@ -56,7 +100,7 @@ const Login = () => {
         navigate("/user/dashboard");
       }
     }
-  }, [isAuthenticated, userRole, vendorApplication, vendorApplicationLoading, navigate]);
+  }, [isAuthenticated, userRole, vendorApplication, vendorApplicationLoading, navigate, requestedPath]);
 
   // Show error toast when Redux error changes
   useEffect(() => {
@@ -234,10 +278,19 @@ const Login = () => {
               <span className="relative bg-[#EBF4F6] px-5 text-[10px] font-black text-[#708aa0] uppercase tracking-[0.2em]">or continue with</span>
             </div>
 
-            <button type="button" className="w-full bg-white border border-gray-100 hover:border-[#7AB2B2]/30 hover:bg-[#7AB2B2]/5 text-[#09637E] font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-3 transition-all duration-300 shadow-sm">
-              <FcGoogle className="text-2xl" />
-              Sign in with Google
-            </button>
+            {googleClientId ? (
+              <GoogleSignInButton dispatch={dispatch} isLoading={isLoading} />
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="w-full bg-white border border-gray-100 text-gray-400 font-bold py-4 rounded-[1.25rem] flex items-center justify-center gap-3 transition-all duration-300 shadow-sm cursor-not-allowed"
+                title="Google sign-in is not configured in this environment"
+              >
+                <FcGoogle className="text-2xl" />
+                Sign in with Google (Not configured)
+              </button>
+            )}
 
             <div className="mt-10 text-center space-y-2">
               <p className="text-sm font-medium text-[#708aa0]">

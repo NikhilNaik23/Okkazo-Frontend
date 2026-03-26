@@ -1,10 +1,45 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { BsArrowLeft, BsCalendarEvent, BsGeoAlt, BsQrCode, BsDownload, BsShare, BsClock } from 'react-icons/bs';
-import { myTickets } from '../../../data/myEventsData'; // Assuming tickets are here or we fetch them
+import { useDispatch } from 'react-redux';
+import { BsArrowLeft, BsCalendarEvent, BsGeoAlt, BsDownload, BsShare, BsClock } from 'react-icons/bs';
 import { motion } from 'framer-motion';
+import { fetchWithAuth } from '../../../utils/apiHandler';
+import { refreshAccessToken } from '../../../store/slices/authSlice';
+
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
+const safeJson = async (response) => {
+    try {
+        return await response.json();
+    } catch {
+        return null;
+    }
+};
+
+const formatDate = (iso) => {
+    if (!iso) return 'Date TBA';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return 'Date TBA';
+    return date.toLocaleDateString(undefined, {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+    });
+};
+
+const formatTimeRange = (startAt, endAt) => {
+    const start = startAt ? new Date(startAt) : null;
+    const end = endAt ? new Date(endAt) : null;
+    if (!start || Number.isNaN(start.getTime())) return 'Time TBA';
+
+    const startText = start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    if (!end || Number.isNaN(end.getTime())) return startText;
+    const endText = end.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return `${startText} - ${endText}`;
+};
 
 const TicketDetails = () => {
+    const dispatch = useDispatch();
     const { id } = useParams();
     const [ticket, setTicket] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -19,30 +54,68 @@ const TicketDetails = () => {
     };
 
     useEffect(() => {
-        // Simulate API call or find from mock data
-        const foundTicket = myTickets.find(t => t.id === id);
+        let active = true;
 
-        // If not found in mock data, use a fallback mock for demonstration since myTickets might not have all IDs
-        const mockTicket = foundTicket || {
-            id: id,
-            title: "Groove Music Festival",
-            date: "Nov 18 2026",
-            time: "8:00 PM",
-            location: "Central Park Amphitheater",
-            image: "https://images.unsplash.com/photo-1459749411177-3c2ea04d1a52?q=80&w=2070&auto=format&fit=crop",
-            ticketType: "VIP Access",
-            price: "₹3,500",
-            orderId: "ORD-2026-88392",
-            attendeeName: "Ticket Holder Name",
-            lat: 40.7829, // Central Park coordinates
-            lng: -73.9654
+        const loadTicket = async () => {
+            setLoading(true);
+
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/tickets/my/${encodeURIComponent(id)}`,
+                { method: 'GET' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(response);
+            if (!active) return;
+
+            if (!response.ok || !data?.success || !data?.data) {
+                setTicket(null);
+                setLoading(false);
+                return;
+            }
+
+            const raw = data.data;
+            const tierLabel = Array.isArray(raw?.tickets?.tiers) && raw.tickets.tiers.length > 0
+                ? raw.tickets.tiers.map((tier) => `${tier.name} x${tier.noOfTickets}`).join(', ')
+                : 'General Admission';
+
+            const qrPayload = raw?.qrToken || raw?.qrPayload || JSON.stringify({
+                ticketId: raw?.ticketId,
+                eventId: raw?.eventId,
+                eventTitle: raw?.eventTitle,
+            });
+
+            const normalizedTicket = {
+                id: raw?.ticketId,
+                title: raw?.eventTitle || 'Event Ticket',
+                date: formatDate(raw?.schedule?.startAt),
+                time: formatTimeRange(raw?.schedule?.startAt, raw?.schedule?.endAt),
+                location: raw?.venue?.locationName || 'Venue TBA',
+                image: raw?.eventBanner?.url || 'https://images.unsplash.com/photo-1459749411177-3c2ea04d1a52?q=80&w=2070&auto=format&fit=crop',
+                ticketType: tierLabel,
+                price: `₹${Number(raw?.tickets?.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                orderId: raw?.ticketId,
+                attendeeName: 'Ticket Holder',
+                lat: Number(raw?.venue?.latitude),
+                lng: Number(raw?.venue?.longitude),
+                qrPayload,
+                quantity: Number(raw?.tickets?.noOfTickets || 0),
+            };
+
+            setTicket(normalizedTicket);
+            setLoading(false);
         };
 
-        setTimeout(() => {
-            setTicket(mockTicket);
-            setLoading(false);
-        }, 500);
-    }, [id]);
+        loadTicket();
+
+        return () => {
+            active = false;
+        };
+    }, [dispatch, id]);
+
+    const qrUrl = ticket?.qrPayload
+        ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(ticket.qrPayload)}`
+        : null;
 
     if (loading) {
         return (
@@ -110,11 +183,14 @@ const TicketDetails = () => {
                             {/* Ticket Body: QR and Details */}
                             <div className="bg-white p-8 pt-4 pb-12 flex flex-col items-center text-center relative">
                                 <div className="mb-8 p-4 bg-white rounded-3xl shadow-[0_10px_40px_-10px_rgba(9,99,126,0.15)] border border-[#09637E]/5">
-                                    <BsQrCode size={180} className="text-[#09637E]" />
+                                    {qrUrl ? (
+                                        <img src={qrUrl} alt="Ticket QR" className="w-[180px] h-[180px]" />
+                                    ) : null}
                                 </div>
                                 <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/40 mb-2">Scan at Entry</p>
                                 <p className="text-sm font-bold text-[#09637E]">{ticket.attendeeName}</p>
                                 <p className="text-xs text-[#09637E]/60 mt-1">Order ID: {ticket.orderId}</p>
+                                <p className="text-xs text-[#09637E]/60 mt-1">Tickets: {ticket.quantity}</p>
                             </div>
                         </div>
 

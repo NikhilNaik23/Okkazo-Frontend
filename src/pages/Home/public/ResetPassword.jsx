@@ -6,6 +6,12 @@ import { toast } from "react-hot-toast";
 import { BsEye, BsEyeSlash, BsCheckCircle } from "react-icons/bs";
 import { MdLock } from "react-icons/md";
 import { resetPassword, selectIsLoading } from "../../../store/slices/authSlice";
+import {
+  getPasswordValidationState,
+  isStrongPassword,
+  PASSWORD_PATTERN,
+  PASSWORD_REQUIREMENTS_MESSAGE,
+} from "../../../utils/passwordValidation";
 
 const ResetPassword = () => {
   const navigate = useNavigate();
@@ -22,6 +28,7 @@ const ResetPassword = () => {
   });
 
   const token = searchParams.get("token");
+  const passwordChecks = getPasswordValidationState(formData.newPassword);
 
   useEffect(() => {
     if (!token) {
@@ -41,8 +48,8 @@ const ResetPassword = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (formData.newPassword.length < 8) {
-      toast.error("Password must be at least 8 characters");
+    if (!isStrongPassword(formData.newPassword)) {
+      toast.error(PASSWORD_REQUIREMENTS_MESSAGE);
       return;
     }
 
@@ -119,7 +126,7 @@ const ResetPassword = () => {
                 Create New Password
               </h2>
               <p className="text-gray-500 mb-8">
-                Your new password must be at least 8 characters long.
+                {PASSWORD_REQUIREMENTS_MESSAGE}
               </p>
 
               <form onSubmit={handleSubmit} className="space-y-5">
@@ -136,6 +143,9 @@ const ResetPassword = () => {
                       value={formData.newPassword}
                       onChange={handleInputChange}
                       placeholder="Enter new password"
+                      pattern={PASSWORD_PATTERN}
+                      title={PASSWORD_REQUIREMENTS_MESSAGE}
+                      minLength={8}
                       className="w-full pl-12 pr-12 py-3 rounded-xl border border-gray-200 focus:border-[#0b2d49] focus:ring-2 focus:ring-[#0b2d49]/20 outline-none transition-all duration-200"
                       required
                     />
@@ -162,6 +172,9 @@ const ResetPassword = () => {
                       value={formData.confirmPassword}
                       onChange={handleInputChange}
                       placeholder="Confirm new password"
+                      pattern={PASSWORD_PATTERN}
+                      title={PASSWORD_REQUIREMENTS_MESSAGE}
+                      minLength={8}
                       className="w-full pl-12 pr-12 py-3 rounded-xl border border-gray-200 focus:border-[#0b2d49] focus:ring-2 focus:ring-[#0b2d49]/20 outline-none transition-all duration-200"
                       required
                     />
@@ -179,9 +192,25 @@ const ResetPassword = () => {
                 <div className="text-sm text-gray-500">
                   <p className="mb-2">Password must:</p>
                   <ul className="space-y-1">
-                    <li className={`flex items-center gap-2 ${formData.newPassword.length >= 8 ? 'text-green-600' : ''}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${formData.newPassword.length >= 8 ? 'bg-green-600' : 'bg-gray-300'}`}></span>
+                    <li className={`flex items-center gap-2 ${passwordChecks.minLength ? 'text-green-600' : ''}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${passwordChecks.minLength ? 'bg-green-600' : 'bg-gray-300'}`}></span>
                       Be at least 8 characters long
+                    </li>
+                    <li className={`flex items-center gap-2 ${passwordChecks.hasUppercase ? 'text-green-600' : ''}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${passwordChecks.hasUppercase ? 'bg-green-600' : 'bg-gray-300'}`}></span>
+                      Include at least 1 uppercase letter
+                    </li>
+                    <li className={`flex items-center gap-2 ${passwordChecks.hasLetter ? 'text-green-600' : ''}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${passwordChecks.hasLetter ? 'bg-green-600' : 'bg-gray-300'}`}></span>
+                      Include letters
+                    </li>
+                    <li className={`flex items-center gap-2 ${passwordChecks.hasNumber ? 'text-green-600' : ''}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${passwordChecks.hasNumber ? 'bg-green-600' : 'bg-gray-300'}`}></span>
+                      Include numbers
+                    </li>
+                    <li className={`flex items-center gap-2 ${passwordChecks.hasSpecial ? 'text-green-600' : ''}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${passwordChecks.hasSpecial ? 'bg-green-600' : 'bg-gray-300'}`}></span>
+                      Include special characters
                     </li>
                     <li className={`flex items-center gap-2 ${formData.newPassword === formData.confirmPassword && formData.confirmPassword ? 'text-green-600' : ''}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${formData.newPassword === formData.confirmPassword && formData.confirmPassword ? 'bg-green-600' : 'bg-gray-300'}`}></span>

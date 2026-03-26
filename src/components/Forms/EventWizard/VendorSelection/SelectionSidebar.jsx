@@ -13,6 +13,13 @@ const SelectionSidebar = ({
     onBack,
     onNext
 }) => {
+    const formatPriceCompact = (value) => {
+        const n = Number(value);
+        if (!Number.isFinite(n) || n <= 0) return '0';
+        if (n >= 1000) return `${Math.round(n / 1000)}k`;
+        return String(Math.round(n));
+    };
+
     return (
         <div className="hidden lg:flex flex-col w-[25vw] min-w-[320px] max-w-[400px] h-[calc(100vh-6rem)] sticky top-24 right-0 p-8 pl-0 pointer-events-none z-50">
             <div className="pointer-events-auto flex flex-col h-full bg-white/60 backdrop-blur-2xl rounded-[3rem] border border-white/50 shadow-[0_20px_80px_-20px_rgba(9,99,126,0.15)] overflow-hidden relative">
@@ -40,6 +47,13 @@ const SelectionSidebar = ({
                         </div>
                     ) : (
                         Object.entries(vendors).map(([category, vendor]) => (
+                            (() => {
+                                const minPrice = Number(vendor?.priceMin ?? vendor?.unitPrice ?? 0);
+                                const maxFallback = Number.isFinite(minPrice) && minPrice > 0 ? Math.round(minPrice * 1.5) : 0;
+                                const maxPrice = Number(vendor?.priceMax ?? maxFallback);
+                                const displayName = vendor?.name || vendor?.vendorBusinessName || 'Selected Vendor';
+
+                                return (
                             <motion.div
                                 key={category}
                                 initial={{ opacity: 0, x: 20 }}
@@ -54,8 +68,8 @@ const SelectionSidebar = ({
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <span className="text-[9px] font-bold uppercase tracking-widest text-primary/40 block mb-0.5">{category}</span>
-                                    <h4 className="text-sm font-serif-premium font-bold text-primary truncate">{vendor.name}</h4>
-                                    <span className="text-xs font-bold text-secondary">₹{(vendor.priceMin >= 1000 ? (vendor.priceMin / 1000).toFixed(0) + 'k' : vendor.priceMin)} - ₹{(vendor.priceMax ? (vendor.priceMax / 1000).toFixed(0) + 'k' : (vendor.priceMin * 1.5 / 1000).toFixed(0) + 'k')}</span>
+                                    <h4 className="text-sm font-serif-premium font-bold text-primary truncate">{displayName}</h4>
+                                    <span className="text-xs font-bold text-secondary">₹{formatPriceCompact(minPrice)} - ₹{formatPriceCompact(maxPrice)}</span>
                                 </div>
                                 <button
                                     onClick={() => onRemoveVendor(category)}
@@ -65,6 +79,8 @@ const SelectionSidebar = ({
                                     <BsX size={14} />
                                 </button>
                             </motion.div>
+                                );
+                            })()
                         ))
                     )}
                 </div>

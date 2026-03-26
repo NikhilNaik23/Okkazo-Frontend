@@ -107,3 +107,31 @@ export const markConversationRead = async ({ conversationId, dispatch, refreshAc
   if (!res.ok || !json?.success) throw new Error(json?.message || 'Failed to mark read');
   return true;
 };
+
+export const deleteConversationMessage = async ({ conversationId, messageId, dispatch, refreshAction }) => {
+  const res = await fetchWithAuth(
+    `${CHAT_API_BASE_URL}/api/chat/conversations/${encodeURIComponent(String(conversationId))}/messages/${encodeURIComponent(String(messageId))}`,
+    { method: 'DELETE' },
+    { dispatch, refreshAction }
+  );
+
+  const json = await safeJson(res);
+  if (!res.ok || !json?.success) throw new Error(json?.message || 'Failed to delete message');
+  return json.data || { messageId };
+};
+
+export const updateConversationMessage = async ({ conversationId, messageId, text, dispatch, refreshAction }) => {
+  const res = await fetchWithAuth(
+    `${CHAT_API_BASE_URL}/api/chat/conversations/${encodeURIComponent(String(conversationId))}/messages/${encodeURIComponent(String(messageId))}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    },
+    { dispatch, refreshAction }
+  );
+
+  const json = await safeJson(res);
+  if (!res.ok || !json?.success) throw new Error(json?.message || 'Failed to update message');
+  return json.data;
+};

@@ -9,6 +9,10 @@ import {
   BsCreditCard
 } from "react-icons/bs";
 import { toast } from "react-hot-toast";
+import {
+  isStrongPassword,
+  PASSWORD_REQUIREMENTS_MESSAGE,
+} from "../../utils/passwordValidation";
 
 const AccountSettings = () => {
   const [notifications, setNotifications] = useState({
@@ -22,7 +26,43 @@ const AccountSettings = () => {
     phone: "+1 (555) 123-4567"
   });
 
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmNewPassword: "",
+  });
+
+  const hasPasswordInput =
+    passwordForm.currentPassword ||
+    passwordForm.newPassword ||
+    passwordForm.confirmNewPassword;
+
+  const handlePasswordInputChange = (e) => {
+    const { name, value } = e.target;
+    setPasswordForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
   const handleSave = () => {
+    if (hasPasswordInput) {
+      if (!passwordForm.currentPassword) {
+        toast.error("Please enter your current password.");
+        return;
+      }
+
+      if (!isStrongPassword(passwordForm.newPassword)) {
+        toast.error(PASSWORD_REQUIREMENTS_MESSAGE);
+        return;
+      }
+
+      if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
+        toast.error("New password and confirm password do not match.");
+        return;
+      }
+    }
+
     toast.success("Account changes saved successfully!", {
       style: {
         borderRadius: '16px',
@@ -88,6 +128,9 @@ const AccountSettings = () => {
                 <div className="relative">
                   <input
                     type="password"
+                    name="currentPassword"
+                    value={passwordForm.currentPassword}
+                    onChange={handlePasswordInputChange}
                     placeholder="Current Password"
                     className="w-full bg-[#e9eff1]/50 rounded-2xl py-4 px-6 border-none focus:ring-2 focus:ring-[#d7a444]/20 focus:bg-white transition-all font-medium placeholder:text-[#708aa0]"
                   />
@@ -95,6 +138,9 @@ const AccountSettings = () => {
                 <div className="relative">
                   <input
                     type="password"
+                    name="newPassword"
+                    value={passwordForm.newPassword}
+                    onChange={handlePasswordInputChange}
                     placeholder="New Password"
                     className="w-full bg-[#e9eff1]/50 rounded-2xl py-4 px-6 border-none focus:ring-2 focus:ring-[#d7a444]/20 focus:bg-white transition-all font-medium placeholder:text-[#708aa0]"
                   />
@@ -102,11 +148,17 @@ const AccountSettings = () => {
                 <div className="relative">
                   <input
                     type="password"
+                    name="confirmNewPassword"
+                    value={passwordForm.confirmNewPassword}
+                    onChange={handlePasswordInputChange}
                     placeholder="Confirm New Password"
                     className="w-full bg-[#e9eff1]/50 rounded-2xl py-4 px-6 border-none focus:ring-2 focus:ring-[#d7a444]/20 focus:bg-white transition-all font-medium placeholder:text-[#708aa0]"
                   />
                 </div>
               </div>
+              <p className="text-xs text-[#708aa0] font-semibold">
+                {PASSWORD_REQUIREMENTS_MESSAGE}
+              </p>
             </div>
 
             <div className="flex justify-end pt-4">

@@ -1,15 +1,15 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { fetchWithAuth } from '../../utils/apiHandler';
+import { fetchWithAuth, fetchWithNgrok } from '../../utils/apiHandler';
 import { clearLocalStorage } from '../../utils/clearLocalStorage';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
 // Async thunk for fetching vendor service categories
 export const fetchServiceCategories = createAsyncThunk(
     'auth/fetchServiceCategories',
     async (_, { rejectWithValue }) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/auth/vendor/service-categories`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/auth/vendor/service-categories`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -40,7 +40,7 @@ export const refreshAccessToken = createAsyncThunk(
                 return rejectWithValue('No refresh token found');
             }
 
-            const response = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/auth/refresh-token`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -79,7 +79,7 @@ export const loginUser = createAsyncThunk(
     'auth/login',
     async (credentials, { rejectWithValue }) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/auth/login`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/auth/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -114,12 +114,48 @@ export const loginUser = createAsyncThunk(
     }
 );
 
+// Async thunk for Google login
+export const loginWithGoogle = createAsyncThunk(
+    'auth/loginWithGoogle',
+    async ({ accessToken }, { rejectWithValue }) => {
+        try {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/auth/google/login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ accessToken }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                return rejectWithValue(data.message || 'Google login failed');
+            }
+
+            if (data.accessToken) {
+                localStorage.setItem('accessToken', data.accessToken);
+            }
+            if (data.refreshToken) {
+                localStorage.setItem('refreshToken', data.refreshToken);
+            }
+            if (data.role) {
+                localStorage.setItem('userRole', data.role);
+            }
+
+            return data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
 // Async thunk for registration
 export const registerUser = createAsyncThunk(
     'auth/register',
     async (userData, { rejectWithValue }) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/auth/register`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/auth/register`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -152,7 +188,7 @@ export const registerVendor = createAsyncThunk(
             const url = `${API_BASE_URL}/auth/vendor/register`;
             console.log('Submitting vendor registration to:', url);
             
-            const response = await fetch(url, {
+            const response = await fetchWithNgrok(url, {
                 method: 'POST',
                 body: formData, // FormData object with files
             });
@@ -272,16 +308,28 @@ export const fetchVendorApplication = createAsyncThunk(
 // Async thunk for fetching current user profile
 export const fetchCurrentUser = createAsyncThunk(
     'auth/fetchCurrentUser',
-    async (_, { dispatch, rejectWithValue }) => {
+    async (_, { dispatch, getState, rejectWithValue }) => {
         try {
             const response = await fetchWithAuth(`${API_BASE_URL}/api/users/me`, {
                 method: 'GET',
             }, { dispatch, refreshAction: refreshAccessToken });
 
-            const data = await response.json();
+            // If backend returns Not Modified, keep existing in-memory profile.
+            if (response.status === 304) {
+                const cachedUser = getState()?.auth?.user;
+                if (cachedUser) {
+                    return { data: cachedUser };
+                }
+                return rejectWithValue('User profile is unchanged');
+            }
+
+            const contentType = response.headers.get('content-type') || '';
+            const data = contentType.includes('application/json')
+                ? await response.json()
+                : null;
 
             if (!response.ok) {
-                return rejectWithValue(data.message || 'Failed to fetch user');
+                return rejectWithValue(data?.message || 'Failed to fetch user');
             }
 
             return data;
@@ -331,7 +379,7 @@ export const forgotPassword = createAsyncThunk(
     'auth/forgotPassword',
     async ({ email }, { rejectWithValue }) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/auth/forgot-password`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -357,7 +405,7 @@ export const resetPassword = createAsyncThunk(
     'auth/resetPassword',
     async ({ token, newPassword }, { rejectWithValue }) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/auth/reset-password`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -383,7 +431,7 @@ export const verifyEmail = createAsyncThunk(
     'auth/verifyEmail',
     async ({ token }, { rejectWithValue }) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/auth/verify-email?token=${token}`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/auth/verify-email?token=${token}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -408,7 +456,7 @@ export const resendVerification = createAsyncThunk(
     'auth/resendVerification',
     async ({ email }, { rejectWithValue }) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/auth/resend-verification`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -433,6 +481,7 @@ export const resendVerification = createAsyncThunk(
 const initialState = {
     user: null,
     role: localStorage.getItem('userRole') || null,
+    authProvider: null,
     vendorApplication: null,
     vendorApplicationLoading: false,
     accessToken: localStorage.getItem('accessToken') || null,
@@ -459,6 +508,7 @@ const authSlice = createSlice({
             clearLocalStorage();
             state.user = null;
             state.role = null;
+            state.authProvider = null;
             state.vendorApplication = null;
             state.accessToken = null;
             state.refreshToken = null;
@@ -507,6 +557,7 @@ const authSlice = createSlice({
                 state.isAuthenticated = true;
                 state.accessToken = action.payload.accessToken;
                 state.refreshToken = action.payload.refreshToken;
+                state.authProvider = action.payload.authProvider || state.authProvider;
                 state.error = null;
             })
             .addCase(refreshAccessToken.rejected, (state, action) => {
@@ -528,9 +579,29 @@ const authSlice = createSlice({
                 state.accessToken = action.payload.accessToken;
                 state.refreshToken = action.payload.refreshToken;
                 state.role = action.payload.role;
+                state.authProvider = action.payload.authProvider || state.authProvider;
                 state.error = null;
             })
             .addCase(loginUser.rejected, (state, action) => {
+                state.isLoading = false;
+                state.error = action.payload;
+                state.isAuthenticated = false;
+            })
+            // Google Login
+            .addCase(loginWithGoogle.pending, (state) => {
+                state.isLoading = true;
+                state.error = null;
+            })
+            .addCase(loginWithGoogle.fulfilled, (state, action) => {
+                state.isLoading = false;
+                state.isAuthenticated = true;
+                state.accessToken = action.payload.accessToken;
+                state.refreshToken = action.payload.refreshToken;
+                state.role = action.payload.role;
+                state.authProvider = action.payload.authProvider || state.authProvider;
+                state.error = null;
+            })
+            .addCase(loginWithGoogle.rejected, (state, action) => {
                 state.isLoading = false;
                 state.error = action.payload;
                 state.isAuthenticated = false;
@@ -578,6 +649,8 @@ const authSlice = createSlice({
             .addCase(fetchCurrentUser.fulfilled, (state, action) => {
                 state.isLoading = false;
                 state.user = action.payload.data;
+                state.role = action.payload?.data?.role || state.role;
+                state.authProvider = action.payload?.data?.authProvider || state.authProvider;
                 state.isAuthenticated = true;
                 state.error = null;
             })
@@ -694,6 +767,7 @@ export const selectAuth = (state) => state.auth;
 export const selectUser = (state) => state.auth.user;
 export const selectIsAuthenticated = (state) => state.auth.isAuthenticated;
 export const selectUserRole = (state) => state.auth.role || state.auth.user?.role || null;
+export const selectAuthProvider = (state) => state.auth.authProvider || state.auth.user?.authProvider || null;
 export const selectVendorApplication = (state) => state.auth.vendorApplication;
 export const selectVendorApplicationLoading = (state) => state.auth.vendorApplicationLoading;
 export const selectIsLoading = (state) => state.auth.isLoading;

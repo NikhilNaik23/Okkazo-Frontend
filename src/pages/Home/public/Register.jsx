@@ -16,6 +16,11 @@ import {
 } from "../../../store/slices/authSlice";
 import { termsContent, privacyContent } from "../../../data/registerData";
 import { FormInput, SimpleModal, BrandingPanel } from "../../../components/Auth";
+import {
+    isStrongPassword,
+    PASSWORD_PATTERN,
+    PASSWORD_REQUIREMENTS_MESSAGE,
+} from "../../../utils/passwordValidation";
 
 const Register = () => {
     const navigate = useNavigate();
@@ -83,8 +88,8 @@ const Register = () => {
             return;
         }
 
-        if (formData.password.length < 8) {
-            toast.error("Password must be at least 8 characters long.");
+        if (!isStrongPassword(formData.password)) {
+            toast.error(PASSWORD_REQUIREMENTS_MESSAGE);
             return;
         }
 
@@ -172,6 +177,9 @@ const Register = () => {
                                     iconType="password"
                                     showPassword={showPassword}
                                     onTogglePassword={() => setShowPassword(!showPassword)}
+                                    pattern={PASSWORD_PATTERN}
+                                    title={PASSWORD_REQUIREMENTS_MESSAGE}
+                                    minLength={8}
                                 />
 
                                 <FormInput
@@ -186,7 +194,14 @@ const Register = () => {
                                     showPassword={showConfirmPassword}
                                     onTogglePassword={() => setShowConfirmPassword(!showConfirmPassword)}
                                     focusColor="#d7a444"
+                                    pattern={PASSWORD_PATTERN}
+                                    title={PASSWORD_REQUIREMENTS_MESSAGE}
+                                    minLength={8}
                                 />
+
+                                <p className="text-xs text-gray-500 -mt-1">
+                                    {PASSWORD_REQUIREMENTS_MESSAGE}
+                                </p>
 
                                 <div className="flex items-start gap-2 mt-2">
                                     <input

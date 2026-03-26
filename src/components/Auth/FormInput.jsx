@@ -13,7 +13,8 @@ const FormInput = ({
     iconType,
     showPassword,
     onTogglePassword,
-    focusColor = "#088395"
+    focusColor = "#088395",
+    ...inputProps
 }) => {
     const isPasswordField = type === "password" || (type === "text" && onTogglePassword);
     const actualType = isPasswordField && showPassword ? "text" : type;
@@ -34,6 +35,7 @@ const FormInput = ({
                     onChange={onChange}
                     placeholder={placeholder}
                     required={required}
+                    {...inputProps}
                     className={`w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white ${focusClass} outline-none transition-all pl-10`}
                 />
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
