@@ -9,10 +9,17 @@
 const isNgrokUrl = (url) => /https:\/\/[\w-]+\.ngrok(?:-free)?\.(?:app|dev)(?:\/|$)/i.test(String(url || ''));
 
 export const fetchWithNgrok = (url, options = {}) => {
-    const headers = {
-        ...(options.headers || {}),
-        ...(isNgrokUrl(url) ? { 'ngrok-skip-browser-warning': 'true' } : {}),
-    };
+    const headers = new Headers(options.headers || {});
+
+    if (isNgrokUrl(url)) {
+        headers.set('ngrok-skip-browser-warning', 'true');
+    }
+
+    // Let the browser set multipart boundary automatically.
+    if (options.body instanceof FormData) {
+        headers.delete('Content-Type');
+        headers.delete('content-type');
+    }
 
     return fetch(url, {
         ...options,
@@ -27,15 +34,22 @@ export const fetchWithAuth = async (url, options = {}, { dispatch, refreshAction
     // Helper to perform the actual fetch
     const doFetch = async (token) => {
         // Don't override existing Authorization if provided (though rare with this helper)
-        const headers = {
-            ...options.headers,
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-            ...(isNgrokUrl(url) ? { 'ngrok-skip-browser-warning': 'true' } : {}),
-        };
+        const headers = new Headers(options.headers || {});
+
+        if (token) {
+            headers.set('Authorization', `Bearer ${token}`);
+        }
+
+        if (isNgrokUrl(url)) {
+            headers.set('ngrok-skip-browser-warning', 'true');
+        }
 
         // If body is FormData, don't set Content-Type header to let browser set boundary
-        if (!(options.body instanceof FormData) && !headers['Content-Type']) {
-            headers['Content-Type'] = 'application/json';
+        if (options.body instanceof FormData) {
+            headers.delete('Content-Type');
+            headers.delete('content-type');
+        } else if (!headers.has('Content-Type') && !headers.has('content-type')) {
+            headers.set('Content-Type', 'application/json');
         }
 
         return fetchWithNgrok(url, { ...options, headers });

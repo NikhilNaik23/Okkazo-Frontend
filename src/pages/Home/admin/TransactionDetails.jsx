@@ -1,65 +1,143 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { 
   ArrowLeft, 
   Download, 
-  Calendar, 
   CreditCard, 
   Building2, 
-  Tag, 
-  Clock, 
-  CheckCircle2, 
   AlertCircle,
   FileText,
   User,
   ExternalLink,
   ShieldCheck,
-  TrendingDown,
   TrendingUp,
   History
 } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useDispatch } from "react-redux";
+import { fetchWithAuth } from "../../../utils/apiHandler";
+import { refreshAccessToken } from "../../../store/slices/authSlice";
+
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
+const formatRupeeFromPaise = (value) => {
+  const amount = (Number(value || 0) || 0) / 100;
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+};
+
+const formatDateTime = (value) => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) {
+    return '—';
+  }
+
+  return `${date.toISOString().slice(0, 10)} ${date.toISOString().slice(11, 19)}`;
+};
+
+const prettyStatus = (status) => {
+  const normalized = String(status || '').trim().toUpperCase();
+  if (!normalized) return 'UNKNOWN';
+  if (normalized === 'PAID') return 'COMPLETED';
+  return normalized;
+};
 
 const TransactionDetails = () => {
+  const dispatch = useDispatch();
   const { id } = useParams();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [downloadingReceipt, setDownloadingReceipt] = useState(false);
+  const [error, setError] = useState('');
+  const [payload, setPayload] = useState(null);
 
-  // Mock data for the transaction
-  const transaction = {
-    id: `#${id}`,
-    date: "2026-02-11 14:32:10",
-    amount: "₹450.00",
-    type: "Ticket Sale",
-    status: "COMPLETED",
-    method: "Razorpay (Credit Card)",
-    reference: "RZP_PAY_99120ASDF",
-    vendor: {
-      name: "North Arena",
-      email: "contact@northarena.com",
-      id: "VND-4421"
-    },
-    user: {
-      name: "Aditya",
-      email: "aditya@example.com",
-      phone: "+91 98765 43210"
-    },
-    event: {
-      name: "Gala Dinner 2024",
-      id: "EVT-7721",
-      date: "Mar 12, 2024"
-    },
-    history: [
-      { status: "PENDING", date: "2026-02-11 14:31:05", desc: "Transaction created from checkout page." },
-      { status: "PROCESSING", date: "2026-02-11 14:31:40", desc: "User entered OTP and submitted payment." },
-      { status: "VERIFIED", date: "2026-02-11 14:31:55", desc: "Payment verified by Razorpay gateway." },
-      { status: "COMPLETED", date: "2026-02-11 14:32:10", desc: "Transaction finalized and settlement initiated." }
-    ]
-  };
+  useEffect(() => {
+    const fetchDetails = async () => {
+      try {
+        setLoading(true);
+        setError('');
+
+        const response = await fetchWithAuth(
+          `${API_BASE_URL}/api/orders/admin/ledger/${encodeURIComponent(String(id || '').replace(/^#/, ''))}/details`,
+          { method: 'GET' },
+          { dispatch, refreshAction: refreshAccessToken }
+        );
+
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(body.message || 'Failed to load transaction details');
+        }
+
+        setPayload(body.data || null);
+      } catch (fetchError) {
+        setError(fetchError.message || 'Failed to load transaction details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchDetails();
+    }
+  }, [API_BASE_URL, dispatch, id]);
+
+  const transaction = payload?.transaction || null;
+  const eventTransactions = useMemo(
+    () => (Array.isArray(payload?.eventTransactions) ? payload.eventTransactions : []),
+    [payload?.eventTransactions]
+  );
 
   const getStatusStyle = (status) => {
-    switch (status) {
+    switch (prettyStatus(status)) {
       case "COMPLETED": return "bg-emerald-50 text-emerald-600 border border-emerald-100";
       case "PENDING": return "bg-amber-50 text-amber-600 border border-amber-100";
+      case "CREATED": return "bg-amber-50 text-amber-600 border border-amber-100";
       case "FAILED": return "bg-rose-50 text-rose-600 border border-rose-100";
+      case "REFUNDED": return "bg-slate-50 text-slate-600 border border-slate-100";
       default: return "bg-slate-50 text-slate-600 border border-slate-100";
+    }
+  };
+
+  const handleDownloadReceipt = async () => {
+    if (!transaction?.transactionId) {
+      return;
+    }
+
+    try {
+      setDownloadingReceipt(true);
+      setError('');
+
+      const response = await fetchWithAuth(
+        `${API_BASE_URL}/api/orders/admin/ledger/${encodeURIComponent(transaction.transactionId)}/receipt/pdf`,
+        { method: 'GET' },
+        { dispatch, refreshAction: refreshAccessToken }
+      );
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.message || 'Failed to download receipt');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      // Preview in browser and also trigger a file download.
+      window.open(url, '_blank', 'noopener,noreferrer');
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `receipt-${transaction.transactionId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (_error) {
+      setError('Failed to download receipt');
+    } finally {
+      setDownloadingReceipt(false);
     }
   };
 
@@ -73,18 +151,22 @@ const TransactionDetails = () => {
             Back to Ledger
           </Link>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-black text-[#1a1c1e] tracking-tight">Transaction {transaction.id}</h1>
-            <span className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${getStatusStyle(transaction.status)}`}>
-              {transaction.status}
+            <h1 className="text-2xl font-black text-[#1a1c1e] tracking-tight">Transaction #{transaction?.transactionId || String(id || '').replace(/^#/, '')}</h1>
+            <span className={`px-3 py-1 rounded-full text-[11px] font-black uppercase tracking-wider ${getStatusStyle(transaction?.status)}`}>
+              {prettyStatus(transaction?.status)}
             </span>
           </div>
-          <p className="text-sm text-[#64748b] font-medium">Recorded on {transaction.date}</p>
+          <p className="text-sm text-[#64748b] font-medium">Recorded on {formatDateTime(transaction?.createdAt)}</p>
         </div>
 
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-5 py-2.5 bg-white border border-[#f0f2f5] text-[#1a1c1e] rounded-xl text-sm font-bold hover:bg-[#f8fafc] transition-all shadow-sm">
+          <button
+            onClick={handleDownloadReceipt}
+            disabled={downloadingReceipt}
+            className="flex items-center gap-2 px-5 py-2.5 bg-white border border-[#f0f2f5] text-[#1a1c1e] rounded-xl text-sm font-bold hover:bg-[#f8fafc] transition-all shadow-sm disabled:opacity-60"
+          >
             <Download size={18} />
-            Receipt
+            {downloadingReceipt ? 'Preparing Receipt...' : 'Receipt'}
           </button>
           <button className="flex items-center gap-2 px-5 py-2.5 bg-[#0b2d49] text-white rounded-xl text-sm font-bold hover:bg-[#1a4b70] transition-all shadow-lg shadow-[#0b2d49]/10">
             <ShieldCheck size={18} />
@@ -94,6 +176,18 @@ const TransactionDetails = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+        {loading && (
+          <div className="px-4 py-3 rounded-lg bg-[#f8fafc] text-[#64748b] text-sm font-semibold border border-[#f0f2f5]">
+            Loading transaction details...
+          </div>
+        )}
+
+        {error && (
+          <div className="px-4 py-3 rounded-lg bg-red-50 text-[#ef4444] text-sm font-semibold border border-red-100">
+            {error}
+          </div>
+        )}
+
         {/* Main Info Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Amount Summary */}
@@ -102,8 +196,8 @@ const TransactionDetails = () => {
               <div className="w-12 h-12 rounded-2xl bg-[#0b2d49]/5 flex items-center justify-center text-[#0b2d49] mb-6">
                 <CreditCard size={24} />
               </div>
-              <p className="text-xs font-bold text-[#94a3b8] uppercase tracking-[0.1em] mb-1">Transaction Amount</p>
-              <h2 className="text-4xl font-black text-[#1a1c1e] tracking-tighter mb-4">{transaction.amount}</h2>
+              <p className="text-xs font-bold text-[#94a3b8] uppercase tracking-widest mb-1">Transaction Amount</p>
+              <h2 className="text-4xl font-black text-[#1a1c1e] tracking-tighter mb-4">{formatRupeeFromPaise(transaction?.grossAmount)}</h2>
               <div className="flex items-center gap-2 text-xs font-bold text-[#28a785] bg-emerald-50 w-fit px-2 py-1 rounded-lg border border-emerald-100">
                 <TrendingUp size={12} />
                 Settlement Ready
@@ -113,11 +207,11 @@ const TransactionDetails = () => {
             <div className="mt-8 pt-6 border-t border-[#f0f2f5] grid grid-cols-2 gap-4">
               <div>
                 <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider mb-1">Method</p>
-                <p className="text-sm font-black text-[#1a1c1e]">{transaction.method}</p>
+                <p className="text-sm font-black text-[#1a1c1e]">Razorpay ({transaction?.type || 'Payment'})</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider mb-1">Fee (2.5%)</p>
-                <p className="text-sm font-black text-[#64748b]">₹11.25</p>
+                <p className="text-sm font-black text-[#64748b]">{formatRupeeFromPaise(transaction?.platformFee)}</p>
               </div>
             </div>
 
@@ -141,13 +235,13 @@ const TransactionDetails = () => {
                 <div>
                   <p className="text-xs font-bold text-[#94a3b8] mb-0.5">Firm Name</p>
                   <p className="text-sm font-black text-[#1a1c1e] flex items-center gap-2">
-                    {transaction.vendor.name}
+                    {transaction?.vendor?.name || 'System Auto'}
                     <ExternalLink size={12} className="text-[#94a3b8]" />
                   </p>
                 </div>
                 <div>
                   <p className="text-xs font-bold text-[#94a3b8] mb-0.5">Vendor ID</p>
-                  <p className="text-sm font-medium text-[#1a1c1e]">{transaction.vendor.id}</p>
+                  <p className="text-sm font-medium text-[#1a1c1e]">{transaction?.vendor?.id || 'N/A'}</p>
                 </div>
               </div>
             </div>
@@ -165,11 +259,11 @@ const TransactionDetails = () => {
               <div className="space-y-4">
                 <div>
                   <p className="text-xs font-bold text-[#94a3b8] mb-0.5">Name</p>
-                  <p className="text-sm font-black text-[#1a1c1e]">{transaction.user.name}</p>
+                  <p className="text-sm font-black text-[#1a1c1e]">{transaction?.payer?.name || transaction?.payer?.authId || 'Unknown'}</p>
                 </div>
                 <div>
                   <p className="text-xs font-bold text-[#94a3b8] mb-0.5">Contact</p>
-                  <p className="text-sm font-medium text-[#1a1c1e]">{transaction.user.email}</p>
+                  <p className="text-sm font-medium text-[#1a1c1e]">{transaction?.payer?.email || transaction?.payer?.phone || 'N/A'}</p>
                 </div>
               </div>
             </div>
@@ -188,7 +282,7 @@ const TransactionDetails = () => {
                 <div className="p-5 rounded-2xl bg-[#f8fafc] border border-[#f0f2f5]">
                   <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider mb-2">System Reference</p>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-black text-[#1a1c1e]">{transaction.reference}</span>
+                    <span className="text-sm font-black text-[#1a1c1e]">{transaction?.references?.systemReference || 'N/A'}</span>
                     <button className="text-[10px] font-black text-[#0b2d49] hover:underline uppercase">Copy</button>
                   </div>
                 </div>
@@ -196,14 +290,40 @@ const TransactionDetails = () => {
                   <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider mb-2">Related Event</p>
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-sm font-black text-[#1a1c1e] block">{transaction.event.name}</span>
-                      <span className="text-[10px] font-medium text-[#64748b]">{transaction.event.id}</span>
+                      <span className="text-sm font-black text-[#1a1c1e] block">{transaction?.event?.title || 'Event'}</span>
+                      <span className="text-[10px] font-medium text-[#64748b]">{transaction?.event?.eventId || transaction?.eventId || 'N/A'}</span>
                     </div>
-                    <Link to={`/admin/events/${transaction.event.id}`} className="p-2 bg-white rounded-lg text-[#0b2d49] hover:bg-[#0b2d49] hover:text-white transition-all shadow-sm">
+                    <Link to={`/admin/events/${transaction?.event?.eventId || transaction?.eventId || ''}`} className="p-2 bg-white rounded-lg text-[#0b2d49] hover:bg-[#0b2d49] hover:text-white transition-all shadow-sm">
                       <ExternalLink size={14} />
                     </Link>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-7 rounded-3xl border border-[#f0f2f5] shadow-sm">
+              <h3 className="text-lg font-black text-[#1a1c1e] mb-6">Transactions for This Event</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-left text-[10px] font-bold text-[#94a3b8] uppercase tracking-widest border-b border-[#f1f5f9]">
+                      <th className="pb-3">Transaction</th>
+                      <th className="pb-3">Payer</th>
+                      <th className="pb-3">Status</th>
+                      <th className="pb-3 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#f1f5f9]">
+                    {eventTransactions.map((row) => (
+                      <tr key={row.transactionId} className="cursor-pointer hover:bg-[#f8fafc]" onClick={() => navigate(`/admin/ledger/${encodeURIComponent(row.transactionId)}`)}>
+                        <td className="py-3 text-sm font-semibold text-[#1a1c1e]">#{row.transactionId}</td>
+                        <td className="py-3 text-sm text-[#64748b]">{row?.payer?.name || row?.authId || 'Unknown'}</td>
+                        <td className="py-3 text-sm text-[#64748b]">{prettyStatus(row.status)}</td>
+                        <td className="py-3 text-right text-sm font-bold text-[#1a1c1e]">{formatRupeeFromPaise(Math.abs(row.amount || 0))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
 
@@ -215,17 +335,17 @@ const TransactionDetails = () => {
               </h3>
               <div className="space-y-8 relative">
                 {/* Vertical Line */}
-                <div className="absolute left-[7px] top-2 bottom-2 w-[2px] bg-[#28a785]"></div>
+                <div className="absolute left-1.75 top-2 bottom-2 w-0.5 bg-[#28a785]"></div>
                 
-                {transaction.history.map((item, idx) => (
+                {(Array.isArray(transaction?.history) ? transaction.history : []).map((item, idx) => (
                   <div key={idx} className="relative pl-8 group">
                     <div className="absolute left-0 top-1 w-4 h-4 rounded-full border-4 border-white shadow-sm z-10 transition-transform group-hover:scale-125 bg-[#28a785]"></div>
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
                       <div>
-                        <p className="text-sm font-black text-[#1a1c1e]">{item.status}</p>
+                        <p className="text-sm font-black text-[#1a1c1e]">{prettyStatus(item.status)}</p>
                         <p className="text-xs text-[#64748b] font-medium">{item.desc}</p>
                       </div>
-                      <span className="text-[10px] font-bold text-[#94a3b8] whitespace-nowrap">{item.date}</span>
+                      <span className="text-[10px] font-bold text-[#94a3b8] whitespace-nowrap">{formatDateTime(item.date)}</span>
                     </div>
                   </div>
                 ))}
@@ -240,19 +360,19 @@ const TransactionDetails = () => {
               <div className="space-y-4 relative z-10">
                 <div className="flex justify-between items-center text-sm border-b border-white/10 pb-3">
                   <span className="text-white/60">Subtotal</span>
-                  <span className="font-bold">₹450.00</span>
+                  <span className="font-bold">{formatRupeeFromPaise(transaction?.grossAmount)}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm border-b border-white/10 pb-3">
                   <span className="text-white/60">Platform Fee</span>
-                  <span className="font-bold">₹11.25</span>
+                  <span className="font-bold">{formatRupeeFromPaise(transaction?.platformFee)}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm border-b border-white/10 pb-3">
                   <span className="text-white/60">Tax (GST 18%)</span>
-                  <span className="font-bold">₹2.03</span>
+                  <span className="font-bold">{formatRupeeFromPaise(transaction?.tax)}</span>
                 </div>
                 <div className="flex justify-between items-end pt-2">
                   <span className="text-base font-medium text-[#d7a444]">Total Settlement</span>
-                  <span className="text-2xl font-black">₹436.72</span>
+                  <span className="text-2xl font-black">{formatRupeeFromPaise(transaction?.settlementAmount)}</span>
                 </div>
               </div>
               {/* Deco */}

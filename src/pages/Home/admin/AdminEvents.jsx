@@ -8,7 +8,6 @@ import {
   ChevronDown,
   Filter,
   Search,
-  Plus,
   CheckSquare,
   Square,
   FileText,
@@ -155,22 +154,6 @@ const mapRequestToUiEvent = (request) => {
     image: "https://images.unsplash.com/photo-1628194380993-97ae0c868427?q=80&w=1000&auto=format&fit=crop"
   }
 ];*/
-
-const ManualEntryCard = () => {
-    return (
-        <div className="h-full min-h-[460px] w-full max-w-[420px] rounded-3xl border-2 border-dashed border-[#d7a444]/40 bg-[#f3ddb1]/20 hover:bg-[#f3ddb1]/40 hover:border-[#d7a444] transition-all duration-300 flex flex-col items-center justify-center gap-4 cursor-pointer group">
-            <div className="w-16 h-16 rounded-full bg-[#f3ddb1] text-[#0b2d49] flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300">
-                <Plus size={32} />
-            </div>
-            <div className="text-center">
-                <h3 className="text-lg font-bold text-[#0b2d49]">Manual Entry</h3>
-                <p className="text-sm text-[#5a5b44] mt-1">Add internal verified event</p>
-            </div>
-        </div>
-    );
-};
-
-
 
 const AdminEvents = () => {
     const navigate = useNavigate();
@@ -321,7 +304,6 @@ const AdminEvents = () => {
                              </button>
                         </div>
                     )}
-                    <ManualEntryCard />
                 </div>
             </div>
 

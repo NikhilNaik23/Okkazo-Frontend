@@ -3,6 +3,7 @@ import { fetchWithAuth, fetchWithNgrok } from '../../utils/apiHandler';
 import { clearLocalStorage } from '../../utils/clearLocalStorage';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+const AUTH_PROVIDER_STORAGE_KEY = 'authProvider';
 
 // Async thunk for fetching vendor service categories
 export const fetchServiceCategories = createAsyncThunk(
@@ -54,6 +55,7 @@ export const refreshAccessToken = createAsyncThunk(
                 // Clear tokens if refresh fails
                 localStorage.removeItem('accessToken');
                 localStorage.removeItem('refreshToken');
+                localStorage.removeItem(AUTH_PROVIDER_STORAGE_KEY);
                 return rejectWithValue(data.message || 'Token refresh failed');
             }
 
@@ -64,11 +66,15 @@ export const refreshAccessToken = createAsyncThunk(
             if (data.refreshToken) {
                 localStorage.setItem('refreshToken', data.refreshToken);
             }
+            if (data.authProvider) {
+                localStorage.setItem(AUTH_PROVIDER_STORAGE_KEY, data.authProvider);
+            }
 
             return data;
         } catch (error) {
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
+            localStorage.removeItem(AUTH_PROVIDER_STORAGE_KEY);
             return rejectWithValue(error.message || 'Network error');
         }
     }
@@ -106,6 +112,9 @@ export const loginUser = createAsyncThunk(
             if (data.role) {
                 localStorage.setItem('userRole', data.role);
             }
+            if (data.authProvider) {
+                localStorage.setItem(AUTH_PROVIDER_STORAGE_KEY, data.authProvider);
+            }
 
             return data;
         } catch (error) {
@@ -141,6 +150,9 @@ export const loginWithGoogle = createAsyncThunk(
             }
             if (data.role) {
                 localStorage.setItem('userRole', data.role);
+            }
+            if (data.authProvider) {
+                localStorage.setItem(AUTH_PROVIDER_STORAGE_KEY, data.authProvider);
             }
 
             return data;
@@ -185,6 +197,10 @@ export const registerVendor = createAsyncThunk(
     'auth/registerVendor',
     async (formData, { rejectWithValue }) => {
         try {
+            if (!(formData instanceof FormData)) {
+                return rejectWithValue('Invalid registration payload. Please try again.');
+            }
+
             const url = `${API_BASE_URL}/auth/vendor/register`;
             console.log('Submitting vendor registration to:', url);
             
@@ -330,6 +346,10 @@ export const fetchCurrentUser = createAsyncThunk(
 
             if (!response.ok) {
                 return rejectWithValue(data?.message || 'Failed to fetch user');
+            }
+
+            if (data?.data?.authProvider) {
+                localStorage.setItem(AUTH_PROVIDER_STORAGE_KEY, data.data.authProvider);
             }
 
             return data;
@@ -481,7 +501,7 @@ export const resendVerification = createAsyncThunk(
 const initialState = {
     user: null,
     role: localStorage.getItem('userRole') || null,
-    authProvider: null,
+    authProvider: localStorage.getItem(AUTH_PROVIDER_STORAGE_KEY) || null,
     vendorApplication: null,
     vendorApplicationLoading: false,
     accessToken: localStorage.getItem('accessToken') || null,

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-hot-toast";
 import { BsShieldLock, BsBell, BsLink45Deg, BsGoogle, BsEnvelope } from "react-icons/bs";
-import { fetchCurrentUser, selectAuthProvider, selectIsAuthenticated, selectUser } from "../../../store/slices/authSlice";
+import { fetchCurrentUser, refreshAccessToken, selectAuthProvider, selectIsAuthenticated, selectUser } from "../../../store/slices/authSlice";
 
 const AccountSettings = () => {
     const navigate = useNavigate();
@@ -13,6 +13,7 @@ const AccountSettings = () => {
     const isAuthenticated = useSelector(selectIsAuthenticated);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [providerProbeDone, setProviderProbeDone] = useState(false);
 
     // State matching the new design requirements
     const [settings, setSettings] = useState({
@@ -29,12 +30,20 @@ const AccountSettings = () => {
     }, [dispatch, isAuthenticated, authUser]);
 
     useEffect(() => {
+        if (isAuthenticated && !authProvider && !providerProbeDone && localStorage.getItem("refreshToken")) {
+            setProviderProbeDone(true);
+            dispatch(refreshAccessToken());
+        }
+    }, [dispatch, isAuthenticated, authProvider, providerProbeDone]);
+
+    useEffect(() => {
         setIsLoading(!authUser);
     }, [authUser]);
 
     const provider = String(authUser?.authProvider || authProvider || "").toUpperCase();
+    const hasKnownProvider = ["EMAIL", "SIGN_IN_WITH_GOOGLE", "BOTH"].includes(provider);
     const hasGoogle = provider === "SIGN_IN_WITH_GOOGLE" || provider === "BOTH";
-    const hasEmailPassword = provider === "EMAIL" || provider === "BOTH" || provider === "";
+    const hasEmailPassword = provider === "EMAIL" || provider === "BOTH";
 
     const toggleSetting = (key) => {
         setSettings(prev => ({ ...prev, [key]: !prev[key] }));
@@ -163,12 +172,12 @@ const AccountSettings = () => {
                                             <div>
                                                 <p className="text-sm font-bold text-[#09637E]">Google</p>
                                                 <p className="text-xs text-[#09637E]/60">
-                                                    {hasGoogle ? (authUser?.email || "Connected") : "Not linked"}
+                                                    {!hasKnownProvider ? "Checking..." : hasGoogle ? (authUser?.email || "Connected") : "Not linked"}
                                                 </p>
                                             </div>
                                         </div>
                                         <span className={`text-[10px] font-black uppercase tracking-widest ${hasGoogle ? "text-[#09637E]/70" : "text-[#09637E]/40"}`}>
-                                            {hasGoogle ? "Connected" : "Not Linked"}
+                                            {!hasKnownProvider ? "Checking" : hasGoogle ? "Connected" : "Not Linked"}
                                         </span>
                                     </div>
 
@@ -180,12 +189,12 @@ const AccountSettings = () => {
                                             <div>
                                                 <p className="text-sm font-bold text-[#09637E]">Email & Password</p>
                                                 <p className="text-xs text-[#09637E]/60">
-                                                    {hasEmailPassword ? "Connected" : "Not linked"}
+                                                    {!hasKnownProvider ? "Checking..." : hasEmailPassword ? "Connected" : "Not linked"}
                                                 </p>
                                             </div>
                                         </div>
                                         <span className={`text-[10px] font-black uppercase tracking-widest ${hasEmailPassword ? "text-[#09637E]/70" : "text-[#09637E]/40"}`}>
-                                            {hasEmailPassword ? "Connected" : "Not Linked"}
+                                            {!hasKnownProvider ? "Checking" : hasEmailPassword ? "Connected" : "Not Linked"}
                                         </span>
                                     </div>
 
