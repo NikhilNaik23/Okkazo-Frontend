@@ -20,7 +20,7 @@ import {
 import { CHAT_API_BASE_URL, CHAT_SOCKET_URL } from '../../../../utils/chatConfig';
 import { extractRichChatMessage, stripRichChatMessage } from '../../../../utils/richChat';
 import { fetchPlanningByEventId, fetchPlanningVendorSelectionByEventId, selectPlanningVendorSelectionByEventId } from '../../../../store/slices/planningSlice';
-import { computeMoneyRangeFromBase } from '../../../../utils/pricing';
+import { computeMoneyRangeFromBase, derivePricingDemandFromEvent } from '../../../../utils/pricing';
 
 const EVENTS_API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -243,6 +243,7 @@ const ChatTab = ({ eventId, client }) => {
     }, [planningVendorSelection]);
 
     const [guestCountForPricing, setGuestCountForPricing] = useState(null);
+    const [dayCountForPricing, setDayCountForPricing] = useState(1);
     
     // UI states
     const [isVendorsOpen, setIsVendorsOpen] = useState(true);
@@ -289,8 +290,9 @@ const ChatTab = ({ eventId, client }) => {
             .then((action) => {
                 if (cancelled) return;
                 if (action?.meta?.requestStatus === 'fulfilled') {
-                    const n = action?.payload?.guestCount;
-                    setGuestCountForPricing(typeof n === 'number' ? n : null);
+                    const pricingDemand = derivePricingDemandFromEvent(action?.payload || {});
+                    setGuestCountForPricing(pricingDemand?.attendeeCount ?? null);
+                    setDayCountForPricing(pricingDemand?.dayCount ?? 1);
                 }
             })
             .catch(() => undefined);
@@ -588,6 +590,7 @@ const ChatTab = ({ eventId, client }) => {
         const range = computeMoneyRangeFromBase({
             basePrice: price,
             guestCount: guestCountForPricing,
+            dayCount: dayCountForPricing,
             serviceLabel,
         });
 
@@ -614,6 +617,7 @@ const ChatTab = ({ eventId, client }) => {
             const servicePrice = computeMoneyRangeFromBase({
                 basePrice: price,
                 guestCount: guestCountForPricing,
+                dayCount: dayCountForPricing,
                 serviceLabel,
             });
 

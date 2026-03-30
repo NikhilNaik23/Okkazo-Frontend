@@ -28,7 +28,7 @@ import {
 } from "../../../utils/chatApi";
 import { CHAT_API_BASE_URL, CHAT_SOCKET_URL } from "../../../utils/chatConfig";
 import { extractRichChatMessage, stripRichChatMessage } from "../../../utils/richChat";
-import { computeMoneyRangeFromBase } from "../../../utils/pricing";
+import { computeMoneyRangeFromBase, derivePricingDemandFromEvent } from "../../../utils/pricing";
 
 const EVENTS_API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -40,10 +40,11 @@ const formatMoneyShort = (value) => {
     return `₹${n.toFixed(0)}`;
 };
 
-const formatMoneyRangeFromBasePrice = (price, { serviceLabel, guestCount } = {}) => {
+const formatMoneyRangeFromBasePrice = (price, { serviceLabel, guestCount, dayCount } = {}) => {
     const range = computeMoneyRangeFromBase({
         basePrice: price,
         guestCount,
+        dayCount,
         serviceLabel,
     });
 
@@ -55,9 +56,42 @@ const formatMoneyRangeFromBasePrice = (price, { serviceLabel, guestCount } = {})
     return `${fmt(min)} – ${fmt(max)}`;
 };
 
-const formatMoneyRangeFromMinMax = (minRaw, _maxRaw, { serviceLabel, guestCount } = {}) => {
+const formatMoneyRangeFromMinMax = (minRaw, _maxRaw, { serviceLabel, guestCount, dayCount } = {}) => {
     // For consistency, max is derived as min*1.5 (and multiplied by guestCount when per-attendee).
-    return formatMoneyRangeFromBasePrice(minRaw, { serviceLabel, guestCount });
+    return formatMoneyRangeFromBasePrice(minRaw, { serviceLabel, guestCount, dayCount });
+};
+
+const normalizeTicketTierName = (tier, idx = 0) => {
+    const name = String(tier?.tierName || tier?.name || '').trim();
+    return name || `Tier ${idx + 1}`;
+};
+
+const normalizeTicketTierCount = (tierLike) => {
+    const raw = Number(tierLike?.ticketCount ?? tierLike?.quantity ?? tierLike?.count ?? 0);
+    return Number.isFinite(raw) && raw >= 0 ? raw : 0;
+};
+
+const normalizeDayKey = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const day = raw.includes('T') ? raw.slice(0, 10) : raw;
+    return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : raw;
+};
+
+const formatTicketDayLabel = (dayValue) => {
+    const key = normalizeDayKey(dayValue);
+    if (!key || !/^\d{4}-\d{2}-\d{2}$/.test(key)) return key || 'Day';
+
+    const [yy, mm, dd] = key.split('-').map((v) => Number(v));
+    const date = new Date(Date.UTC(yy, (mm || 1) - 1, dd || 1));
+    if (Number.isNaN(date.getTime())) return key;
+
+    return date.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'Asia/Kolkata',
+    });
 };
 
 const toManagerBadge = (name) => {
@@ -142,6 +176,8 @@ const UserEventManagement = () => {
 
     const lastAltSyncRef = useRef({});
 
+    const pricingDemand = React.useMemo(() => derivePricingDemandFromEvent(event || {}), [event]);
+
     const latestAltMessageIdByService = React.useMemo(() => {
         const latestByService = {};
         const list = Array.isArray(messages) ? messages : [];
@@ -195,7 +231,8 @@ const UserEventManagement = () => {
 
             const servicePrice = computeMoneyRangeFromBase({
                 basePrice: price,
-                guestCount: event?.guestCount,
+                guestCount: pricingDemand?.attendeeCount,
+                dayCount: pricingDemand?.dayCount,
                 serviceLabel,
             });
 
@@ -338,7 +375,8 @@ const UserEventManagement = () => {
                         const tier = o?.tier ? String(o.tier) : '';
                         const priceText = formatMoneyRangeFromMinMax(o?.priceMin ?? o?.price, o?.priceMax, {
                             serviceLabel,
-                            guestCount: event?.guestCount,
+                            guestCount: pricingDemand?.attendeeCount,
+                            dayCount: pricingDemand?.dayCount,
                         });
                         const distanceText = o?.distanceText || formatDistance(o?.distanceKm);
                         const services = Array.isArray(o?.services) ? o.services : [];
@@ -431,7 +469,8 @@ const UserEventManagement = () => {
                                                                     <div className="text-[9px] font-black uppercase tracking-widest text-primary/60 mt-1">
                                                                         {svcName && svcTier ? `${svcName} • ` : ''}{formatMoneyRangeFromBasePrice(svcPrice, {
                                                                             serviceLabel,
-                                                                            guestCount: event?.guestCount,
+                                                                            guestCount: pricingDemand?.attendeeCount,
+                                                                            dayCount: pricingDemand?.dayCount,
                                                                         })}
                                                                     </div>
                                                                 </div>
@@ -558,7 +597,12 @@ const UserEventManagement = () => {
                             id: planningEventId,
                             title: p?.eventTitle || 'Event',
                             location: p?.location?.name || 'Location TBD',
-                            image: p?.eventBanner || p?.banner || null,
+                            image:
+                                p?.eventBanner?.url ||
+                                p?.eventBanner ||
+                                p?.banner?.url ||
+                                p?.banner ||
+                                null,
                             status: toDisplayStatus(p?.status || 'PENDING APPROVAL'),
                             listingType: String(p?.category || '').toLowerCase() === 'public' ? 'Public' : 'Private',
                             depositPaid: Boolean(p?.depositPaid || p?.depositPaidAt || p?.depositPaidAmountPaise),
@@ -567,6 +611,7 @@ const UserEventManagement = () => {
                             managerProfile: p?.managerProfile || null,
                             guestCount: typeof p?.guestCount === 'number' ? p.guestCount : null,
                             ticketTiers: Array.isArray(p?.tickets?.tiers) ? p.tickets.tiers : [],
+                            ticketDayWiseAllocations: Array.isArray(p?.tickets?.dayWiseAllocations) ? p.tickets.dayWiseAllocations : [],
                             eventDescription: typeof p?.eventDescription === 'string' ? p.eventDescription : null,
                             selectedServices,
                             selectedVendors,
@@ -595,6 +640,7 @@ const UserEventManagement = () => {
                             managerProfile: pr?.managerProfile || null,
                             guestCount: null,
                             ticketTiers: Array.isArray(pr?.tickets?.tiers) ? pr.tickets.tiers : [],
+                            ticketDayWiseAllocations: Array.isArray(pr?.tickets?.dayWiseAllocations) ? pr.tickets.dayWiseAllocations : [],
                             eventDescription: typeof pr?.eventDescription === 'string' ? pr.eventDescription : null,
                             selectedServices: [],
                             selectedVendors: [],
@@ -1059,6 +1105,102 @@ const UserEventManagement = () => {
         }
     };
 
+    const quoteDisplay = React.useMemo(() => {
+        const selectionVendors = Array.isArray(planningVendorSelection?.vendors)
+            ? planningVendorSelection.vendors
+            : [];
+        const vendorProfiles = Array.isArray(planningVendorSelection?.vendorProfiles)
+            ? planningVendorSelection.vendorProfiles
+            : [];
+
+        const profileByAuthId = new Map();
+        for (const profile of vendorProfiles) {
+            const keys = [profile?.authId, profile?.vendorAuthId, profile?.userAuthId]
+                .map((v) => String(v || '').trim())
+                .filter(Boolean);
+
+            for (const key of keys) {
+                if (!profileByAuthId.has(key)) {
+                    profileByAuthId.set(key, profile);
+                }
+            }
+        }
+
+        const toKey = (vendorAuthId, service) => {
+            const vendorKey = String(vendorAuthId || '').trim().toLowerCase();
+            const serviceKey = String(service || '').trim().toLowerCase();
+            if (!vendorKey || !serviceKey) return null;
+            return `${vendorKey}::${serviceKey}`;
+        };
+
+        const selectionMetaByKey = new Map();
+        for (const row of selectionVendors) {
+            const vendorAuthId = String(row?.vendorAuthId || '').trim();
+            const key = toKey(vendorAuthId, row?.service);
+            if (!key) continue;
+
+            const quantityNumber = Number(row?.pricingQuantity);
+            const hasQuantityNumber = Number.isFinite(quantityNumber) && quantityNumber > 0;
+            const quantityUnit = String(row?.pricingQuantityUnit || row?.pricingUnit || '').trim();
+            const quantity = hasQuantityNumber
+                ? `${quantityNumber}${quantityUnit ? ` ${quantityUnit}` : ''}`
+                : (quantityUnit || '—');
+
+            const profile = profileByAuthId.get(vendorAuthId) || null;
+            const businessName = String(
+                profile?.businessName ||
+                profile?.name ||
+                row?.businessName ||
+                ''
+            ).trim();
+            const serviceName = String(row?.serviceName || row?.service || '').trim();
+
+            selectionMetaByKey.set(key, {
+                businessName: businessName || 'Vendor',
+                serviceName: serviceName || 'Service',
+                quantity,
+            });
+        }
+
+        const lineItems = (Array.isArray(quoteLatest?.items) ? quoteLatest.items : []).map((item, idx) => {
+            const vendorAuthId = String(item?.vendorAuthId || '').trim();
+            const key = toKey(vendorAuthId, item?.service);
+            const meta = key ? selectionMetaByKey.get(key) : null;
+
+            const amountPaise = Number(
+                item?.clientTotal?.minPaise ??
+                item?.clientTotal?.maxPaise ??
+                0
+            );
+
+            return {
+                id: `${vendorAuthId || 'vendor'}:${String(item?.service || 'service')}:${idx}`,
+                businessName: meta?.businessName || 'Vendor',
+                serviceName: meta?.serviceName || String(item?.service || 'Service').trim() || 'Service',
+                quantity: meta?.quantity || '—',
+                amountPaise: Number.isFinite(amountPaise) ? amountPaise : 0,
+            };
+        });
+
+        const promotions = (Array.isArray(quoteLatest?.promotions) ? quoteLatest.promotions : []).map((promotion, idx) => ({
+            id: `${String(promotion?.value || 'promotion')}:${idx}`,
+            name: String(promotion?.value || '').trim() || 'Promotion',
+            feePaise: Number(promotion?.feePaise || 0),
+        }));
+
+        const grandTotalPaise = Number(
+            quoteLatest?.clientGrandTotal?.minPaise ??
+            quoteLatest?.clientGrandTotal?.maxPaise ??
+            0
+        );
+
+        return {
+            lineItems,
+            promotions,
+            grandTotalPaise: Number.isFinite(grandTotalPaise) ? grandTotalPaise : 0,
+        };
+    }, [quoteLatest, planningVendorSelection]);
+
     if (loading) {
         return (
             <div className="min-h-screen bg-surface flex items-center justify-center pt-28">
@@ -1072,6 +1214,24 @@ const UserEventManagement = () => {
     const isPromote = String(event?.kind || '').toUpperCase() === 'PROMOTE';
     const isPublicListing = isPromote || String(event?.listingType || '').toLowerCase() === 'public';
     const isPrivateListing = !isPromote && String(event?.listingType || '').toLowerCase() === 'private';
+    const resolveBannerUrl = (value) => {
+        if (!value) return null;
+        if (typeof value === 'string') {
+            const s = value.trim();
+            return s || null;
+        }
+
+        if (typeof value === 'object') {
+            const candidates = [value.url, value.fileUrl, value.secure_url, value.src, value.image];
+            for (const item of candidates) {
+                if (typeof item === 'string' && item.trim()) return item.trim();
+            }
+        }
+
+        return null;
+    };
+    const publicBannerUrl = isPublicListing ? resolveBannerUrl(event?.image) : null;
+    const eventBannerSrc = publicBannerUrl || "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1200&q=80";
 
     const selectedServices = Array.isArray(event?.selectedServices) ? event.selectedServices : [];
     const selectedVendors = Array.isArray(event?.selectedVendors) ? event.selectedVendors : [];
@@ -1079,6 +1239,46 @@ const UserEventManagement = () => {
 
     const vendorSelectionVendors = Array.isArray(event?.vendorSelectionVendors) ? event.vendorSelectionVendors : [];
     const vendorSelectionByService = new Map(vendorSelectionVendors.map((v) => [String(v?.service || '').trim(), v]));
+
+    const normalizedTicketTiers = (Array.isArray(event?.ticketTiers) ? event.ticketTiers : []).map((tier, idx) => ({
+        name: normalizeTicketTierName(tier, idx),
+        ticketCount: normalizeTicketTierCount(tier),
+    }));
+
+    const dayWiseTicketRows = (Array.isArray(event?.ticketDayWiseAllocations) ? event.ticketDayWiseAllocations : [])
+        .map((row, idx) => {
+            const dayKey = normalizeDayKey(row?.day);
+            const rowTierBreakdown = (Array.isArray(row?.tierBreakdown) ? row.tierBreakdown : []).map((tier, tierIdx) => ({
+                name: normalizeTicketTierName(tier, tierIdx),
+                ticketCount: normalizeTicketTierCount(tier),
+            }));
+
+            const totalTicketsRaw = Number(row?.ticketCount);
+            const totalTickets = Number.isFinite(totalTicketsRaw) && totalTicketsRaw >= 0
+                ? totalTicketsRaw
+                : rowTierBreakdown.reduce((sum, t) => sum + t.ticketCount, 0);
+
+            return {
+                id: `${dayKey || 'day'}-${idx}`,
+                dayKey,
+                dayLabel: formatTicketDayLabel(dayKey),
+                totalTickets,
+                tierBreakdown: rowTierBreakdown,
+            };
+        })
+        .sort((a, b) => String(a.dayKey || '').localeCompare(String(b.dayKey || '')));
+
+    const ticketRows = dayWiseTicketRows.length > 0
+        ? dayWiseTicketRows
+        : (normalizedTicketTiers.length > 0
+            ? [{
+                id: 'overall',
+                dayKey: '',
+                dayLabel: 'Overall Allocation',
+                totalTickets: normalizedTicketTiers.reduce((sum, t) => sum + t.ticketCount, 0),
+                tierBreakdown: normalizedTicketTiers,
+            }]
+            : []);
 
     const toVendorStatus = (raw) => {
         const s = String(raw || '').trim().toUpperCase();
@@ -1099,6 +1299,8 @@ const UserEventManagement = () => {
         const safe = Number.isFinite(n) ? n : 0;
         return safe.toLocaleString('en-IN');
     };
+
+    const formatMoneyFromPaise = (paise) => `₹${formatInr(toInr(paise))}`;
 
     const loadRazorpayScript = () =>
         new Promise((resolve) => {
@@ -1311,25 +1513,56 @@ const UserEventManagement = () => {
                                 )}
 
                                 {quoteLatest && (
-                                    <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div className="bg-surface rounded-3xl p-6 border border-primary/5">
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-primary/40 mb-2">Vendor Subtotal (Min)</p>
-                                            <p className="text-2xl font-black text-[#0b2d49]">₹{formatInr(toInr(quoteLatest?.vendorSubtotal?.minPaise))}</p>
-                                        </div>
-                                        <div className="bg-surface rounded-3xl p-6 border border-primary/5">
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-primary/40 mb-2">Service Charge (Min)</p>
-                                            <p className="text-2xl font-black text-[#0b2d49]">₹{formatInr(toInr(quoteLatest?.serviceChargeTotal?.minPaise))}</p>
-                                        </div>
-                                        <div className="bg-surface rounded-3xl p-6 border border-primary/5">
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-primary/40 mb-2">Promotions</p>
-                                            <p className="text-2xl font-black text-[#0b2d49]">₹{formatInr(toInr(quoteLatest?.promotionsTotal?.minPaise))}</p>
+                                    <div className="mt-8 space-y-4">
+                                        <div className="bg-surface rounded-3xl border border-primary/5 overflow-hidden">
+                                            <div className="overflow-x-auto">
+                                                <div className="min-w-[720px]">
+                                                    <div className="grid grid-cols-12 gap-3 px-5 py-3 bg-white border-b border-primary/10 text-[10px] font-black uppercase tracking-widest text-primary/45">
+                                                        <div className="col-span-4">Service name</div>
+                                                        <div className="col-span-3">Business name</div>
+                                                        <div className="col-span-2">Quantity</div>
+                                                        <div className="col-span-3 text-right">Amount</div>
+                                                    </div>
+
+                                                    {quoteDisplay.lineItems.length > 0 ? (
+                                                        <div className="divide-y divide-primary/10">
+                                                            {quoteDisplay.lineItems.map((item) => (
+                                                                <div key={item.id} className="grid grid-cols-12 gap-3 px-5 py-4 text-sm">
+                                                                    <div className="col-span-4 font-bold text-[#0b2d49]">{item.serviceName}</div>
+                                                                    <div className="col-span-3 text-primary/80">{item.businessName}</div>
+                                                                    <div className="col-span-2 text-primary/80">{item.quantity}</div>
+                                                                    <div className="col-span-3 text-right font-black text-[#0b2d49]">{formatMoneyFromPaise(item.amountPaise)}</div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="px-5 py-5 text-sm text-primary/60">No vendor line items available.</div>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
 
-                                        <div className="md:col-span-3 bg-white rounded-3xl p-6 border border-primary/5">
+                                        {quoteDisplay.promotions.length > 0 && (
+                                            <div className="bg-surface rounded-3xl border border-primary/5 overflow-hidden">
+                                                <div className="px-5 py-3 bg-white border-b border-primary/10 text-[10px] font-black uppercase tracking-widest text-primary/45">
+                                                    Opted promotions
+                                                </div>
+                                                <div className="divide-y divide-primary/10">
+                                                    {quoteDisplay.promotions.map((promotion) => (
+                                                        <div key={promotion.id} className="flex items-center justify-between px-5 py-4 text-sm">
+                                                            <div className="font-bold text-[#0b2d49]">{promotion.name}</div>
+                                                            <div className="font-black text-[#0b2d49]">{formatMoneyFromPaise(promotion.feePaise)}</div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="bg-white rounded-3xl p-6 border border-primary/5">
                                             <div className="flex items-center justify-between gap-6">
                                                 <div>
-                                                    <p className="text-[10px] font-black uppercase tracking-widest text-primary/40 mb-2">Client Total (Min)</p>
-                                                    <p className="text-3xl font-black text-[#0b2d49]">₹{formatInr(toInr(quoteLatest?.clientGrandTotal?.minPaise))}</p>
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-primary/40 mb-2">Total Amount</p>
+                                                    <p className="text-3xl font-black text-[#0b2d49]">{formatMoneyFromPaise(quoteDisplay.grandTotalPaise)}</p>
                                                 </div>
                                                 <div className="text-right">
                                                     <p className="text-[10px] font-black uppercase tracking-widest text-primary/40">Demand Tier</p>
@@ -1391,8 +1624,14 @@ const UserEventManagement = () => {
                                     <h3 className="text-sm font-serif-premium text-primary mb-6">Event Details</h3>
 
                                     <div className="relative h-64 rounded-2xl overflow-hidden bg-gray-100 mb-8 border border-gray-100 group">
-                                        <div className="absolute top-4 left-4 z-20 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">Minimal Banner</div>
-                                        <img src={event.image || "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1200&q=80"} alt="Asset" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 filter grayscale group-hover:grayscale-0" />
+                                        <div className="absolute top-4 left-4 z-20 bg-white/90 backdrop-blur-md px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest">
+                                            {isPublicListing ? 'Event Banner' : 'Minimal Banner'}
+                                        </div>
+                                        <img
+                                            src={eventBannerSrc}
+                                            alt={`${event?.title || 'Event'} banner`}
+                                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 filter grayscale group-hover:grayscale-0"
+                                        />
                                         <div className="absolute inset-0 bg-linear-to-t from-gray-900/60 to-transparent flex flex-col justify-end p-8 text-white">
                                             <h4 className="font-serif-premium italic text-2xl">{event.title} </h4>
                                             <p className="text-[10px] uppercase tracking-widest opacity-80">{event.location}</p>
@@ -1444,27 +1683,49 @@ const UserEventManagement = () => {
                                             <h3 className="text-sm font-serif-premium text-primary">Tickets</h3>
                                         </div>
 
-                                        {Array.isArray(event?.ticketTiers) && event.ticketTiers.length > 0 ? (
-                                            <div className="space-y-3">
-                                                {event.ticketTiers.map((tier, idx) => (
-                                                    <div key={tier?._id || tier?.name || idx} className="flex items-center justify-between bg-surface rounded-xl p-4">
-                                                        <div>
-                                                            <p className="text-[9px] font-black uppercase tracking-widest text-primary/50 mb-1">Tier</p>
-                                                            <p className="text-sm font-bold text-[#0b2d49]">{tier?.name || `Tier ${idx + 1}`}</p>
+                                        {ticketRows.length > 0 ? (
+                                            <div className="space-y-4">
+                                                {ticketRows.map((dayRow, dayIdx) => (
+                                                    <div key={dayRow.id || dayIdx} className="bg-surface rounded-2xl p-4 border border-primary/10">
+                                                        <div className="flex items-center justify-between mb-3">
+                                                            <div>
+                                                                <p className="text-[9px] font-black uppercase tracking-widest text-primary/50 mb-1">
+                                                                    {dayRow.dayKey ? `Day ${dayIdx + 1}` : 'Summary'}
+                                                                </p>
+                                                                <p className="text-sm font-bold text-[#0b2d49]">{dayRow.dayLabel || 'Day Allocation'}</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-[9px] font-black uppercase tracking-widest text-primary/50 mb-1">Total Tickets</p>
+                                                                <p className="text-sm font-bold text-[#0b2d49]">{Number.isFinite(dayRow.totalTickets) ? dayRow.totalTickets : '—'}</p>
+                                                            </div>
                                                         </div>
-                                                        <div className="text-right">
-                                                            <p className="text-[9px] font-black uppercase tracking-widest text-primary/50 mb-1">Quantity</p>
-                                                            <p className="text-sm font-bold text-[#0b2d49]">
-                                                                {typeof tier?.sold === 'number' ? tier.sold : '—'}
-                                                                {typeof tier?.quantity === 'number' ? ` / ${tier.quantity}` : ''}
-                                                            </p>
-                                                        </div>
+
+                                                        {Array.isArray(dayRow.tierBreakdown) && dayRow.tierBreakdown.length > 0 ? (
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                                {dayRow.tierBreakdown.map((tier, idx) => (
+                                                                    <div key={`${dayRow.id}-tier-${idx}`} className="flex items-center justify-between bg-white rounded-xl p-3 border border-primary/5">
+                                                                        <div>
+                                                                            <p className="text-[9px] font-black uppercase tracking-widest text-primary/50 mb-1">Tier</p>
+                                                                            <p className="text-xs font-bold text-[#0b2d49]">{tier.name}</p>
+                                                                        </div>
+                                                                        <div className="text-right">
+                                                                            <p className="text-[9px] font-black uppercase tracking-widest text-primary/50 mb-1">Quantity</p>
+                                                                            <p className="text-xs font-bold text-[#0b2d49]">{tier.ticketCount}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="bg-white rounded-xl p-3 text-xs text-[#0b2d49]/60 border border-primary/5">
+                                                                No tier breakdown for this day.
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>
                                         ) : (
                                             <div className="bg-surface rounded-xl p-6 text-sm text-[#0b2d49]/70">
-                                                No ticket tiers configured.
+                                                No day-wise ticket allocation configured.
                                             </div>
                                         )}
                                     </div>
@@ -1558,6 +1819,16 @@ const UserEventManagement = () => {
                                                     const key = String(serviceName || '').trim();
                                                     const vendor = vendorByService.get(key);
                                                     const vendorSel = vendorSelectionByService.get(key);
+                                                    const optedServiceName = String(vendorSel?.service || vendor?.service || key || '').trim() || 'Service';
+                                                    const servicePriceMinRaw = Number(vendorSel?.servicePrice?.min ?? vendor?.servicePrice?.min ?? 0);
+                                                    const servicePriceMaxRaw = Number(vendorSel?.servicePrice?.max ?? vendor?.servicePrice?.max ?? 0);
+                                                    const servicePriceMin = Number.isFinite(servicePriceMinRaw) && servicePriceMinRaw > 0
+                                                        ? servicePriceMinRaw
+                                                        : 0;
+                                                    const servicePriceMax = Number.isFinite(servicePriceMaxRaw) && servicePriceMaxRaw > 0
+                                                        ? servicePriceMaxRaw
+                                                        : (servicePriceMin > 0 ? Math.ceil(servicePriceMin * 1.5) : 0);
+                                                    const hasQuotedPrice = servicePriceMin > 0 || servicePriceMax > 0;
                                                     const vendorStatusRaw = vendorSel?.status || (vendor?.vendorAuthId ? 'ACCEPTED' : 'YET_TO_SELECT');
                                                     const vendorStatus = toVendorStatus(vendorStatusRaw);
                                                     const vendorAuthId = vendorSel?.vendorAuthId || vendor?.vendorAuthId || null;
@@ -1566,6 +1837,12 @@ const UserEventManagement = () => {
                                                         <div key={`${key}-${i}`} className="flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-primary/20 hover:bg-surface/50 transition-all">
                                                             <div>
                                                                 <p className="text-xs font-bold text-[#0b2d49]">{key || 'Service'}</p>
+                                                                <p className="text-[9px] font-bold text-primary/55 uppercase tracking-widest">
+                                                                    Opted: {optedServiceName}
+                                                                </p>
+                                                                <p className="text-[9px] font-bold text-secondary uppercase tracking-widest">
+                                                                    Price: {hasQuotedPrice ? `₹${formatInr(servicePriceMin)} - ₹${formatInr(servicePriceMax)}` : 'Not quoted yet'}
+                                                                </p>
                                                                 <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
                                                                     Vendor: {vendorAuthId ? String(vendorAuthId).slice(0, 10) + '…' : 'Not selected'}
                                                                 </p>

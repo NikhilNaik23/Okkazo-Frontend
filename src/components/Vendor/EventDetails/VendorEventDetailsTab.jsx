@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import {
@@ -11,6 +11,7 @@ const VendorEventDetailsTab = () => {
         event,
         handleAccept,
         handleReject,
+        handleLockServicePrice,
         services = [],
         tempServices = [],
         handleTempServiceChange,
@@ -18,6 +19,7 @@ const VendorEventDetailsTab = () => {
     const navigate = useNavigate();
 
     const [lockedPrices, setLockedPrices] = useState({});
+    const [lockInProgress, setLockInProgress] = useState({});
 
     const formatKeyLabel = (key) => {
         return String(key || '')
@@ -51,26 +53,56 @@ const VendorEventDetailsTab = () => {
             .filter(Boolean);
     };
 
-    const handleLockToggle = (id, currentPrice) => {
+    useEffect(() => {
+        const next = {};
+        (Array.isArray(tempServices) ? tempServices : []).forEach((service) => {
+            next[service.id] = Boolean(service?.isLocked);
+        });
+        setLockedPrices(next);
+    }, [tempServices]);
+
+    const handleLockToggle = async (id, currentPrice) => {
+        if (lockedPrices[id]) return;
+
         const serviceNode = tempServices.find((s) => s.id === id);
         const currentPriceNum = Number(currentPrice);
         const maxBudgetNum = Number(serviceNode?.maxBudget);
 
-        if (!lockedPrices[id]) {
-            if (!Number.isFinite(currentPriceNum) || currentPriceNum <= 0) {
-                toast.error('Please enter a valid price before locking.');
-                return;
-            }
-            if (Number.isFinite(maxBudgetNum) && maxBudgetNum > 0 && currentPriceNum > maxBudgetNum) {
-                toast.error("Price cannot exceed the client's maximum budget.");
-                return;
-            }
+        if (!Number.isFinite(currentPriceNum) || currentPriceNum <= 0) {
+            toast.error('Please enter a valid price before locking.');
+            return;
+        }
+        if (Number.isFinite(maxBudgetNum) && maxBudgetNum > 0 && currentPriceNum > maxBudgetNum) {
+            toast.error("Price cannot exceed the client's maximum budget.");
+            return;
         }
 
-        setLockedPrices((prev) => ({
-            ...prev,
-            [id]: !prev[id],
-        }));
+        try {
+            setLockInProgress((prev) => ({ ...prev, [id]: true }));
+            const result = await handleLockServicePrice?.(id, currentPriceNum);
+
+            setLockedPrices((prev) => ({
+                ...prev,
+                [id]: true,
+            }));
+
+            const finalPrice = Number(result?.lockedPrice || currentPriceNum);
+            const commissionPercent = Number(result?.commissionPercent || 0);
+
+            if (Number.isFinite(finalPrice) && finalPrice > 0) {
+                if (commissionPercent > 0) {
+                    toast.success(`Price locked at ₹${finalPrice.toLocaleString()} (${commissionPercent}% commission included).`);
+                } else {
+                    toast.success(`Price locked at ₹${finalPrice.toLocaleString()}.`);
+                }
+            } else {
+                toast.success('Price locked.');
+            }
+        } catch (error) {
+            toast.error(String(error || 'Failed to lock price'));
+        } finally {
+            setLockInProgress((prev) => ({ ...prev, [id]: false }));
+        }
     };
 
     const primaryContactName = String(event?.client?.name || '').trim();
@@ -87,6 +119,27 @@ const VendorEventDetailsTab = () => {
             .filter((s) => lockedPrices[s.id])
             .reduce((sum, s) => sum + (Number(s.price) || 0) * (Number(s.qty) || 0), 0);
     }, [tempServices, lockedPrices]);
+
+    const timeSlot = String(event?.time || 'TBD').split(' - ')[0] || 'TBD';
+    const paxLabel = event?.isPublic ? 'Total Tickets' : 'Expected Pax';
+    const paxUnit = event?.isPublic ? 'Tickets' : 'Guests';
+    const paxValue = Number(event?.pax || 0) > 0 ? `${event.pax} ${paxUnit}` : 'TBD';
+
+    const statCards = [
+        { icon: BsCalendarEvent, label: 'Date', value: event?.date || 'TBD' },
+        { icon: BsClock, label: 'Time Slot', value: timeSlot },
+        { icon: BsPeople, label: paxLabel, value: paxValue },
+        { icon: BsBagCheck, label: 'Category', value: event?.category || 'TBD' },
+    ];
+
+    if (event?.isPublic && Number(event?.publicDayCount || 0) > 0) {
+        const days = Number(event.publicDayCount);
+        statCards.splice(3, 0, {
+            icon: BsCalendarEvent,
+            label: 'Public Days',
+            value: `${days} ${days === 1 ? 'Day' : 'Days'}`,
+        });
+    }
 
     return (
         <div className="grid grid-cols-12 gap-8 animate-in slide-in-from-bottom-4 duration-700">
@@ -120,12 +173,7 @@ const VendorEventDetailsTab = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 relative z-10">
                     {/* Stats Grid */}
                     <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-4 gap-6">
-                        {[
-                            { icon: BsCalendarEvent, label: "Date", value: event.date },
-                            { icon: BsClock, label: "Time Slot", value: event.time.split(' - ')[0] },
-                            { icon: BsPeople, label: "Expected Pax", value: `${event.pax} Guests` },
-                            { icon: BsBagCheck, label: "Category", value: event.category }
-                        ].map((stat, idx) => (
+                        {statCards.map((stat, idx) => (
                             <div key={idx} className="group bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 rounded-2xl p-4 transition-all duration-300 backdrop-blur-sm">
                                 <div className="w-8 h-8 rounded-full bg-[#d7a444]/10 flex items-center justify-center mb-3 group-hover:scale-110 group-hover:bg-[#d7a444]/20 transition-all">
                                     <stat.icon className="text-[#d7a444] text-sm" />
@@ -178,12 +226,32 @@ const VendorEventDetailsTab = () => {
                     <div className="space-y-4">
                         {tempServices.map((service, idx) => {
                             const isLocked = lockedPrices[service.id];
+                            const isLocking = Boolean(lockInProgress[service.id]);
                             const fullService = service.fullService;
                             const unitLabel = resolveUnitLabel(fullService);
                             const images = getImages(fullService);
                             const primaryImage = images[0] || null;
 
                             const displayName = service.name || fullService?.name || fullService?.serviceName || 'Service';
+                            const requestedServiceName = String(service?.serviceName || displayName || service?.serviceKey || 'Service').trim();
+                            const requestedServiceId = String(service?.serviceId || fullService?._id || '').trim();
+                            const requestedServiceCategory = String(service?.serviceKey || '').trim();
+                            const selectedServiceName = String(service?.serviceName || displayName || requestedServiceName || 'Service').trim();
+                            const selectedServiceTier = String(service?.serviceTier || fullService?.tier || '').trim();
+                            const rawSelectedPrice = Number(service?.quotedPrice || service?.price || 0);
+                            const minBudget = Number(service?.minBudget || 0);
+                            const quoteCap = Number(service?.maxBudget || 0);
+                            const sliderMin = Number.isFinite(minBudget) && minBudget > 0 ? minBudget : 0;
+                            const computedSliderMax = Number.isFinite(quoteCap) && quoteCap > 0
+                                ? quoteCap
+                                : Math.max(sliderMin, Number.isFinite(rawSelectedPrice) ? rawSelectedPrice : 0);
+                            const sliderMax = computedSliderMax >= sliderMin ? computedSliderMax : sliderMin;
+                            const selectedPrice = Number.isFinite(rawSelectedPrice)
+                                ? Math.min(sliderMax, Math.max(sliderMin, rawSelectedPrice))
+                                : sliderMin;
+                            const commissionPercent = Number(service?.commissionPercent || 0);
+                            const commissionAmount = Number(service?.commissionAmount || 0);
+                            const totalLockedPrice = Number(service?.totalPrice || service?.price || 0);
                             const displayDescription =
                                 (fullService?.details?.description || fullService?.description || service.details || '').trim();
 
@@ -244,6 +312,9 @@ const VendorEventDetailsTab = () => {
 
                             const visibleChips = chips;
                             const hiddenCount = 0;
+                            const publicTicketRows = Array.isArray(event?.publicTicketDayAllocations)
+                                ? event.publicTicketDayAllocations
+                                : [];
 
                             return (
                                 <div
@@ -279,6 +350,62 @@ const VendorEventDetailsTab = () => {
 
                                                     <p className="mt-2 text-[13px] text-[#708aa0] leading-relaxed line-clamp-2">
                                                         {displayDescription || 'Service request for this event.'}
+                                                    </p>
+
+                                                    {event?.isPublic && publicTicketRows.length > 0 && (
+                                                        <div className="mt-3 rounded-2xl border border-[#cfe2ef] bg-[#eef6fb] p-3">
+                                                            <p className="text-[10px] font-black uppercase tracking-widest text-[#6f95ad]">Public Tickets</p>
+                                                            <div className="mt-2 space-y-2">
+                                                                {publicTicketRows.map((row, rowIdx) => {
+                                                                    const tiers = Array.isArray(row?.tiers) ? row.tiers : [];
+                                                                    const totalTickets = Number(row?.ticketCount || 0);
+
+                                                                    return (
+                                                                        <div key={`${service.id}-public-day-${row?.day || rowIdx}`} className="rounded-xl border border-[#dbe9f2] bg-[#f8fcff] p-3">
+                                                                            <div className="flex items-start justify-between gap-3">
+                                                                                <div className="min-w-0">
+                                                                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#6f95ad]">Day {rowIdx + 1}</p>
+                                                                                    <p className="mt-1 text-sm font-black text-[#0b2d49] truncate">{row?.dayLabel || 'TBD'}</p>
+                                                                                </div>
+                                                                                <div className="text-right shrink-0">
+                                                                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#6f95ad]">Total Tickets</p>
+                                                                                    <p className="mt-1 text-sm font-black text-[#0b2d49]">{totalTickets > 0 ? totalTickets : '—'}</p>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {tiers.length > 0 && (
+                                                                                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                                                    {tiers.map((tier, tierIdx) => (
+                                                                                        <div key={`${service.id}-public-tier-${rowIdx}-${tierIdx}`} className="rounded-lg border border-[#e3edf4] bg-white px-2.5 py-2">
+                                                                                            <p className="text-[9px] font-black uppercase tracking-widest text-[#7ea4ba]">Tier</p>
+                                                                                            <p className="text-[12px] font-black text-[#0b2d49] truncate">{tier?.tierName || 'Tier'}</p>
+                                                                                            <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-[#7ea4ba]">Quantity</p>
+                                                                                            <p className="text-[12px] font-black text-[#0b2d49]">{Number(tier?.ticketCount || 0) || 0}</p>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    <p className="mt-2 text-[11px] font-black uppercase tracking-widest text-[#708aa0]">
+                                                        Requested Service: <span className="text-[#0b2d49]">{requestedServiceName}</span>
+                                                    </p>
+                                                    <p className="mt-1 text-[11px] font-black uppercase tracking-widest text-[#708aa0]">
+                                                        Requested Service ID: <span className="text-[#0b2d49]">{requestedServiceId || 'Not available'}</span>
+                                                    </p>
+                                                    <p className="mt-1 text-[11px] font-black uppercase tracking-widest text-[#708aa0]">
+                                                        Service Category: <span className="text-[#0b2d49]">{requestedServiceCategory || 'Not specified'}</span>
+                                                    </p>
+                                                    <p className="mt-1 text-[11px] font-black uppercase tracking-widest text-[#708aa0]">
+                                                        Service Name: <span className="text-[#0b2d49]">{selectedServiceName || 'Not available'}</span>
+                                                    </p>
+                                                    <p className="mt-1 text-[11px] font-black uppercase tracking-widest text-[#708aa0]">
+                                                        Service Tier: <span className="text-[#0b2d49]">{selectedServiceTier || 'Not specified'}</span>
                                                     </p>
 
                                                     {/* Original price (single line) */}
@@ -332,41 +459,59 @@ const VendorEventDetailsTab = () => {
                                         {event?.status === 'PENDING' ? (
                                             <div className="mt-auto pt-4 flex justify-end">
                                                 <div className="flex flex-col items-end gap-2">
-                                                    <div className="flex items-center justify-end gap-2 w-full">
-                                                        <h4 className="text-[10px] font-black uppercase tracking-widest text-[#708aa0]">Quote Price</h4>
-                                                        {isLocked && (
-                                                            <span className="text-[10px] font-black uppercase tracking-widest text-[#0b2d49]">
-                                                                ₹{(Number(service.price) || 0).toLocaleString()}
-                                                            </span>
-                                                        )}
+                                                    <div className="grid grid-cols-3 gap-2 w-full">
+                                                        <div className="rounded-xl border border-gray-100 bg-white px-3 py-2 text-right">
+                                                            <p className="text-[9px] font-black uppercase tracking-widest text-[#708aa0]">Selected Price</p>
+                                                            <p className="mt-1 text-[12px] font-black text-[#0b2d49]">₹{selectedPrice.toLocaleString()}</p>
+                                                        </div>
+                                                        <div className="rounded-xl border border-gray-100 bg-white px-3 py-2 text-right">
+                                                            <p className="text-[9px] font-black uppercase tracking-widest text-[#708aa0]">Commission</p>
+                                                            <p className="mt-1 text-[12px] font-black text-[#0b2d49]">
+                                                                {isLocked
+                                                                    ? `₹${commissionAmount.toLocaleString()}${commissionPercent > 0 ? ` (${commissionPercent}%)` : ''}`
+                                                                    : 'Calculated on lock'}
+                                                            </p>
+                                                        </div>
+                                                        <div className="rounded-xl border border-[#d7a444]/20 bg-[#d7a444]/10 px-3 py-2 text-right">
+                                                            <p className="text-[9px] font-black uppercase tracking-widest text-[#708aa0]">Total Price</p>
+                                                            <p className="mt-1 text-[12px] font-black text-[#0b2d49]">
+                                                                {isLocked ? `₹${totalLockedPrice.toLocaleString()}` : 'Will lock total'}
+                                                            </p>
+                                                        </div>
                                                     </div>
 
                                                     <div className="flex items-center justify-end gap-2 w-full">
-                                                        <div className="relative">
-                                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-[#708aa0]">₹</span>
+                                                        <div className="w-56">
                                                             <input
-                                                                type="number"
-                                                                value={service.price || ''}
-                                                                onChange={(e) => handleTempServiceChange?.(service.id, 'price', e.target.value)}
-                                                                disabled={isLocked}
-                                                                className={`border rounded-xl py-2 pl-7 pr-3 text-sm font-black focus:outline-none w-36 transition-colors ${
-                                                                    isLocked
-                                                                        ? 'bg-[#f8fafb] border-gray-100 text-[#708aa0] cursor-not-allowed'
-                                                                        : 'bg-white border-gray-100 text-[#0b2d49] focus:border-[#d7a444] placeholder:text-[#708aa0]/60'
+                                                                type="range"
+                                                                min={sliderMin}
+                                                                max={sliderMax}
+                                                                step="1"
+                                                                value={selectedPrice}
+                                                                onChange={(e) => handleTempServiceChange?.(service.id, 'price', Number(e.target.value))}
+                                                                disabled={isLocked || isLocking}
+                                                                className={`w-full accent-[#d7a444] ${
+                                                                    (isLocked || isLocking)
+                                                                        ? 'cursor-not-allowed opacity-70'
+                                                                        : 'cursor-pointer'
                                                                 }`}
-                                                                placeholder="Amount"
                                                             />
+                                                            <div className="mt-1 flex items-center justify-between text-[10px] font-black text-[#708aa0]">
+                                                                <span>₹{sliderMin.toLocaleString()}</span>
+                                                                <span>₹{sliderMax.toLocaleString()}</span>
+                                                            </div>
                                                         </div>
 
                                                         <button
-                                                            onClick={() => handleLockToggle(service.id, service.price)}
+                                                            onClick={() => handleLockToggle(service.id, selectedPrice)}
+                                                            disabled={isLocked || isLocking}
                                                             className={`flex items-center justify-center h-10 px-4 rounded-xl font-black text-[11px] uppercase tracking-wider transition-colors border whitespace-nowrap ${
                                                                 isLocked
                                                                     ? 'bg-[#d7a444] text-[#0b2d49] border-[#d7a444]'
                                                                     : 'bg-white text-[#708aa0] border-gray-100 hover:border-[#d7a444]/40 hover:text-[#0b2d49]'
-                                                            }`}
+                                                            } ${(isLocked || isLocking) ? 'cursor-not-allowed opacity-90' : ''}`}
                                                         >
-                                                            {isLocked ? 'Locked' : 'Lock Price'}
+                                                            {isLocked ? 'Locked' : (isLocking ? 'Locking...' : 'Lock Price')}
                                                         </button>
                                                     </div>
                                                 </div>
@@ -374,6 +519,12 @@ const VendorEventDetailsTab = () => {
                                         ) : (
                                             <div className="mt-auto pt-4 flex flex-wrap items-center justify-start gap-3">
                                                 <div className="px-5 py-2.5 bg-[#f8fafb] border border-gray-100 rounded-xl text-xs font-black text-[#0b2d49] uppercase tracking-widest flex flex-col gap-1 text-right">
+                                                    <span className="text-[#708aa0] text-[10px]">Locked Price</span>
+                                                    <span className="text-sm">₹{Number(service?.totalPrice || service?.price || 0).toLocaleString()}</span>
+                                                    <span className="text-[#708aa0] text-[10px] mt-1">Commission Price</span>
+                                                    <span className="text-sm">₹{Number(service?.commissionAmount || 0).toLocaleString()}</span>
+                                                    <span className="text-[#708aa0] text-[10px] mt-1">Quoted Price</span>
+                                                    <span className="text-sm">₹{Number(service?.quotedPrice || 0).toLocaleString()}</span>
                                                     <span className="text-[#708aa0] text-[10px]">Agreed Price</span>
                                                     <span className="text-sm">₹{service.price?.toLocaleString()}</span>
                                                 </div>
@@ -427,12 +578,6 @@ const VendorEventDetailsTab = () => {
                             </div>
                             <span className="truncate">{event.client.email}</span>
                         </a>
-                        <a href={`tel:${event.client.phone.replace(/[^0-9+]/g, '')}`} className="flex items-center gap-4 text-sm font-bold text-[#708aa0] hover:text-[#0b2d49] transition-colors group/link p-3 -mx-3 rounded-xl hover:bg-[#f8fafb]">
-                            <div className="w-10 h-10 rounded-xl bg-white border border-gray-100 shadow-sm flex items-center justify-center group-hover/link:text-[#d7a444] group-hover/link:border-[#d7a444]/20 transition-all">
-                                <BsClock />
-                            </div>
-                            {event.client.phone}
-                        </a>
                     </div>
 
                     <div className="mt-8">
@@ -465,7 +610,8 @@ const VendorEventDetailsTab = () => {
                                 </button>
                                 <button
                                     onClick={handleReject}
-                                    className="w-full py-4 bg-white border-2 border-red-50 text-red-500 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-50 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+                                    disabled={!allPricesLocked}
+                                    className={`w-full py-4 bg-white border-2 border-red-50 text-red-500 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-3 active:scale-[0.98] ${!allPricesLocked ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-50'}`}
                                 >
                                     <BsXCircle size={16} /> Decline
                                 </button>

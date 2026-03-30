@@ -1,35 +1,150 @@
-import React from 'react';
-import { BsPlus, BsTrash3, BsTicketPerforated, BsBoxSeam, BsCurrencyRupee, BsShieldCheck, BsShieldX } from "react-icons/bs";
+import React, { useEffect, useMemo, useState } from 'react';
+import { BsPlus, BsTrash3, BsTicketPerforated, BsBoxSeam, BsCurrencyRupee, BsShieldCheck } from "react-icons/bs";
+import { getInclusiveIstDayRange } from '../../../../utils/istDateTime';
+import { getTierDescriptors, getDayTierTotal, validateDayTierAllocations } from '../../../../utils/dayTierAllocation';
 
 const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
     const { tickets, totalCapacity, ticketType } = formData;
+    const scheduleDays = getInclusiveIstDayRange(formData.startDate, formData.endDate);
+    const firstDay = scheduleDays[0] || null;
+    const dayAllocations = formData.ticketDayAllocations && typeof formData.ticketDayAllocations === 'object'
+        ? formData.ticketDayAllocations
+        : {};
+    const dayTierAllocations = formData.ticketDayTierAllocations && typeof formData.ticketDayTierAllocations === 'object'
+        ? formData.ticketDayTierAllocations
+        : {};
+
+    const tierDescriptors = useMemo(() => getTierDescriptors(tickets), [tickets]);
+    const tierIds = useMemo(() => tierDescriptors.map((tier) => tier.id), [tierDescriptors]);
+    const [sameAsFirstDays, setSameAsFirstDays] = useState({});
 
     const totalAssigned = tickets.reduce((acc, t) => acc + (parseInt(t.quantity) || 0), 0);
-    const isCapacityMet = totalCapacity > 0 && totalAssigned === parseInt(totalCapacity);
+    const isCapacityMet = totalCapacity > 0 && totalAssigned === parseInt(totalCapacity, 10);
+
+    const allocationValidation = useMemo(() => validateDayTierAllocations({
+        days: scheduleDays,
+        tickets,
+        dayAllocations,
+        dayTierAllocations,
+    }), [scheduleDays, tickets, dayAllocations, dayTierAllocations]);
+
+    const getDayLabel = (day) => {
+        const d = new Date(`${day}T00:00:00+05:30`);
+        if (Number.isNaN(d.getTime())) return day;
+        return d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
+    };
+
+    useEffect(() => {
+        const validDays = new Set(scheduleDays.filter((day) => day !== firstDay));
+        setSameAsFirstDays((prev) => {
+            const next = {};
+            for (const [day, enabled] of Object.entries(prev || {})) {
+                if (validDays.has(day)) next[day] = Boolean(enabled);
+            }
+            const unchanged =
+                Object.keys(next).length === Object.keys(prev || {}).length &&
+                Object.keys(next).every((key) => Boolean(next[key]) === Boolean(prev[key]));
+            return unchanged ? prev : next;
+        });
+    }, [scheduleDays, firstDay]);
 
     const handleTypeChange = (type) => {
         if (type === 'free') {
-            // For free events, we provide one 'General Admission' tier automatically
             setFormData({
                 ...formData,
                 ticketType: 'free',
-                tickets: [{ id: Date.now(), name: "General Admission", price: 0, quantity: formData.totalCapacity || "" }]
+                tickets: [{ id: Date.now(), name: "General Admission", price: 0, quantity: formData.totalCapacity || "" }],
             });
-        } else {
-            setFormData({ ...formData, ticketType: 'paid' });
+            return;
         }
+        setFormData({ ...formData, ticketType: 'paid' });
     };
 
     const handleCapacityChange = (val) => {
-        const capacity = val === "" ? "" : parseInt(val);
+        const capacity = val === "" ? "" : parseInt(val, 10);
         const update = { ...formData, totalCapacity: capacity };
-
-        // If it's a free event, sync the automatic single tier's quantity
         if (formData.ticketType === 'free') {
             update.tickets = [{ ...formData.tickets[0], quantity: capacity, name: "General Admission", price: 0 }];
         }
-
         setFormData(update);
+    };
+
+    const handleDayAllocationChange = (day, rawValue) => {
+        const value = rawValue === '' ? '' : Math.max(0, parseInt(rawValue, 10) || 0);
+        const firstTierId = tierIds[0] || null;
+        const nextDayTier = {
+            ...(dayTierAllocations[day] && typeof dayTierAllocations[day] === 'object' ? dayTierAllocations[day] : {}),
+        };
+        if (ticketType === 'free' && firstTierId) {
+            nextDayTier[firstTierId] = value === '' ? '' : Number(value);
+        }
+
+        setFormData({
+            ...formData,
+            ticketDayAllocations: {
+                ...dayAllocations,
+                [day]: value,
+            },
+            ticketDayTierAllocations: {
+                ...dayTierAllocations,
+                [day]: nextDayTier,
+            },
+        });
+    };
+
+    const handleDayTierAllocationChange = (day, tierId, rawValue) => {
+        const value = rawValue === '' ? '' : Math.max(0, parseInt(rawValue, 10) || 0);
+        const nextDayEntry = {
+            ...(dayTierAllocations[day] && typeof dayTierAllocations[day] === 'object' ? dayTierAllocations[day] : {}),
+            [tierId]: value,
+        };
+        const nextDayTotal = getDayTierTotal(nextDayEntry, tierIds);
+
+        const nextTicketDayTierAllocations = {
+            ...dayTierAllocations,
+            [day]: nextDayEntry,
+        };
+        const nextTicketDayAllocations = {
+            ...dayAllocations,
+            [day]: nextDayTotal > 0 ? nextDayTotal : '',
+        };
+
+        if (day === firstDay && ticketType === 'paid') {
+            for (const [otherDay, enabled] of Object.entries(sameAsFirstDays)) {
+                if (!enabled) continue;
+                nextTicketDayTierAllocations[otherDay] = { ...nextDayEntry };
+                nextTicketDayAllocations[otherDay] = nextDayTotal > 0 ? nextDayTotal : '';
+            }
+        }
+
+        setFormData({
+            ...formData,
+            ticketDayAllocations: nextTicketDayAllocations,
+            ticketDayTierAllocations: nextTicketDayTierAllocations,
+        });
+    };
+
+    const handleToggleSameAsFirst = (day, enabled) => {
+        setSameAsFirstDays((prev) => ({ ...prev, [day]: enabled }));
+        if (!enabled || !firstDay || !dayTierAllocations[firstDay]) return;
+
+        const firstDayEntry = dayTierAllocations[firstDay] && typeof dayTierAllocations[firstDay] === 'object'
+            ? dayTierAllocations[firstDay]
+            : {};
+        const copiedEntry = { ...firstDayEntry };
+        const copiedTotal = getDayTierTotal(copiedEntry, tierIds);
+
+        setFormData({
+            ...formData,
+            ticketDayAllocations: {
+                ...dayAllocations,
+                [day]: copiedTotal > 0 ? copiedTotal : '',
+            },
+            ticketDayTierAllocations: {
+                ...dayTierAllocations,
+                [day]: copiedEntry,
+            },
+        });
     };
 
     return (
@@ -38,28 +153,21 @@ const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
 
             <div className="mb-12 relative flex flex-col md:flex-row md:items-end justify-between gap-8">
                 <div>
-                    <p className="text-[#088395] font-black uppercase tracking-[0.3em] text-[10px] mb-4">Step 03 — Ticket Management</p>
+                    <p className="text-[#088395] font-black uppercase tracking-[0.3em] text-[10px] mb-4">Step 03 - Ticket Management</p>
                     <h2 className="text-4xl md:text-5xl font-serif-premium text-[#09637E] italic leading-tight">Define value tiers.</h2>
                 </div>
 
-                {/* Ticket Type Toggle */}
                 <div className="flex bg-white/50 backdrop-blur-md p-1.5 rounded-2xl border border-[#09637E]/10 shadow-sm">
                     <button
                         onClick={() => handleTypeChange('paid')}
-                        className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 flex items-center gap-2 ${ticketType === 'paid'
-                            ? 'bg-[#09637E] text-white shadow-lg'
-                            : 'text-[#09637E]/40 hover:text-[#09637E]'
-                            }`}
+                        className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 flex items-center gap-2 ${ticketType === 'paid' ? 'bg-[#09637E] text-white shadow-lg' : 'text-[#09637E]/40 hover:text-[#09637E]'}`}
                     >
                         <BsCurrencyRupee />
                         Paid
                     </button>
                     <button
                         onClick={() => handleTypeChange('free')}
-                        className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 flex items-center gap-2 ${ticketType === 'free'
-                            ? 'bg-[#088395] text-white shadow-lg'
-                            : 'text-[#09637E]/40 hover:text-[#09637E]'
-                            }`}
+                        className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 flex items-center gap-2 ${ticketType === 'free' ? 'bg-[#088395] text-white shadow-lg' : 'text-[#09637E]/40 hover:text-[#09637E]'}`}
                     >
                         <BsShieldCheck />
                         Free
@@ -67,7 +175,6 @@ const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
                 </div>
             </div>
 
-            {/* Capacity Input & Progress Bar */}
             <div className="mb-12 bg-[#09637E] rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden group">
                 <div className="absolute right-0 top-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-32 -mt-32" />
 
@@ -95,22 +202,12 @@ const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
                         </div>
                         <div className="h-3 bg-white/10 rounded-full overflow-hidden p-0.5 border border-white/5">
                             <div
-                                className={`h-full rounded-full transition-all duration-700 ${totalAssigned > (totalCapacity || 0)
-                                    ? 'bg-red-400'
-                                    : isCapacityMet
-                                        ? 'bg-[#7AB2B2]'
-                                        : 'bg-[#088395]'
-                                    } shadow-[0_0_10px_rgba(122,178,178,0.3)]`}
+                                className={`h-full rounded-full transition-all duration-700 ${totalAssigned > (totalCapacity || 0) ? 'bg-red-400' : isCapacityMet ? 'bg-[#7AB2B2]' : 'bg-[#088395]'} shadow-[0_0_10px_rgba(122,178,178,0.3)]`}
                                 style={{ width: `${Math.min(100, (totalAssigned / (totalCapacity || 1)) * 100)}%` }}
                             />
                         </div>
-                        {totalAssigned > (totalCapacity || 0) && (
-                            <p className="text-[8px] text-red-300 font-bold uppercase tracking-widest animate-pulse">Capacity Over Limit</p>
-                        )}
-                        {totalCapacity > 0 && !isCapacityMet && totalAssigned < totalCapacity && (
-                            <p className="text-[8px] text-white/40 font-bold uppercase tracking-widest">
-                                {ticketType === 'free' ? 'Enter capacity to activate' : `Need ${totalCapacity - totalAssigned} more assigned`}
-                            </p>
+                        {ticketType === 'paid' && !allocationValidation.isValid && (
+                            <p className="text-[8px] text-amber-200 font-bold uppercase tracking-widest">Match day totals and tier totals</p>
                         )}
                     </div>
                 </div>
@@ -147,7 +244,7 @@ const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
                                 <div className="md:col-span-3">
                                     <label className="block text-[9px] font-black text-[#09637E]/40 uppercase tracking-[0.2em] mb-3">Entrance Fee</label>
                                     <div className="flex items-baseline gap-2 group/input">
-                                        <span className="text-[#088395] font-serif-premium italic text-2xl">₹</span>
+                                        <span className="text-[#088395] font-serif-premium italic text-2xl">Rs</span>
                                         <input
                                             type="number"
                                             value={ticket.price}
@@ -167,7 +264,7 @@ const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
                                             type="number"
                                             value={ticket.quantity}
                                             placeholder="Quantity"
-                                            onChange={(e) => onChange(ticket.id, 'quantity', e.target.value === "" ? "" : parseInt(e.target.value))}
+                                            onChange={(e) => onChange(ticket.id, 'quantity', e.target.value === "" ? "" : parseInt(e.target.value, 10))}
                                             onWheel={(e) => e.target.blur()}
                                             className="w-full bg-transparent text-2xl font-serif-premium italic text-[#09637E] placeholder-[#09637E]/20 outline-none border-b border-[#09637E]/10 pb-2 focus:border-[#088395] transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                         />
@@ -199,6 +296,97 @@ const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
                     </button>
                 </div>
             )}
+
+            <div className="mt-10 bg-white rounded-[2rem] p-6 border border-[#09637E]/10 shadow-lg">
+                <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-sm font-black uppercase tracking-[0.2em] text-[#09637E]/70">Tickets Per Day</h4>
+                    <span className={`text-[10px] font-black uppercase tracking-wider ${allocationValidation.isValid ? 'text-[#088395]' : 'text-[#09637E]/40'}`}>
+                        {allocationValidation.isValid ? 'Ready' : 'Pending'}
+                    </span>
+                </div>
+
+                {scheduleDays.length === 0 ? (
+                    <p className="text-[10px] font-semibold text-[#09637E]/50 uppercase tracking-wider">
+                        Set schedule dates in Step 5, then return here to enter day-wise tier allocations.
+                    </p>
+                ) : (
+                    <div className="space-y-3">
+                        {scheduleDays.map((day) => (
+                            <div key={day} className="rounded-xl border border-[#09637E]/10 p-3 bg-white/70">
+                                <div className="grid grid-cols-12 gap-2 items-center">
+                                    <div className="col-span-7 text-[#09637E] text-sm font-semibold">{getDayLabel(day)}</div>
+                                    <div className="col-span-5 text-right">
+                                        {ticketType === 'paid' ? (
+                                            <span className="text-base font-serif-premium italic text-[#09637E]">{allocationValidation.dayTotalByDay[day] || 0}</span>
+                                        ) : (
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max={totalCapacity || undefined}
+                                                value={dayAllocations[day] ?? ''}
+                                                onChange={(e) => handleDayAllocationChange(day, e.target.value)}
+                                                className="w-full bg-transparent text-base font-serif-premium italic text-[#09637E] outline-none border-b border-[#09637E]/15 pb-1 focus:border-[#088395] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                placeholder="Qty"
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+
+                                {ticketType === 'paid' && day !== firstDay && (
+                                    <div className="mt-2 flex justify-end">
+                                        <label className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-wider text-[#09637E]/60">
+                                            <input
+                                                type="checkbox"
+                                                checked={Boolean(sameAsFirstDays[day])}
+                                                onChange={(e) => handleToggleSameAsFirst(day, e.target.checked)}
+                                                className="accent-[#088395]"
+                                            />
+                                            Same as 1st day
+                                        </label>
+                                    </div>
+                                )}
+
+                                {ticketType === 'paid' && (
+                                    <div className="mt-2 space-y-1">
+                                        {tierDescriptors.map((tier) => (
+                                            <div key={`${day}-${tier.id}`} className="grid grid-cols-12 gap-2 items-center">
+                                                <div className="col-span-7 text-[11px] font-semibold text-[#09637E]/70 truncate" title={tier.name || 'Tier'}>
+                                                    {tier.name || 'Tier'}
+                                                </div>
+                                                <div className="col-span-5">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max={tier.quantity || undefined}
+                                                        disabled={Boolean(sameAsFirstDays[day]) && day !== firstDay}
+                                                        value={dayTierAllocations?.[day]?.[tier.id] ?? ''}
+                                                        onChange={(e) => handleDayTierAllocationChange(day, tier.id, e.target.value)}
+                                                        className="w-full bg-transparent text-sm font-serif-premium italic text-[#09637E] placeholder-[#09637E]/20 outline-none border-b border-[#09637E]/10 pb-1 focus:border-[#088395] disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                        placeholder="0"
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+
+                        {ticketType === 'paid' && tierDescriptors.length > 0 && (
+                            <div className="mt-2 border-t border-[#09637E]/10 pt-3 space-y-1">
+                                {tierDescriptors.map((tier) => (
+                                    <div key={`tier-total-${tier.id}`} className="flex items-center justify-between text-[11px]">
+                                        <span className="font-semibold text-[#09637E]/70 truncate max-w-[70%]">{tier.name || 'Tier'}</span>
+                                        <span className={`font-black ${allocationValidation.tierTotalById[tier.id] === allocationValidation.tierTargetById[tier.id] ? 'text-[#088395]' : 'text-red-500'}`}>
+                                            {allocationValidation.tierTotalById[tier.id] || 0} / {allocationValidation.tierTargetById[tier.id] || 0}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
         </div>
     );
 };

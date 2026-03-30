@@ -101,6 +101,51 @@ export const updateCommissionConfig = createAsyncThunk(
     }
 );
 
+export const fetchDemandPricingConfig = createAsyncThunk(
+    'admin/fetchDemandPricingConfig',
+    async (_, { dispatch, rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            const refreshToken = localStorage.getItem('refreshToken');
+            if (!accessToken && !refreshToken) return rejectWithValue('No access token found');
+
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/events/config/fees`, {
+                method: 'GET',
+            }, { dispatch, refreshAction: refreshAccessToken });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to fetch demand pricing config');
+
+            return data.data || data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const updateDemandPricingConfig = createAsyncThunk(
+    'admin/updateDemandPricingConfig',
+    async ({ demandPricingMultipliers }, { dispatch, rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            const refreshToken = localStorage.getItem('refreshToken');
+            if (!accessToken && !refreshToken) return rejectWithValue('No access token found');
+
+            const response = await fetchWithAuth(`${API_BASE_URL}/api/events/config/fees`, {
+                method: 'PATCH',
+                body: JSON.stringify({ demandPricingMultipliers }),
+            }, { dispatch, refreshAction: refreshAccessToken });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to update demand pricing config');
+
+            return data.data || data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
 export const blockTeamMember = createAsyncThunk(
     'admin/blockTeamMember',
     async (authId, { dispatch, rejectWithValue }) => {
@@ -962,6 +1007,13 @@ const initialState = {
     commissionUpdating: false,
     commissionError: null,
     commissionUpdateError: null,
+
+    // Demand pricing config
+    demandPricingConfig: null,
+    demandPricingLoading: false,
+    demandPricingUpdating: false,
+    demandPricingError: null,
+    demandPricingUpdateError: null,
 };
 
 const adminSlice = createSlice({
@@ -1421,6 +1473,32 @@ const adminSlice = createSlice({
             .addCase(updateCommissionConfig.rejected, (state, action) => {
                 state.commissionUpdating = false;
                 state.commissionUpdateError = action.payload;
+            })
+
+            // Demand pricing config
+            .addCase(fetchDemandPricingConfig.pending, (state) => {
+                state.demandPricingLoading = true;
+                state.demandPricingError = null;
+            })
+            .addCase(fetchDemandPricingConfig.fulfilled, (state, action) => {
+                state.demandPricingLoading = false;
+                state.demandPricingConfig = action.payload || null;
+            })
+            .addCase(fetchDemandPricingConfig.rejected, (state, action) => {
+                state.demandPricingLoading = false;
+                state.demandPricingError = action.payload;
+            })
+            .addCase(updateDemandPricingConfig.pending, (state) => {
+                state.demandPricingUpdating = true;
+                state.demandPricingUpdateError = null;
+            })
+            .addCase(updateDemandPricingConfig.fulfilled, (state, action) => {
+                state.demandPricingUpdating = false;
+                state.demandPricingConfig = action.payload || state.demandPricingConfig;
+            })
+            .addCase(updateDemandPricingConfig.rejected, (state, action) => {
+                state.demandPricingUpdating = false;
+                state.demandPricingUpdateError = action.payload;
             });
     },
 });

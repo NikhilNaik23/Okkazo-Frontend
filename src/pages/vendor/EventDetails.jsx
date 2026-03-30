@@ -18,6 +18,7 @@ import {
     acceptVendorEventRequest,
     fetchVendorEventRequestDetails,
     fetchVendorEventRequests,
+    lockVendorEventServicePrice,
     rejectVendorEventRequest,
     selectSelectedVendorEventRequest,
     selectSelectedVendorEventRequestError,
@@ -59,6 +60,45 @@ const formatEventDateLabel = (value) => {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return 'TBD';
     return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+const formatPublicDayLabel = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return 'TBD';
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        const d = new Date(`${raw}T12:00:00`);
+        if (!Number.isNaN(d.getTime())) {
+            return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+        }
+    }
+
+    return formatEventDateLabel(raw);
+};
+
+const getInclusiveDayCount = (startAt, endAt) => {
+    if (!startAt || !endAt) return 0;
+
+    const start = new Date(startAt);
+    const end = new Date(endAt);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+
+    const startUtc = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+    const endUtc = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
+    if (endUtc < startUtc) return 0;
+
+    return Math.floor((endUtc - startUtc) / (24 * 60 * 60 * 1000)) + 1;
+};
+
+const formatEventDateRangeLabel = (startAt, endAt) => {
+    const startLabel = formatEventDateLabel(startAt);
+    const endLabel = formatEventDateLabel(endAt || startAt);
+
+    if (startLabel === 'TBD' && endLabel === 'TBD') return 'TBD';
+    if (startLabel === 'TBD') return endLabel;
+    if (endLabel === 'TBD') return startLabel;
+    if (startLabel === endLabel) return startLabel;
+    return `${startLabel} - ${endLabel}`;
 };
 
 const EventDetails = () => {
@@ -217,6 +257,71 @@ const EventDetails = () => {
         setShowRejectModal(true);
     };
 
+    const handleLockServicePrice = async (serviceRowId, quotePrice) => {
+        const target = tempServices.find((s) => s.id === serviceRowId);
+        if (!target) {
+            throw new Error('Service not found');
+        }
+
+        const service = String(target.serviceKey || target.name || '').trim();
+        if (!service) {
+            throw new Error('Service is required');
+        }
+
+        const result = await dispatch(
+            lockVendorEventServicePrice({
+                eventId: id,
+                service,
+                price: Number(quotePrice),
+            })
+        ).unwrap();
+
+        const quotedPriceRaw = Number(result?.quotedPrice);
+        const quotedPrice = Number.isFinite(quotedPriceRaw) && quotedPriceRaw > 0
+            ? quotedPriceRaw
+            : Number(quotePrice);
+
+        const commissionPercentRaw = Number(result?.commissionPercent);
+        const commissionPercent = Number.isFinite(commissionPercentRaw) && commissionPercentRaw >= 0
+            ? commissionPercentRaw
+            : 0;
+
+        const commissionAmountRaw = Number(result?.commissionAmount);
+        const commissionAmount = Number.isFinite(commissionAmountRaw) && commissionAmountRaw >= 0
+            ? commissionAmountRaw
+            : 0;
+
+        const lockedPriceRaw = Number(result?.lockedPrice);
+        const lockedPrice = Number.isFinite(lockedPriceRaw) && lockedPriceRaw > 0
+            ? lockedPriceRaw
+            : Number(quotePrice);
+
+        const applyLockedPrice = (row) => {
+            if (row.id !== serviceRowId) return row;
+            return {
+                ...row,
+                price: lockedPrice,
+                quotedPrice,
+                totalPrice: lockedPrice,
+                commissionPercent,
+                commissionAmount,
+                isLocked: true,
+            };
+        };
+
+        setTempServices((prev) => prev.map(applyLockedPrice));
+        setServices((prev) => prev.map(applyLockedPrice));
+
+        dispatch(fetchVendorEventRequestDetails({ eventId: id }));
+
+        return {
+            lockedPrice,
+            quotedPrice,
+            commissionPercent,
+            commissionAmount,
+        };
+    };
+
     const handleConfirmReject = async () => {
         const trimmed = String(rejectReason || '').trim();
         if (!trimmed) {
@@ -329,6 +434,131 @@ const EventDetails = () => {
         const vendorItems = Array.isArray(selected.vendorItems) ? selected.vendorItems : [];
         const summaryStatus = selected.summary?.summaryStatus;
 
+        const categoryRaw = String(planning?.category || '').trim().toLowerCase();
+        const isPublicEvent = categoryRaw === 'public';
+        const publicDayCount = isPublicEvent
+            ? getInclusiveDayCount(planning?.schedule?.startAt, planning?.schedule?.endAt)
+            : 0;
+        const publicDateRangeLabel = isPublicEvent
+            ? formatEventDateRangeLabel(planning?.schedule?.startAt, planning?.schedule?.endAt)
+            : null;
+
+        const totalTickets = Number(planning?.tickets?.totalTickets || 0);
+        const guestCount = Number(planning?.guestCount || 0);
+        const paxCount = isPublicEvent
+            ? (totalTickets > 0 ? totalTickets : guestCount)
+            : guestCount;
+
+        const fallbackPublicTiers = Array.isArray(planning?.tickets?.tiers)
+            ? planning.tickets.tiers
+                .map((tier) => {
+                    const tierName = String(tier?.tierName || tier?.name || '').trim();
+                    const tierCountRaw = Number(tier?.ticketCount ?? tier?.quantity ?? 0);
+                    const tierCount = Number.isFinite(tierCountRaw) && tierCountRaw > 0 ? tierCountRaw : 0;
+                    if (!tierName || tierCount <= 0) return null;
+                    return { tierName, ticketCount: tierCount };
+                })
+                .filter(Boolean)
+            : [];
+
+        const parsedDayAllocationRows = (() => {
+            const arraySource = [
+                planning?.tickets?.dayWiseAllocations,
+                planning?.tickets?.ticketDayWiseAllocations,
+                planning?.ticketDayWiseAllocations,
+            ].find(Array.isArray);
+
+            if (Array.isArray(arraySource) && arraySource.length > 0) {
+                return arraySource;
+            }
+
+            const dayAllocationMap = planning?.ticketDayAllocations && typeof planning.ticketDayAllocations === 'object'
+                ? planning.ticketDayAllocations
+                : null;
+            const dayTierMap = planning?.ticketDayTierAllocations && typeof planning.ticketDayTierAllocations === 'object'
+                ? planning.ticketDayTierAllocations
+                : null;
+
+            if (!dayAllocationMap || Object.keys(dayAllocationMap).length === 0) {
+                return [];
+            }
+
+            return Object.keys(dayAllocationMap)
+                .sort()
+                .map((dayKey) => {
+                    const tierObj = dayTierMap && dayTierMap[dayKey] && typeof dayTierMap[dayKey] === 'object'
+                        ? dayTierMap[dayKey]
+                        : null;
+
+                    const tierBreakdown = tierObj
+                        ? Object.entries(tierObj)
+                            .map(([tierName, count]) => {
+                                const tierCountRaw = Number(count || 0);
+                                const tierCount = Number.isFinite(tierCountRaw) && tierCountRaw > 0 ? tierCountRaw : 0;
+                                const safeName = String(tierName || '').trim();
+                                if (!safeName || tierCount <= 0) return null;
+                                return { tierName: safeName, ticketCount: tierCount };
+                            })
+                            .filter(Boolean)
+                        : [];
+
+                    return {
+                        day: dayKey,
+                        ticketCount: Number(dayAllocationMap?.[dayKey] || 0),
+                        tierBreakdown,
+                    };
+                });
+        })();
+
+        const publicTicketDayAllocationsFromRows = isPublicEvent && parsedDayAllocationRows.length > 0
+            ? parsedDayAllocationRows
+                .map((row) => {
+                    const day = String(row?.day || '').trim();
+                    const ticketCountRaw = Number(row?.ticketCount || 0);
+                    const ticketCount = Number.isFinite(ticketCountRaw) && ticketCountRaw > 0 ? ticketCountRaw : 0;
+
+                    const tierBreakdown = Array.isArray(row?.tierBreakdown) && row.tierBreakdown.length > 0
+                        ? row.tierBreakdown
+                            .map((tier) => {
+                                const tierName = String(tier?.tierName || '').trim();
+                                const tierCountRaw = Number(tier?.ticketCount || 0);
+                                const tierCount = Number.isFinite(tierCountRaw) && tierCountRaw > 0 ? tierCountRaw : 0;
+                                if (!tierName || tierCount <= 0) return null;
+                                return { tierName, ticketCount: tierCount };
+                            })
+                            .filter(Boolean)
+                        : fallbackPublicTiers;
+
+                    if (!day && ticketCount <= 0 && tierBreakdown.length === 0) return null;
+
+                    return {
+                        day,
+                        dayLabel: formatPublicDayLabel(day),
+                        ticketCount,
+                        tiers: tierBreakdown,
+                    };
+                })
+                .filter(Boolean)
+            : [];
+
+        const fallbackTotalTickets = (() => {
+            const byTotal = Number(totalTickets);
+            if (Number.isFinite(byTotal) && byTotal > 0) return byTotal;
+            const byTiers = fallbackPublicTiers.reduce((sum, tier) => sum + Number(tier?.ticketCount || 0), 0);
+            return Number.isFinite(byTiers) && byTiers > 0 ? byTiers : 0;
+        })();
+
+        const publicTicketDayAllocations = publicTicketDayAllocationsFromRows.length > 0
+            ? publicTicketDayAllocationsFromRows
+            : (isPublicEvent
+                ? [{
+                    day: null,
+                    dayLabel: publicDateRangeLabel || 'TBD',
+                    ticketCount: fallbackTotalTickets,
+                    tiers: fallbackPublicTiers,
+                }]
+                : []);
+
         const nextStatus = summaryStatus === 'ACCEPTED'
             ? 'CONFIRMED'
             : summaryStatus === 'REJECTED'
@@ -414,27 +644,124 @@ const EventDetails = () => {
             })
             .filter((x) => x && (x.description || x.signedAmount !== 0));
 
+        const previousRows = Array.isArray(tempServices) && tempServices.length > 0
+            ? tempServices
+            : (Array.isArray(services) ? services : []);
+
+        const previousByServiceCompositeKey = new Map(
+            previousRows.map((row) => {
+                const key = `${String(row?.serviceKey || '').trim().toLowerCase()}::${String(row?.serviceId || '').trim()}`;
+                return [key, row];
+            })
+        );
+
         const nextRequestedServices = vendorItems.map((v, idx) => {
             const serviceId = String(v?.serviceId || '').trim();
+            const serviceKey = String(v?.service || '').trim();
+            const previousRow = previousByServiceCompositeKey.get(`${serviceKey.toLowerCase()}::${serviceId}`)
+                || previousByServiceCompositeKey.get(`${serviceKey.toLowerCase()}::`)
+                || null;
             const serviceDoc =
                 myServices.find((s) => String(s?._id) === String(serviceId)) ||
                 publicServicesById?.[serviceId] ||
                 null;
 
+            const resolvedServiceName =
+                String(serviceDoc?.name || '').trim() ||
+                String(v?.serviceName || '').trim() ||
+                String(v?.service || '').trim() ||
+                'Service';
+
+            const resolvedServiceTier =
+                String(serviceDoc?.tier || '').trim() ||
+                String(v?.serviceTier || '').trim() ||
+                null;
+
             const min = Number(v?.servicePrice?.min || 0);
             const max = Number(v?.servicePrice?.max || 0);
+            const explicitLocked = Boolean(v?.priceLocked);
+            const isLocked = explicitLocked;
+
+            const previousLockedPrice = Number(previousRow?.totalPrice || previousRow?.price || 0);
+
+            const quotedPriceRaw = Number(v?.vendorQuotedPrice);
+            const previousQuotedPrice = Number(previousRow?.quotedPrice || 0);
+            let quotedPrice = Number.isFinite(quotedPriceRaw) && quotedPriceRaw > 0
+                ? quotedPriceRaw
+                : (Number.isFinite(previousQuotedPrice) && previousQuotedPrice > 0 ? previousQuotedPrice : 0);
+
+            const commissionAmountRaw = Number(v?.commissionAmount);
+            const previousCommissionAmount = Number(previousRow?.commissionAmount || 0);
+            let commissionAmount = Number.isFinite(commissionAmountRaw) && commissionAmountRaw >= 0
+                ? commissionAmountRaw
+                : (Number.isFinite(previousCommissionAmount) && previousCommissionAmount >= 0 ? previousCommissionAmount : 0);
+
+            const commissionPercentRaw = Number(v?.commissionPercent);
+            const previousCommissionPercent = Number(previousRow?.commissionPercent || 0);
+            let commissionPercent = Number.isFinite(commissionPercentRaw) && commissionPercentRaw >= 0
+                ? commissionPercentRaw
+                : (Number.isFinite(previousCommissionPercent) && previousCommissionPercent >= 0 ? previousCommissionPercent : 0);
+
+            let lockedPrice = 0;
+            if (quotedPrice > 0 && commissionAmount >= 0) {
+                lockedPrice = Number((quotedPrice + commissionAmount).toFixed(2));
+            } else if (Number.isFinite(previousLockedPrice) && previousLockedPrice > 0) {
+                lockedPrice = previousLockedPrice;
+            } else if (min > 0 && min === max) {
+                // Legacy fallback for older rows where lock used to overwrite min/max.
+                lockedPrice = min;
+            }
+
+            if ((!quotedPrice || quotedPrice <= 0) && lockedPrice > 0) {
+                if (commissionAmount > 0 && commissionAmount < lockedPrice) {
+                    quotedPrice = Math.max(0, lockedPrice - commissionAmount);
+                } else if (commissionPercent > 0) {
+                    quotedPrice = Number((lockedPrice / (1 + (commissionPercent / 100))).toFixed(2));
+                }
+            }
+
+            if ((commissionAmount <= 0 || !Number.isFinite(commissionAmount)) && lockedPrice > 0 && quotedPrice > 0) {
+                commissionAmount = Math.max(0, lockedPrice - quotedPrice);
+            }
+
+            if ((commissionPercent <= 0 || !Number.isFinite(commissionPercent)) && quotedPrice > 0 && commissionAmount > 0) {
+                commissionPercent = Number(((commissionAmount / quotedPrice) * 100).toFixed(2));
+            }
+
+            const totalPrice = isLocked
+                ? (lockedPrice > 0 ? lockedPrice : (quotedPrice + commissionAmount))
+                : 0;
+
+            const quoteCap = min > 0 && max > min
+                ? Number((Math.min(max, min * 1.25)).toFixed(2))
+                : max;
+            const defaultQuotePrice = min > 0 ? min : Number(serviceDoc?.price || 0);
+
+            const qtyRaw = Number(v?.pricingQuantity);
+            const qty = Number.isFinite(qtyRaw) && qtyRaw > 0
+                ? qtyRaw
+                : (Number(previousRow?.qty || 1) || 1);
 
             return {
                 id: idx + 1,
+                serviceKey,
                 serviceId,
-                name: serviceDoc?.name || v?.service || 'Service',
+                name: resolvedServiceName,
+                serviceName: resolvedServiceName,
+                serviceTier: resolvedServiceTier,
                 details: v?.status === 'REJECTED'
                     ? `Rejected: ${v?.rejectionReason || 'No reason provided'}`
                     : (serviceDoc?.description || 'Service request for this event.'),
-                price: min || Number(serviceDoc?.price || 0),
-                maxBudget: max,
+                price: isLocked ? totalPrice : (quotedPrice > 0 ? quotedPrice : defaultQuotePrice),
+                quotedPrice,
+                totalPrice,
+                commissionPercent,
+                commissionAmount,
+                minBudget: min,
+                maxBudget: quoteCap > 0 ? quoteCap : max,
                 basePrice: Number(serviceDoc?.price || 0),
-                qty: 1,
+                qty,
+                isLocked,
                 fullService: serviceDoc,
             };
         });
@@ -445,9 +772,14 @@ const EventDetails = () => {
                 id: selected.eventId || prev.id,
                 title: planning.eventTitle || prev.title,
                 status: nextStatus,
-                date: formatEventDateLabel(planning.eventDate || planning.schedule?.startAt) || prev.date,
+                date: isPublicEvent
+                    ? (publicDateRangeLabel || prev.date)
+                    : (formatEventDateLabel(planning.eventDate || planning.schedule?.startAt) || prev.date),
                 time: planning.eventTime ? `${planning.eventTime} - TBD` : prev.time,
-                pax: planning.guestCount ?? prev.pax,
+                pax: paxCount > 0 ? paxCount : prev.pax,
+                isPublic: isPublicEvent,
+                publicDayCount,
+                publicTicketDayAllocations,
                 category: planning.eventType || planning.category || prev.category,
                 location: planning.location?.name || prev.location,
                 description: planning.eventDescription || prev.description,
@@ -479,9 +811,18 @@ const EventDetails = () => {
     };
 
     const handleTempServiceChange = (id, field, value) => {
-        setTempServices(prev => prev.map(s =>
-            s.id === id ? { ...s, [field]: parseFloat(value) || 0 } : s
-        ));
+        const nextValue = parseFloat(value) || 0;
+        setTempServices(prev => prev.map((s) => {
+            if (s.id !== id) return s;
+            if (field === 'price') {
+                return {
+                    ...s,
+                    price: nextValue,
+                    quotedPrice: nextValue,
+                };
+            }
+            return { ...s, [field]: nextValue };
+        }));
     };
 
     const calculateSubtotal = () => services.reduce((acc, curr) => acc + (curr.price * curr.qty), 0);
@@ -622,6 +963,7 @@ const EventDetails = () => {
         total,
         handleAccept,
         handleReject,
+        handleLockServicePrice,
         handleUpdateQuotes,
         handleTempServiceChange,
         handlePrint,

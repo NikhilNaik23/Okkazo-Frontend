@@ -12,7 +12,6 @@ import {
 import {
     fetchPromotionsConfig,
     selectPromotePackages,
-    selectPromotionsConfigStatus,
 } from '../../../store/slices/promotionsConfigSlice';
 
 // ─── Load Razorpay once ───────────────────────────────────────────────────────
@@ -94,7 +93,6 @@ const FlowProgress = ({ activeStep, error }) => (
 // existingPayment: { eventId: string, amount?: number, eventTitle?: string }
 const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaymentSuccess, existingPayment = null }) => {
     const dispatch = useDispatch();
-    const promotionsStatus = useSelector(selectPromotionsConfigStatus);
     const promotePackages = useSelector(selectPromotePackages);
 
     const [flowActive, setFlowActive]   = useState(false);
@@ -187,6 +185,15 @@ const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaym
             return;
         }
         const { razorpayOrderId: rzpOrderId, amount, currency, keyId: rzpKeyId } = orderResult.payload;
+        const normalizedOrderId = String(rzpOrderId || '').trim();
+        const normalizedKeyId = String(rzpKeyId || '').trim();
+        const normalizedAmount = Number(amount);
+
+        if (!normalizedOrderId || !normalizedKeyId || !Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+            setFlowError('Invalid payment order response. Please retry. If the issue persists, ask support to verify RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET in order-service.');
+            setFlowActive(false);
+            return;
+        }
 
         // ── 3. Load Razorpay SDK & open popup ────────────────────────────────
         setActiveStep('razor');
@@ -199,12 +206,12 @@ const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaym
 
         await new Promise((resolve) => {
             const options = {
-                key: rzpKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
-                amount,
+                key: normalizedKeyId,
+                amount: normalizedAmount,
                 currency: currency || 'INR',
                 name: 'Okkazo',
                 description: `Platform Fee — ${formData.eventName || 'Promote Event'}`,
-                order_id: rzpOrderId,
+                order_id: normalizedOrderId,
                 theme: { color: '#09637E' },
                 modal: {
                     ondismiss: () => {
@@ -238,8 +245,31 @@ const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaym
                 },
             };
 
-            const rzp = new window.Razorpay(options);
-            rzp.open();
+            try {
+                if (!window.Razorpay) {
+                    setFlowError('Payment gateway is not available. Please refresh and try again.');
+                    setFlowActive(false);
+                    resolve();
+                    return;
+                }
+
+                const rzp = new window.Razorpay(options);
+
+                if (typeof rzp?.on === 'function') {
+                    rzp.on('payment.failed', (err) => {
+                        const desc = err?.error?.description || err?.error?.reason || 'Payment failed. Please try again.';
+                        setFlowError(desc);
+                        setFlowActive(false);
+                        resolve();
+                    });
+                }
+
+                rzp.open();
+            } catch (e) {
+                setFlowError(e?.message || 'Unable to open payment gateway. Please try again.');
+                setFlowActive(false);
+                resolve();
+            }
         });
     }, [dispatch, formData, finalTotal, savedEventId, handlePaymentSuccess, isExistingPayment, existingPayment]);
 

@@ -1,11 +1,10 @@
 import React from 'react';
 import { BsCheck2 } from "react-icons/bs";
+import { toIstDateTimeLocalInput } from '../../../utils/istDateTime';
 
 const EventDetailsForm = ({ formData, setFormData }) => {
-    // Get current date string in format YYYY-MM-DDTHH:mm for min attribute
-    const now = new Date();
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    const minDate = now.toISOString().slice(0, 16);
+    // Keep datetime-local constraints pinned to IST.
+    const minDate = toIstDateTimeLocalInput(new Date()) || '';
 
     return (
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">

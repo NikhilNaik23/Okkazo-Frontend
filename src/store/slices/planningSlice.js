@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { fetchWithAuth } from '../../utils/apiHandler';
 import { refreshAccessToken } from './authSlice';
+import { getInclusiveIstDayRange, toIstIsoString } from '../../utils/istDateTime';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -44,15 +45,7 @@ const mapPromotions = (promotions = {}) => {
 };
 
 const toIso = (value) => {
-    if (!value) return null;
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return null;
-    
-    // To prevent the "shifting day" issue when converting to UTC (GMT) for payload,
-    // we format the ISO string using local time components. This ensures that 
-    // March 25 00:00 IST stays "2026-03-25" in the payload string without -1 day shift.
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.000Z`;
+    return toIstIsoString(value);
 };
 
 /**
@@ -108,6 +101,13 @@ const buildPublicFormData = (formData, authState) => {
         (scheduleStart
             ? toIso(new Date(new Date(scheduleStart).getTime() - 60 * 1000))
             : null);
+    const ticketType = (formData.ticketType || 'paid').toLowerCase() === 'free' ? 'free' : 'paid';
+    const ticketDayAllocations = formData.ticketDayAllocations && typeof formData.ticketDayAllocations === 'object'
+        ? formData.ticketDayAllocations
+        : {};
+    const ticketDayTierAllocations = formData.ticketDayTierAllocations && typeof formData.ticketDayTierAllocations === 'object'
+        ? formData.ticketDayTierAllocations
+        : {};
 
     const tiers = (formData.tickets || [])
         .filter((t) => t && t.name && Number(t.quantity) > 0)
@@ -117,7 +117,32 @@ const buildPublicFormData = (formData, authState) => {
             ticketCount: Number(t.quantity),
         }));
 
-    const ticketType = (formData.ticketType || 'paid').toLowerCase() === 'free' ? 'free' : 'paid';
+    const tierNamesById = Object.fromEntries(
+        (formData.tickets || [])
+            .map((t) => ({ id: String(t?.id ?? ''), name: String(t?.name || '').trim() }))
+            .filter((t) => t.id && t.name)
+            .map((t) => [t.id, t.name])
+    );
+
+    const dayWiseAllocations = getInclusiveIstDayRange(scheduleStart, scheduleEnd).map((day) => {
+        const parsed = parseInt(ticketDayAllocations[day], 10);
+        const dayCount = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+
+        const tierBreakdown = ticketType === 'paid'
+            ? Object.entries(ticketDayTierAllocations?.[day] || {})
+                .map(([tierId, ticketCount]) => ({
+                    tierName: tierNamesById[String(tierId)] || '',
+                    ticketCount: Math.max(0, parseInt(ticketCount, 10) || 0),
+                }))
+                .filter((row) => row.tierName)
+            : [];
+
+        return {
+            day,
+            ticketCount: dayCount,
+            tierBreakdown,
+        };
+    });
 
     const jsonPayload = {
         authId:
@@ -151,6 +176,7 @@ const buildPublicFormData = (formData, authState) => {
             totalTickets: Number(formData.totalCapacity),
             ticketType,
             tiers: ticketType === 'paid' ? tiers : [],
+            dayWiseAllocations,
         },
         promotionType: mapPromotions(formData.promotions),
     };

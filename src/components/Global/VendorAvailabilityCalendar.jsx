@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     BsChevronLeft,
@@ -23,6 +24,29 @@ const safeJson = async (response) => {
     }
 };
 
+const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const toDayKey = (value) => {
+    if (!value) return null;
+
+    const raw = String(value).trim();
+    if (!raw) return null;
+
+    if (DAY_KEY_RE.test(raw)) return raw;
+
+    // Preserve the explicit day in ISO-like strings to avoid timezone date shifting.
+    const isoDay = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (isoDay?.[1]) return isoDay[1];
+
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return null;
+
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+};
+
 const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -30,6 +54,7 @@ const MotionDiv = motion.div;
 
 const VendorAvailabilityCalendar = ({ compact = false }) => {
     const dispatch = useDispatch();
+    const navigate = useNavigate();
     const today = new Date();
     const [currentMonth, setCurrentMonth] = useState(today.getMonth());
     const [currentYear, setCurrentYear] = useState(today.getFullYear());
@@ -50,30 +75,41 @@ const VendorAvailabilityCalendar = ({ compact = false }) => {
         const run = async () => {
             try {
                 const qs = new URLSearchParams({ from, to });
-                const response = await fetchWithAuth(
+                const [availabilityResponse, requestsResponse] = await Promise.all([
+                    fetchWithAuth(
                     `${API_BASE_URL}/api/vendor/me/availability?${qs.toString()}`,
                     { method: 'GET' },
                     { dispatch, refreshAction: refreshAccessToken }
-                );
+                    ),
+                    fetchWithAuth(
+                        `${API_BASE_URL}/api/events/vendor/requests`,
+                        { method: 'GET' },
+                        { dispatch, refreshAction: refreshAccessToken }
+                    ),
+                ]);
 
-                const data = await safeJson(response);
-                if (!response.ok || !data?.success) {
-                    throw new Error(data?.message || 'Failed to load availability');
+                const availabilityData = await safeJson(availabilityResponse);
+                if (!availabilityResponse.ok || !availabilityData?.success) {
+                    throw new Error(availabilityData?.message || 'Failed to load availability');
                 }
 
-                const unavailable = Array.isArray(data?.data?.unavailable) ? data.data.unavailable : [];
+                const requestsData = await safeJson(requestsResponse);
+
+                const unavailable = Array.isArray(availabilityData?.data?.unavailable) ? availabilityData.data.unavailable : [];
                 const nextBooked = {};
                 const nextBlocked = {};
 
                 unavailable.forEach((item) => {
-                    const day = item?.day;
+                    const day = toDayKey(item?.day);
                     if (!day) return;
 
                     const source = String(item?.source || '').toUpperCase();
                     if (source === 'BOOKING') {
+                        const eventId = String(item?.sourceId || '').trim();
                         nextBooked[day] = {
                             type: 'event',
-                            label: item?.reason || 'Booked',
+                            label: item?.reason || (eventId ? `Event ${eventId.slice(0, 8)}...` : 'Booked'),
+                            eventId: eventId || null,
                             color: '#0b2d49',
                         };
                         return;
@@ -81,6 +117,30 @@ const VendorAvailabilityCalendar = ({ compact = false }) => {
 
                     if (source === 'MANUAL' && !nextBooked[day]) {
                         nextBlocked[day] = { reason: item?.reason || 'Not available' };
+                    }
+                });
+
+                // Fallback source: confirmed booked events list (ensures accepted/confirmed events are visible on calendar).
+                const requests = Array.isArray(requestsData?.data?.requests) ? requestsData.data.requests : [];
+                requests.forEach((row) => {
+                    const items = Array.isArray(row?.vendorItems) ? row.vendorItems : [];
+                    const hasRejected = items.some((v) => String(v?.status || '').trim().toUpperCase() === 'REJECTED');
+                    const isPending = items.some((v) => String(v?.status || '').trim().toUpperCase() === 'YET_TO_SELECT');
+                    const isConfirmed = !hasRejected && !isPending;
+                    if (!isConfirmed) return;
+
+                    const day = toDayKey(row?.eventDate);
+                    if (!day) return;
+                    if (day < from || day > to) return;
+
+                    if (!nextBooked[day]) {
+                        const eventId = String(row?.eventId || '').trim();
+                        nextBooked[day] = {
+                            type: 'event',
+                            label: String(row?.eventTitle || 'Booked').trim() || 'Booked',
+                            eventId: eventId || null,
+                            color: '#0b2d49',
+                        };
                     }
                 });
 
@@ -136,7 +196,14 @@ const VendorAvailabilityCalendar = ({ compact = false }) => {
     const handleDateClick = async (dateStr) => {
         if (!dateStr || isPast(dateStr)) return;
         if (bookedDates[dateStr]) {
-            toast(`📅 ${bookedDates[dateStr].label}`, { style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' } });
+            const booked = bookedDates[dateStr];
+            const eventId = String(booked?.eventId || '').trim();
+            if (eventId) {
+                navigate(`/vendor/event/${encodeURIComponent(eventId)}/details`);
+                return;
+            }
+
+            toast(`📅 ${booked.label}`, { style: { borderRadius: '16px', background: '#0b2d49', color: '#fff', fontWeight: 'bold' } });
             return;
         }
         if (blockedDates[dateStr]) {
@@ -199,7 +266,8 @@ const VendorAvailabilityCalendar = ({ compact = false }) => {
     const upcomingEvents = useMemo(() => {
         const seen = {};
         return Object.entries(bookedDates).filter(([d]) => !isPast(d)).reduce((acc, [, info]) => {
-            if (!seen[info.label]) { seen[info.label] = true; acc.push(info); }
+            const key = String(info?.eventId || info?.label || '').trim() || `fallback-${acc.length}`;
+            if (!seen[key]) { seen[key] = true; acc.push(info); }
             return acc;
         }, []).slice(0, 4);
     }, [bookedDates, isPast]);

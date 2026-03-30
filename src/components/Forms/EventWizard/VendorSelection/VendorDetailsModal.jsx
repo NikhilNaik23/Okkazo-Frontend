@@ -5,8 +5,17 @@ import { BsGlobe, BsTelephone, BsEnvelope, BsInstagram } from 'react-icons/bs';
 import { MdLocationOn } from 'react-icons/md';
 import ReviewsTab from './ReviewsTab';
 import { vendorHighlights } from '../../../../data/vendorSelectionData';
+import { inferPricingUnit, resolveServicePricingModel } from '../../../../utils/pricing';
 
-const MAX_PRICE_MULTIPLIER = 1.5;
+const toPositiveNumber = (value, fallback) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
+const toNonNegativeNumber = (value, fallback = 0) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? n : fallback;
+};
 
 const VendorDetailsModal = ({
     vendor,
@@ -17,10 +26,12 @@ const VendorDetailsModal = ({
     guestCount = 0,
     attendeeCount: attendeeCountProp,
     attendeeLabel: attendeeLabelProp,
+    eventDayCount = 1,
     mode,
 }) => {
     const [activeTab, setActiveTab] = React.useState('Overview');
     const [expandedPackageId, setExpandedPackageId] = React.useState(null);
+    const [packageQuantityById, setPackageQuantityById] = React.useState({});
 
     const isVenueServiceMode = mode === 'venue-service';
 
@@ -28,6 +39,7 @@ const VendorDetailsModal = ({
     const attendeeCount = Number.isFinite(attendeeCountRaw) ? attendeeCountRaw : 0;
     const attendeeLabel = attendeeLabelProp || 'Guests';
     const attendeeCountForPricing = Math.max(1, attendeeCount || 0);
+    const normalizedEventDayCount = Math.max(1, Number(eventDayCount || 1));
 
     const currentPackages = Array.isArray(vendor?.services) ? vendor.services : [];
     const expandedPackage = currentPackages.find(p => (p.serviceId || p.id) === expandedPackageId);
@@ -35,6 +47,8 @@ const VendorDetailsModal = ({
     React.useEffect(() => {
         if (!vendor) return;
         setActiveTab('Overview');
+        setExpandedPackageId(null);
+        setPackageQuantityById({});
     }, [vendor]);
 
     React.useEffect(() => {
@@ -46,13 +60,111 @@ const VendorDetailsModal = ({
 
     if (!vendor) return null;
 
-    const priceMin = (vendor.priceMin || 0) * priceMultiplier;
-    const priceMax = (vendor.priceMax || Math.round((vendor.priceMin || 0) * MAX_PRICE_MULTIPLIER)) * priceMultiplier;
-
-    const isPerPlate = !isVenueServiceMode && (
-        String(vendor.category || '').toLowerCase().includes('catering') ||
-        String(vendor.categoryId || '').toLowerCase().includes('catering')
+    const effectiveMinMultiplier = toPositiveNumber(vendor?.priceMultiplier, toPositiveNumber(priceMultiplier, 1));
+    const derivedAbsoluteMax = effectiveMinMultiplier * toPositiveNumber(vendor?.maxPriceMultiplier, 1);
+    const effectiveAbsoluteMaxMultiplier = Math.max(
+        effectiveMinMultiplier,
+        toPositiveNumber(vendor?.absoluteMaxMultiplier, derivedAbsoluteMax)
     );
+    const relativeMaxMultiplier = effectiveAbsoluteMaxMultiplier / effectiveMinMultiplier;
+
+    const buildSelectedVendorPayload = ({
+        sourceVendor,
+        unitPrice,
+        pricingUnit,
+        pricingQuantity = null,
+        pricingQuantityUnit = null,
+        selectedPackage = null,
+    }) => {
+        const safeUnitPrice = toNonNegativeNumber(unitPrice, 0);
+        const baseUnitPrice = safeUnitPrice / effectiveMinMultiplier;
+        const basePriceMin = baseUnitPrice;
+        const basePriceMax = baseUnitPrice;
+
+        const qty = Number(pricingQuantity);
+        const normalizedQuantity = Number.isFinite(qty) && qty > 0 ? qty : null;
+
+        return {
+            ...sourceVendor,
+            pricingUnit,
+            ...(normalizedQuantity != null ? { pricingQuantity: normalizedQuantity } : {}),
+            ...(pricingQuantityUnit ? { pricingQuantityUnit } : {}),
+            baseUnitPrice,
+            basePriceMin,
+            basePriceMax,
+            unitPrice: safeUnitPrice,
+            priceMin: safeUnitPrice,
+            priceMax: Math.round(safeUnitPrice * relativeMaxMultiplier),
+            priceMultiplier: effectiveMinMultiplier,
+            absoluteMaxMultiplier: effectiveAbsoluteMaxMultiplier,
+            maxPriceMultiplier: relativeMaxMultiplier,
+            ...(selectedPackage ? { selectedPackage } : {}),
+        };
+    };
+
+    const getPackageUnitPrice = (pkg) => {
+        const direct = Number(pkg?.price);
+        if (Number.isFinite(direct) && direct >= 0) return direct;
+
+        const base = Number(pkg?.basePrice);
+        if (Number.isFinite(base) && base >= 0) {
+            return Math.round(base * effectiveMinMultiplier);
+        }
+
+        return 0;
+    };
+
+    const inferredPricingUnit = vendor?.pricingUnit || inferPricingUnit({
+        serviceLabel: vendor?.category,
+        serviceCategory: vendor?.category,
+        categoryId: vendor?.categoryId,
+    });
+    const isPerPlate = String(inferredPricingUnit || '').toUpperCase() === 'PER_PLATE';
+    const isPerPerson = String(inferredPricingUnit || '').toUpperCase() === 'PER_PERSON';
+    const isPerKg = String(inferredPricingUnit || '').toUpperCase() === 'PER_KG';
+    const isPerHundredUnits = String(inferredPricingUnit || '').toUpperCase() === 'PER_100_UNITS';
+    const pricingModel = resolveServicePricingModel({
+        serviceLabel: vendor?.category,
+        serviceCategory: vendor?.category,
+        categoryId: vendor?.categoryId,
+        pricingUnit: inferredPricingUnit,
+    });
+    const isPerAttendeePackagePricing = !isVenueServiceMode && pricingModel === 'per_attendee';
+    const quantityForPricing = isPerAttendeePackagePricing
+        ? attendeeCountForPricing
+        : (pricingModel === 'per_day' ? normalizedEventDayCount : 1);
+    const packageUnitLabel = isPerPlate
+        ? 'Per Plate'
+        : (isPerPerson
+            ? 'Per Person'
+            : (isPerKg
+                ? 'Per Kg'
+                : (isPerHundredUnits ? 'Per 100 Units' : 'Event/Day')));
+    const selectionPricingUnit = isPerPlate
+        ? 'PER_PLATE'
+        : (isPerPerson
+            ? 'PER_PERSON'
+            : (isPerKg
+                ? 'PER_KG'
+                : (isPerHundredUnits
+                    ? 'PER_100_UNITS'
+                    : (pricingModel === 'fixed' ? 'FIXED' : 'EVENT'))));
+    const isPerKgPricing = String(selectionPricingUnit || '').toUpperCase() === 'PER_KG';
+
+    const resolvePackageQuantity = React.useCallback((pkgId) => {
+        const raw = Number(packageQuantityById?.[pkgId]);
+        if (Number.isFinite(raw) && raw > 0) return raw;
+        return 1;
+    }, [packageQuantityById]);
+
+    const handlePackageQuantityChange = React.useCallback((pkgId, nextRaw) => {
+        const n = Number(nextRaw);
+        const nextValue = Number.isFinite(n) && n > 0 ? n : 1;
+        setPackageQuantityById((prev) => ({
+            ...prev,
+            [pkgId]: nextValue,
+        }));
+    }, []);
 
     const tabs = isVenueServiceMode ? ['Overview', 'Reviews'] : ['Overview', 'Services', 'Reviews'];
 
@@ -251,7 +363,11 @@ const VendorDetailsModal = ({
                                                 <div className="grid grid-cols-1 gap-6">
                                                     {currentPackages.map((pkg, i) => {
                                                         const pkgId = pkg.serviceId || pkg.id || String(i);
-                                                        const unitPrice = (Number(pkg.price || 0)) * priceMultiplier;
+                                                        const unitPrice = getPackageUnitPrice(pkg);
+                                                        const packageQty = isPerKgPricing ? resolvePackageQuantity(pkgId) : 1;
+                                                        const lineQuantity = isPerAttendeePackagePricing
+                                                            ? attendeeCountForPricing
+                                                            : (pricingModel === 'per_day' ? normalizedEventDayCount : packageQty);
 
                                                         return (
                                                             <div key={pkgId} className="p-6 rounded-2xl border border-gray-100 hover:border-primary/20 hover:bg-gray-50 transition-all group flex flex-col relative overflow-hidden">
@@ -263,12 +379,31 @@ const VendorDetailsModal = ({
                                                                         <h4 className="text-xl font-bold text-primary group-hover:text-secondary transition-colors">{pkg.name || vendor.name}</h4>
                                                                     </div>
                                                                     <div className="text-right">
-                                                                            <span className="block text-2xl font-serif-premium text-primary">₹{unitPrice.toLocaleString()}</span>
-                                                                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">/ {isPerPlate ? 'Per Plate' : 'Event'}</span>
+                                                                        <span className="block text-2xl font-serif-premium text-primary">₹{unitPrice.toLocaleString()}</span>
+                                                                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">/ {packageUnitLabel}</span>
+                                                                        <span className="block text-[10px] text-primary/60 font-semibold mt-1">
+                                                                            Est. ₹{Math.round(unitPrice * lineQuantity).toLocaleString()} - ₹{Math.round(unitPrice * lineQuantity * relativeMaxMultiplier).toLocaleString()}
+                                                                        </span>
                                                                     </div>
                                                                 </div>
 
                                                                 <p className="text-sm text-gray-500 mb-6 leading-relaxed">{pkg.description || 'Package details'}</p>
+
+                                                                {isPerKgPricing && (
+                                                                    <div className="mb-6">
+                                                                        <label className="text-[10px] font-bold uppercase tracking-widest text-primary/50 block mb-2">
+                                                                            Required Quantity (kg)
+                                                                        </label>
+                                                                        <input
+                                                                            type="number"
+                                                                            min="1"
+                                                                            step="0.5"
+                                                                            value={packageQty}
+                                                                            onChange={(e) => handlePackageQuantityChange(pkgId, e.target.value)}
+                                                                            className="w-full max-w-[180px] px-3 py-2 rounded-lg border border-primary/15 bg-white text-primary font-semibold"
+                                                                        />
+                                                                    </div>
+                                                                )}
 
 
 
@@ -281,16 +416,14 @@ const VendorDetailsModal = ({
                                                                     </button>
                                                                     <button
                                                                         onClick={() => {
-                                                                            const pricingUnit = isPerPlate ? 'PER_PLATE' : 'EVENT';
-                                                                            const updatedVendor = {
-                                                                                ...vendor,
-                                                                                pricingUnit,
+                                                                            const updatedVendor = buildSelectedVendorPayload({
+                                                                                sourceVendor: vendor,
                                                                                 unitPrice,
-                                                                                priceMin: unitPrice,
-                                                                                priceMax: Math.round(unitPrice * MAX_PRICE_MULTIPLIER),
-                                                                                maxPriceMultiplier: MAX_PRICE_MULTIPLIER,
+                                                                                pricingUnit: selectionPricingUnit,
+                                                                                pricingQuantity: packageQty,
+                                                                                pricingQuantityUnit: isPerKgPricing ? 'kg' : null,
                                                                                 selectedPackage: pkg,
-                                                                            };
+                                                                            });
                                                                             onSelect(updatedVendor);
                                                                             onClose();
                                                                         }}
@@ -314,6 +447,22 @@ const VendorDetailsModal = ({
                                                     Back to Packages
                                                 </button>
 
+                                                {isPerKgPricing && (
+                                                    <div className="mb-6">
+                                                        <label className="text-[10px] font-bold uppercase tracking-widest text-primary/50 block mb-2">
+                                                            Required Quantity (kg)
+                                                        </label>
+                                                        <input
+                                                            type="number"
+                                                            min="1"
+                                                            step="0.5"
+                                                            value={resolvePackageQuantity(expandedPackageId)}
+                                                            onChange={(e) => handlePackageQuantityChange(expandedPackageId, e.target.value)}
+                                                            className="w-full max-w-[220px] px-3 py-2 rounded-lg border border-primary/15 bg-white text-primary font-semibold"
+                                                        />
+                                                    </div>
+                                                )}
+
                                                 <div className="bg-surface rounded-3xl p-8 border border-primary/5">
                                                     <div className="flex justify-between items-start mb-8 border-b border-primary/5 pb-8">
                                                         <div>
@@ -322,8 +471,8 @@ const VendorDetailsModal = ({
                                                             <p className="text-gray-500">{expandedPackage.description || 'Package details'}</p>
                                                         </div>
                                                         <div className="text-right">
-                                                            <div className="text-4xl font-serif-premium text-primary">₹{((Number(expandedPackage.price || 0)) * priceMultiplier).toLocaleString()}</div>
-                                                            <div className="text-xs font-bold uppercase tracking-widest text-gray-400">/ {isPerPlate ? 'Per Plate' : 'Event'}</div>
+                                                            <div className="text-4xl font-serif-premium text-primary">₹{getPackageUnitPrice(expandedPackage).toLocaleString()}</div>
+                                                            <div className="text-xs font-bold uppercase tracking-widest text-gray-400">/ {packageUnitLabel}</div>
                                                         </div>
                                                     </div>
 
@@ -343,26 +492,33 @@ const VendorDetailsModal = ({
                                                         <div>
                                                             <span className="block text-[10px] font-bold uppercase tracking-widest text-primary/60 mb-1">Total Estimated Cost</span>
                                                             <div className="text-2xl font-serif-premium text-primary">
-                                                                ₹{((Number(expandedPackage.price || 0)) * priceMultiplier * (isPerPlate ? attendeeCountForPricing : 1)).toLocaleString()}
+                                                                ₹{Math.round(getPackageUnitPrice(expandedPackage) * (isPerAttendeePackagePricing
+                                                                    ? attendeeCountForPricing
+                                                                    : (pricingModel === 'per_day' ? normalizedEventDayCount : resolvePackageQuantity(expandedPackageId)))).toLocaleString()} - ₹{Math.round(getPackageUnitPrice(expandedPackage) * (isPerAttendeePackagePricing
+                                                                    ? attendeeCountForPricing
+                                                                    : (pricingModel === 'per_day' ? normalizedEventDayCount : resolvePackageQuantity(expandedPackageId))) * relativeMaxMultiplier).toLocaleString()}
                                                             </div>
                                                             <span className="text-xs text-gray-500">
-                                                                {isPerPlate ? `For ${attendeeCount} ${attendeeLabel.toLowerCase()}` : 'Fixed Event Price'}
+                                                                {isPerAttendeePackagePricing
+                                                                    ? `For ${attendeeCount} ${attendeeLabel.toLowerCase()}`
+                                                                    : (pricingModel === 'per_day'
+                                                                        ? `For ${normalizedEventDayCount} day${normalizedEventDayCount > 1 ? 's' : ''}`
+                                                                        : `For ${resolvePackageQuantity(expandedPackageId)} kg`)}
                                                             </span>
                                                         </div>
                                                         <button
                                                             onClick={() => {
-                                                                const unitPrice = (Number(expandedPackage.price || 0)) * priceMultiplier;
-                                                                const pricingUnit = isPerPlate ? 'PER_PLATE' : 'EVENT';
+                                                                const unitPrice = getPackageUnitPrice(expandedPackage);
+                                                                const expandedQty = isPerKgPricing ? resolvePackageQuantity(expandedPackageId) : 1;
 
-                                                                const updatedVendor = {
-                                                                    ...vendor,
-                                                                    pricingUnit,
+                                                                const updatedVendor = buildSelectedVendorPayload({
+                                                                    sourceVendor: vendor,
                                                                     unitPrice,
-                                                                    priceMin: unitPrice,
-                                                                    priceMax: Math.round(unitPrice * MAX_PRICE_MULTIPLIER),
-                                                                    maxPriceMultiplier: MAX_PRICE_MULTIPLIER,
+                                                                    pricingUnit: selectionPricingUnit,
+                                                                    pricingQuantity: expandedQty,
+                                                                    pricingQuantityUnit: isPerKgPricing ? 'kg' : null,
                                                                     selectedPackage: expandedPackage,
-                                                                };
+                                                                });
                                                                 onSelect(updatedVendor);
                                                                 onClose();
                                                             }}
@@ -388,15 +544,12 @@ const VendorDetailsModal = ({
                         <div className="shrink-0 px-10 py-8 border-t border-gray-100 bg-white">
                             <button
                                 onClick={() => {
-                                    const unitPrice = Number(vendor?.unitPrice ?? vendor?.priceMin ?? 0) * priceMultiplier;
-                                    const updatedVendor = {
-                                        ...vendor,
-                                        pricingUnit: 'EVENT',
+                                    const unitPrice = toNonNegativeNumber(vendor?.unitPrice, toNonNegativeNumber(vendor?.priceMin, 0));
+                                    const updatedVendor = buildSelectedVendorPayload({
+                                        sourceVendor: vendor,
                                         unitPrice,
-                                        priceMin: unitPrice,
-                                        priceMax: Math.round(unitPrice * MAX_PRICE_MULTIPLIER),
-                                        maxPriceMultiplier: MAX_PRICE_MULTIPLIER,
-                                    };
+                                        pricingUnit: 'EVENT',
+                                    });
                                     onSelect(updatedVendor);
                                     onClose();
                                 }}

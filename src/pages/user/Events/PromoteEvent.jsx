@@ -24,6 +24,8 @@ import {
     selectPlatformFee,
     selectServiceChargePercent,
 } from '../../../store/slices/feesSlice';
+import { getInclusiveIstDayRange } from '../../../utils/istDateTime';
+import { normalizeDayTierAllocations, validateDayTierAllocations } from '../../../utils/dayTierAllocation';
 
 const PromoteEvent = () => {
     const location = useLocation();
@@ -76,6 +78,68 @@ const PromoteEvent = () => {
         return initialPromoteEventState;
     });
 
+    useEffect(() => {
+        setFormData((prev) => {
+            const days = getInclusiveIstDayRange(prev.startDate, prev.endDate);
+            const existing = prev.ticketDayAllocations && typeof prev.ticketDayAllocations === 'object'
+                ? prev.ticketDayAllocations
+                : {};
+            const cap = parseInt(prev.totalCapacity, 10);
+            const hasCap = Number.isFinite(cap) && cap > 0;
+
+            const nextAllocations = {};
+            for (const day of days) {
+                const parsed = parseInt(existing[day], 10);
+                if (!Number.isFinite(parsed) || parsed <= 0) {
+                    nextAllocations[day] = '';
+                    continue;
+                }
+                nextAllocations[day] = hasCap ? Math.min(parsed, cap) : parsed;
+            }
+
+            const existingKeys = Object.keys(existing);
+            const nextKeys = Object.keys(nextAllocations);
+            const allocationsUnchanged =
+                existingKeys.length === nextKeys.length &&
+                nextKeys.every((k) => String(existing[k] ?? '') === String(nextAllocations[k] ?? ''));
+
+            const existingDayTier = prev.ticketDayTierAllocations && typeof prev.ticketDayTierAllocations === 'object'
+                ? prev.ticketDayTierAllocations
+                : {};
+            const nextDayTier = normalizeDayTierAllocations({
+                days,
+                tickets: prev.tickets,
+                existing: existingDayTier,
+                dayAllocations: nextAllocations,
+                ticketType: prev.ticketType,
+            });
+
+            const tierUnchanged = JSON.stringify(existingDayTier) === JSON.stringify(nextDayTier);
+
+            if (allocationsUnchanged && tierUnchanged) return prev;
+            return {
+                ...prev,
+                ticketDayAllocations: nextAllocations,
+                ticketDayTierAllocations: nextDayTier,
+            };
+        });
+    }, [formData.startDate, formData.endDate, formData.totalCapacity, formData.ticketType, formData.tickets]);
+
+    const promoteScheduleDays = getInclusiveIstDayRange(formData.startDate, formData.endDate);
+    const promoteDayAllocations = formData.ticketDayAllocations && typeof formData.ticketDayAllocations === 'object'
+        ? formData.ticketDayAllocations
+        : {};
+    const promoteDayTierAllocations = formData.ticketDayTierAllocations && typeof formData.ticketDayTierAllocations === 'object'
+        ? formData.ticketDayTierAllocations
+        : {};
+    const promoteAllocationValidation = validateDayTierAllocations({
+        days: promoteScheduleDays,
+        tickets: formData.tickets,
+        dayAllocations: promoteDayAllocations,
+        dayTierAllocations: promoteDayTierAllocations,
+    });
+    const hasPerDayTicketAllocations = promoteAllocationValidation.isValid;
+
     // Helper: Step definitions (calculated dynamically for completion status)
     const steps = promoteEventSteps.map(step => ({
         ...step,
@@ -87,7 +151,8 @@ const PromoteEvent = () => {
                 formData.totalCapacity > 0 &&
                 formData.tickets.length > 0 &&
                 formData.tickets.reduce((sum, t) => sum + (parseInt(t.quantity) || 0), 0) === parseInt(formData.totalCapacity) &&
-                formData.tickets.every(t => !!t.name && (formData.ticketType === 'free' || (t.price !== "" && t.price > 0)))
+                formData.tickets.every(t => !!t.name && (formData.ticketType === 'free' || (t.price !== "" && t.price > 0))) &&
+                (promoteScheduleDays.length === 0 || hasPerDayTicketAllocations)
             ) ||
             (step.id === 5 && !!formData.startDate && !!formData.endDate && !!formData.ticketReleaseDate && !!formData.ticketSalesEndDate && !!formData.address && !!formData.lat && !!formData.lng) ||
             (step.id === 6) || // Promote is optional
@@ -181,6 +246,10 @@ const PromoteEvent = () => {
             );
         if (!ticketsValid) {
             errors.push('Complete Step 4: valid ticket tiers and quantities matching total tickets.');
+        }
+
+        if (promoteScheduleDays.length > 0 && !promoteAllocationValidation.isValid) {
+            errors.push('Daily ticket totals must match per-tier day allocations and each tier total must match its quantity.');
         }
 
         const hasSchedule = !!formData.startDate && !!formData.endDate && !!formData.ticketReleaseDate && !!formData.ticketSalesEndDate;

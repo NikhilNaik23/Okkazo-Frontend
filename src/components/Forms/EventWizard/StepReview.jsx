@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BsStars, BsX, BsTagFill, BsArrowRight } from "react-icons/bs";
+import { getInclusiveIstDayRange } from '../../../utils/istDateTime';
 
 const StepReview = ({ formData, onRemoveVendor }) => {
     const DEFAULT_MAX_PRICE_MULTIPLIER = 1.5;
@@ -75,6 +76,16 @@ const StepReview = ({ formData, onRemoveVendor }) => {
     const displayTime = isPublic
         ? (formData?.publicStartTime ? new Date(formData.publicStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')
         : (formData?.startTime || '');
+    const scheduleDays = isPublic ? getInclusiveIstDayRange(formData?.publicStartTime, formData?.publicEndTime) : [];
+    const dayAllocationMap = formData?.ticketDayAllocations && typeof formData.ticketDayAllocations === 'object'
+        ? formData.ticketDayAllocations
+        : {};
+
+    const getDayLabel = (day) => {
+        const d = new Date(`${day}T00:00:00+05:30`);
+        if (Number.isNaN(d.getTime())) return day;
+        return d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
+    };
 
 
     return (
@@ -128,6 +139,22 @@ const StepReview = ({ formData, onRemoveVendor }) => {
                             ))}
                         </div>
                     </div>
+
+                    {isPublic && scheduleDays.length > 0 && (
+                        <div className="mb-12">
+                            <p className="text-[10px] font-black tracking-[0.2em] text-gray-400 uppercase mb-6 text-center">Daily Ticket Plan</p>
+                            <div className="max-w-xl mx-auto bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+                                {scheduleDays.map((day) => (
+                                    <div key={day} className="flex items-center justify-between border-b border-gray-100 last:border-b-0 pb-2 last:pb-0">
+                                        <span className="text-sm font-semibold text-primary">{getDayLabel(day)}</span>
+                                        <span className="text-sm font-black text-primary/70">
+                                            {parseInt(dayAllocationMap[day], 10) || 0} tickets
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Selected Vendors */}
                     <div>

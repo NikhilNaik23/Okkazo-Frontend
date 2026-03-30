@@ -97,10 +97,18 @@ const VendorDetails = () => {
     if (!isVerifiedVendor) return;
     if (activeTab !== 'services') return;
     if (!vendorAuthId) return;
-    if (vendorServicesResult || vendorServicesLoading) return;
+    if (vendorServicesResult || vendorServicesLoading || vendorServicesError) return;
 
     dispatch(fetchVendorServicesByAuthId({ vendorAuthId, limit: 100, skip: 0 }));
-  }, [activeTab, dispatch, isVerifiedVendor, vendorAuthId, vendorServicesLoading, vendorServicesResult]);
+  }, [
+    activeTab,
+    dispatch,
+    isVerifiedVendor,
+    vendorAuthId,
+    vendorServicesError,
+    vendorServicesLoading,
+    vendorServicesResult,
+  ]);
 
   useEffect(() => {
     // Prevent access to Services/Pricing while vendor is unverified
@@ -627,6 +635,15 @@ const VendorDetails = () => {
                           const svcId = svc?._id || svc?.id;
                           const price = Number(svc?.price ?? 0);
                           const formattedPrice = Number.isFinite(price) ? price.toLocaleString() : '0';
+                          const normalizedServiceCategory = String(svc?.serviceCategory || vendor?.serviceCategory || '').trim();
+                          const isVenueService = normalizedServiceCategory.toUpperCase() === 'VENUE'
+                            || String(svc?.categoryId || '').trim().toLowerCase() === 'venues';
+                          const venueLocation = String(
+                            svc?.details?.locationAreaName
+                              || svc?.details?.location
+                              || vendor?.location
+                              || 'Location not provided'
+                          ).trim();
 
                           return (
                             <div
@@ -638,9 +655,15 @@ const VendorDetails = () => {
                                   <Briefcase size={24} />
                                 </div>
                                 <div>
-                                  <h5 className="font-black text-[#0b2d49] text-lg line-clamp-1">{svc?.name || 'Service'}</h5>
+                                  <h5 className="font-black text-[#0b2d49] text-lg line-clamp-1">
+                                    {svc?.name || (isVenueService ? 'Venue' : 'Service')}
+                                  </h5>
                                   <div className="flex items-center gap-3 mt-1">
-                                    {svc?.tier ? (
+                                    {isVenueService ? (
+                                      <p className="text-xs font-bold text-[#708aa0] tracking-wide line-clamp-1">
+                                        Venue Location: {venueLocation}
+                                      </p>
+                                    ) : svc?.tier ? (
                                       <p className="text-xs font-bold text-[#708aa0] uppercase tracking-widest">Tier: {svc.tier}</p>
                                     ) : (
                                       <p className="text-xs font-bold text-[#708aa0] uppercase tracking-widest">Category: {svc?.serviceCategory || vendor?.serviceCategory || '—'}</p>
@@ -657,7 +680,9 @@ const VendorDetails = () => {
 
                               <div className="flex items-center gap-10">
                                 <div className="text-right">
-                                  <p className="text-[10px] font-black text-[#708aa0] uppercase tracking-widest mb-1">Base Price</p>
+                                  <p className="text-[10px] font-black text-[#708aa0] uppercase tracking-widest mb-1">
+                                    {isVenueService ? 'Venue Price' : 'Service Price'}
+                                  </p>
                                   <p className="text-xl font-black text-[#0b2d49] flex items-center justify-end gap-1">
                                     <IndianRupee size={18} /> {formattedPrice}
                                   </p>

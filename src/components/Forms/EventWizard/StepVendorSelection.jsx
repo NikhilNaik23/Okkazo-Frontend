@@ -17,6 +17,8 @@ import { vendorServiceCategories, isDateHighDemand } from "../../../data/plannin
 import { filterOptions } from "../../../data/vendorSelectionData";
 import SharedCalendar from "./SharedCalendar";
 import { fetchWithAuth } from '../../../utils/apiHandler';
+import { getInclusiveIstDayRange, toIstDayString } from '../../../utils/istDateTime';
+import { inferPricingUnit, resolveServicePricingModel } from '../../../utils/pricing';
 import { useDispatch } from 'react-redux';
 import { refreshAccessToken } from '../../../store/slices/authSlice';
 import { toast } from 'react-hot-toast';
@@ -38,7 +40,89 @@ const safeJson = async (response) => {
     }
 };
 
-const DEFAULT_MAX_PRICE_MULTIPLIER = 1.5;
+const DEFAULT_DEMAND_PRICING_MULTIPLIERS = {
+    normal: { min: 1, max: 1 },
+    highDemand: { min: 1.5, max: 2.25 },
+};
+
+const toPositiveNumber = (value, fallback) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
+const toNonNegativeNumber = (value, fallback = 0) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? n : fallback;
+};
+
+const toNonNegativeOrNull = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+};
+
+const resolveBasePrice = ({ baseValue, scaledValue, minMultiplier }) => {
+    const directBase = Number(baseValue);
+    if (Number.isFinite(directBase) && directBase >= 0) {
+        return directBase;
+    }
+
+    const scaled = toNonNegativeNumber(scaledValue, 0);
+    const safeMin = toPositiveNumber(minMultiplier, 1);
+    return scaled / safeMin;
+};
+
+const resolveServicePricing = ({ service, minMultiplier = 1, maxMultiplier = 1 }) => {
+    const safeMinMultiplier = toPositiveNumber(minMultiplier, 1);
+    const safeMaxMultiplier = Math.max(safeMinMultiplier, toPositiveNumber(maxMultiplier, safeMinMultiplier));
+
+    const directBasePrice = toNonNegativeOrNull(service?.basePrice);
+    const scaledMin =
+        toNonNegativeOrNull(service?.priceMin)
+        ?? toNonNegativeOrNull(service?.price)
+        ?? (directBasePrice != null ? Math.round(directBasePrice * safeMinMultiplier) : null);
+    const scaledMax =
+        toNonNegativeOrNull(service?.priceMax)
+        ?? (directBasePrice != null ? Math.round(directBasePrice * safeMaxMultiplier) : null)
+        ?? scaledMin;
+
+    const basePrice = directBasePrice != null
+        ? directBasePrice
+        : (scaledMin != null ? (scaledMin / safeMinMultiplier) : null);
+
+    return {
+        scaledMin,
+        scaledMax,
+        basePrice,
+    };
+};
+
+const getScaledMinFromServices = ({ vendorLike, minMultiplier = 1, maxMultiplier = 1 }) => {
+    const services = Array.isArray(vendorLike?.services) ? vendorLike.services : [];
+    const scaledCandidates = services
+        .map((service) => resolveServicePricing({ service, minMultiplier, maxMultiplier }).scaledMin)
+        .filter((v) => Number.isFinite(v) && v > 0);
+
+    if (scaledCandidates.length === 0) return 0;
+    return Math.min(...scaledCandidates);
+};
+
+const normalizeDemandPricingMultipliers = (raw) => {
+    const normalMin = toPositiveNumber(raw?.normal?.min, DEFAULT_DEMAND_PRICING_MULTIPLIERS.normal.min);
+    const normalMaxRaw = toPositiveNumber(raw?.normal?.max, DEFAULT_DEMAND_PRICING_MULTIPLIERS.normal.max);
+    const highMin = toPositiveNumber(raw?.highDemand?.min, DEFAULT_DEMAND_PRICING_MULTIPLIERS.highDemand.min);
+    const highMaxRaw = toPositiveNumber(raw?.highDemand?.max, DEFAULT_DEMAND_PRICING_MULTIPLIERS.highDemand.max);
+
+    return {
+        normal: {
+            min: normalMin,
+            max: normalMaxRaw >= normalMin ? normalMaxRaw : normalMin,
+        },
+        highDemand: {
+            min: highMin,
+            max: highMaxRaw >= highMin ? highMaxRaw : highMin,
+        },
+    };
+};
 
 const SERVICE_ALIASES = {
     catering: 'Catering & Drinks',
@@ -46,41 +130,48 @@ const SERVICE_ALIASES = {
     'catering & drink': 'Catering & Drinks',
 };
 
+const CANONICAL_SERVICE_BY_LOWER = vendorServiceCategories.reduce((acc, service) => {
+    const raw = service == null ? '' : String(service).trim();
+    if (!raw) return acc;
+    acc[raw.toLowerCase()] = raw;
+    return acc;
+}, {});
+
 const canonicalizeServiceLabel = (value) => {
     const raw = value == null ? '' : String(value).trim();
     if (!raw) return '';
 
+    if (vendorServiceCategories.includes(raw)) return raw;
+
     const key = raw.toLowerCase();
     const alias = SERVICE_ALIASES[key];
-    return alias || raw;
+    if (alias) return alias;
+
+    return CANONICAL_SERVICE_BY_LOWER[key] || raw;
 };
 
-const normalizeSelectedVendorPricing = (vendor, priceMultiplier) => {
+const normalizeSelectedVendorPricing = (vendor, { minMultiplier, maxMultiplier }) => {
     const v = vendor && typeof vendor === 'object' ? vendor : {};
-    const prevMultiplierRaw = Number(v?.priceMultiplier);
-    const prevMultiplier = Number.isFinite(prevMultiplierRaw) && prevMultiplierRaw > 0 ? prevMultiplierRaw : 1;
+    const prevMinMultiplier = toPositiveNumber(v?.priceMultiplier, 1);
+    const prevAbsoluteMax = toPositiveNumber(v?.absoluteMaxMultiplier, prevMinMultiplier * toPositiveNumber(v?.maxPriceMultiplier, 1));
 
-    const nextMultiplierRaw = Number(priceMultiplier);
-    const nextMultiplier = Number.isFinite(nextMultiplierRaw) && nextMultiplierRaw > 0 ? nextMultiplierRaw : 1;
+    const nextMinMultiplier = toPositiveNumber(minMultiplier, 1);
+    const nextAbsoluteMax = Math.max(nextMinMultiplier, toPositiveNumber(maxMultiplier, nextMinMultiplier));
+    const nextRelativeMax = nextAbsoluteMax / nextMinMultiplier;
 
     const unitPriceRaw = Number(v?.unitPrice ?? v?.priceMin ?? 0);
-    const derivedBaseUnitPrice = Number.isFinite(unitPriceRaw) && unitPriceRaw > 0 ? unitPriceRaw / prevMultiplier : 0;
+    const derivedBaseUnitPrice = Number.isFinite(unitPriceRaw) && unitPriceRaw > 0 ? unitPriceRaw / prevMinMultiplier : 0;
     const baseUnitPriceRaw = Number(v?.baseUnitPrice ?? derivedBaseUnitPrice);
     const baseUnitPrice = Number.isFinite(baseUnitPriceRaw) && baseUnitPriceRaw > 0 ? baseUnitPriceRaw : 0;
 
     const priceMinRaw = Number(v?.priceMin ?? baseUnitPrice ?? 0);
-    const derivedBaseMin = Number.isFinite(priceMinRaw) && priceMinRaw > 0 ? priceMinRaw / prevMultiplier : 0;
+    const derivedBaseMin = Number.isFinite(priceMinRaw) && priceMinRaw > 0 ? priceMinRaw / prevMinMultiplier : 0;
     const basePriceMinRaw = Number(v?.basePriceMin ?? derivedBaseMin ?? baseUnitPrice ?? 0);
     const basePriceMin = Number.isFinite(basePriceMinRaw) && basePriceMinRaw > 0 ? basePriceMinRaw : 0;
 
-    const explicitMaxMultiplierRaw = Number(v?.maxPriceMultiplier);
-    const maxPriceMultiplier = Number.isFinite(explicitMaxMultiplierRaw) && explicitMaxMultiplierRaw > 0
-        ? explicitMaxMultiplierRaw
-        : DEFAULT_MAX_PRICE_MULTIPLIER;
-
     const priceMaxRaw = Number(v?.priceMax);
-    const derivedBaseMax = Number.isFinite(priceMaxRaw) && priceMaxRaw > 0 ? priceMaxRaw / prevMultiplier : 0;
-    const basePriceMaxFallback = Math.round(basePriceMin * maxPriceMultiplier);
+    const derivedBaseMax = Number.isFinite(priceMaxRaw) && priceMaxRaw > 0 ? priceMaxRaw / prevAbsoluteMax : 0;
+    const basePriceMaxFallback = basePriceMin;
     const basePriceMaxRaw = Number(v?.basePriceMax ?? derivedBaseMax ?? basePriceMaxFallback);
     const basePriceMax = Number.isFinite(basePriceMaxRaw) && basePriceMaxRaw > 0 ? basePriceMaxRaw : basePriceMaxFallback;
 
@@ -89,11 +180,12 @@ const normalizeSelectedVendorPricing = (vendor, priceMultiplier) => {
         baseUnitPrice,
         basePriceMin,
         basePriceMax,
-        maxPriceMultiplier,
-        priceMultiplier: nextMultiplier,
-        unitPrice: Math.round(baseUnitPrice * nextMultiplier),
-        priceMin: Math.round(basePriceMin * nextMultiplier),
-        priceMax: Math.round(basePriceMax * nextMultiplier),
+        maxPriceMultiplier: nextRelativeMax,
+        priceMultiplier: nextMinMultiplier,
+        absoluteMaxMultiplier: nextAbsoluteMax,
+        unitPrice: Math.round(baseUnitPrice * nextMinMultiplier),
+        priceMin: Math.round(basePriceMin * nextMinMultiplier),
+        priceMax: Math.round(basePriceMax * nextAbsoluteMax),
     };
 };
 
@@ -133,7 +225,7 @@ const getVenueServicePrimaryImage = (serviceDetails) => {
     return first || serviceDetails?.image || null;
 };
 
-const mapBackendVenueServiceToCard = ({ vendor, service, index = 0, eventLat, eventLng }) => {
+const mapBackendVenueServiceToCard = ({ vendor, service, index = 0, eventLat, eventLng, minMultiplier = 1, maxMultiplier = 1 }) => {
     const serviceId = service?.serviceId || service?.id || null;
     const details = service?.details || {};
 
@@ -148,7 +240,16 @@ const mapBackendVenueServiceToCard = ({ vendor, service, index = 0, eventLat, ev
         vendor?.location?.name ||
         'Location TBD';
 
-    const unitPrice = Number(service?.price ?? vendor?.priceMin ?? 0);
+    const safeMinMultiplier = toPositiveNumber(minMultiplier, 1);
+    const safeMaxMultiplier = Math.max(safeMinMultiplier, toPositiveNumber(maxMultiplier, safeMinMultiplier));
+    const scaledUnitPrice = toNonNegativeNumber(service?.price, toNonNegativeNumber(vendor?.priceMin, 0));
+    const baseUnitPrice = resolveBasePrice({
+        baseValue: service?.basePrice,
+        scaledValue: scaledUnitPrice,
+        minMultiplier: safeMinMultiplier,
+    });
+    const scaledMin = Math.round(baseUnitPrice * safeMinMultiplier);
+    const scaledMax = Math.round(baseUnitPrice * safeMaxMultiplier);
 
     return {
         id: serviceId || `${vendor?.vendorAuthId || 'venue'}-${index}`,
@@ -170,10 +271,15 @@ const mapBackendVenueServiceToCard = ({ vendor, service, index = 0, eventLat, ev
         capacity: details?.capacity != null ? Number(details.capacity) : vendor?.capacity,
 
         pricingUnit: 'EVENT',
-        unitPrice: Number.isFinite(unitPrice) ? unitPrice : 0,
-        priceMin: Number.isFinite(unitPrice) ? unitPrice : 0,
-        priceMax: Math.round((Number.isFinite(unitPrice) ? unitPrice : 0) * DEFAULT_MAX_PRICE_MULTIPLIER),
-        maxPriceMultiplier: DEFAULT_MAX_PRICE_MULTIPLIER,
+        baseUnitPrice,
+        basePriceMin: baseUnitPrice,
+        basePriceMax: baseUnitPrice,
+        priceMultiplier: safeMinMultiplier,
+        absoluteMaxMultiplier: safeMaxMultiplier,
+        maxPriceMultiplier: safeMaxMultiplier / safeMinMultiplier,
+        unitPrice: scaledMin,
+        priceMin: scaledMin,
+        priceMax: scaledMax,
 
         details,
         services: Array.isArray(vendor?.services) ? vendor.services : [],
@@ -203,14 +309,63 @@ const extractLatLng = (value) => {
     return { lat: null, lng: null };
 };
 
-const mapBackendVendorToCard = (vendor, category, index = 0, eventLat, eventLng) => {
+const mapBackendVendorToCard = (vendor, category, index = 0, eventLat, eventLng, minMultiplier = 1, maxMultiplier = 1) => {
     const name = vendor?.businessName || 'Vendor';
     const rating = vendor?.rating != null ? String(vendor.rating) : '0';
     const location = vendor?.location?.name || 'Location TBD';
 
     const services = Array.isArray(vendor?.services) ? vendor.services : [];
-    const priceMin = vendor?.priceMin != null ? Number(vendor.priceMin) : (services[0]?.price != null ? Number(services[0].price) : 0);
-    const priceMax = vendor?.priceMax != null ? Number(vendor.priceMax) : Math.round(priceMin * 1.5);
+    const safeMinMultiplier = toPositiveNumber(minMultiplier, 1);
+    const safeMaxMultiplier = Math.max(safeMinMultiplier, toPositiveNumber(maxMultiplier, safeMinMultiplier));
+
+    const normalizedServices = services.map((service) => {
+        const pricing = resolveServicePricing({
+            service,
+            minMultiplier: safeMinMultiplier,
+            maxMultiplier: safeMaxMultiplier,
+        });
+
+        return {
+            ...service,
+            basePrice: pricing.basePrice != null ? pricing.basePrice : service?.basePrice,
+            price: pricing.scaledMin != null ? pricing.scaledMin : service?.price,
+            priceMin: pricing.scaledMin != null ? pricing.scaledMin : service?.priceMin,
+            priceMax: pricing.scaledMax != null ? pricing.scaledMax : service?.priceMax,
+        };
+    });
+
+    const serviceScaledMins = normalizedServices
+        .map((s) => toNonNegativeOrNull(s?.priceMin))
+        .filter((v) => v != null);
+    const serviceScaledMaxes = normalizedServices
+        .map((s) => toNonNegativeOrNull(s?.priceMax))
+        .filter((v) => v != null);
+    const serviceBaseMins = normalizedServices
+        .map((s) => toNonNegativeOrNull(s?.basePrice))
+        .filter((v) => v != null);
+
+    const scaledVendorMin =
+        toNonNegativeOrNull(vendor?.priceMin)
+        ?? (serviceScaledMins.length ? Math.min(...serviceScaledMins) : null)
+        ?? 0;
+    const scaledVendorMax =
+        toNonNegativeOrNull(vendor?.priceMax)
+        ?? (serviceScaledMaxes.length ? Math.max(...serviceScaledMaxes) : null)
+        ?? scaledVendorMin;
+    const derivedBaseMin = serviceBaseMins.length ? Math.min(...serviceBaseMins) : null;
+    const derivedBaseMax = serviceBaseMins.length ? Math.max(...serviceBaseMins) : null;
+
+    const basePriceMin = resolveBasePrice({
+        baseValue: derivedBaseMin,
+        scaledValue: scaledVendorMin,
+        minMultiplier: safeMinMultiplier,
+    });
+    const basePriceMax = resolveBasePrice({
+        baseValue: derivedBaseMax,
+        scaledValue: scaledVendorMax,
+        minMultiplier: safeMaxMultiplier,
+    });
+    const normalizedBaseMax = Math.max(basePriceMin, basePriceMax);
 
     const image = services?.[0]?.details?.image || pickFallbackImage(category, index);
 
@@ -223,8 +378,19 @@ const mapBackendVendorToCard = (vendor, category, index = 0, eventLat, eventLng)
         name,
         rating,
         reviews: Number(vendor?.reviews || 0),
-        priceMin,
-        priceMax,
+        baseUnitPrice: basePriceMin,
+        basePriceMin,
+        basePriceMax: normalizedBaseMax,
+        priceMultiplier: safeMinMultiplier,
+        absoluteMaxMultiplier: safeMaxMultiplier,
+        maxPriceMultiplier: safeMaxMultiplier / safeMinMultiplier,
+        pricingUnit: inferPricingUnit({
+            serviceLabel: category,
+            serviceCategory: category,
+            categoryId: vendor?.categoryId,
+        }),
+        priceMin: Math.round(basePriceMin * safeMinMultiplier),
+        priceMax: Math.round(normalizedBaseMax * safeMaxMultiplier),
         image,
         location,
         mapsUrl: vendor?.location?.mapsUrl || null,
@@ -235,41 +401,173 @@ const mapBackendVendorToCard = (vendor, category, index = 0, eventLat, eventLng)
         lng,
         distanceKm: computedDistance != null ? computedDistance : vendor?.distanceKm,
         description: vendor?.description || null,
-        services,
+        services: normalizedServices,
         category,
         _raw: vendor,
     };
 };
 
-const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTab, setActiveServiceTab, handleSelectVendor, handleChange, minDateString }) => {
+const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTab, setActiveServiceTab, handleChange, minDateString }) => {
     const dispatch = useDispatch();
+    const isPublicListing = String(formData?.listingType || 'Private') === 'Public';
     const activeCategoryRaw = formData.services[activeServiceTab] || "Venue";
     const activeCategory = canonicalizeServiceLabel(activeCategoryRaw);
     const eventId = formData?.id;
     const eventLat = formData?.lat;
     const eventLng = formData?.lng;
 
-    const attendeeInfo = useMemo(() => {
-        const listingType = String(formData?.listingType || 'Private');
-
-        if (listingType === 'Public') {
-            const capacity = parseInt(formData?.totalCapacity, 10);
-            const fallbackTicketsTotal = Array.isArray(formData?.tickets)
-                ? formData.tickets.reduce((acc, t) => acc + (parseInt(t?.quantity, 10) || 0), 0)
-                : 0;
-
+    const publicTicketDemand = useMemo(() => {
+        if (!isPublicListing) {
             return {
-                attendeeCount: Number.isFinite(capacity) && capacity > 0 ? capacity : fallbackTicketsTotal,
-                attendeeLabel: 'Tickets',
+                totalTickets: 0,
+                peakDayTickets: 0,
+                fallbackCapacity: 0,
+                dayCount: 1,
             };
         }
 
-        const guests = parseInt(formData?.guests, 10);
+        const dayAllocationMap = formData?.ticketDayAllocations && typeof formData.ticketDayAllocations === 'object'
+            ? formData.ticketDayAllocations
+            : {};
+        const dayTicketCounts = Object.values(dayAllocationMap)
+            .map((value) => parseInt(value, 10))
+            .filter((value) => Number.isFinite(value) && value > 0);
+
+        const totalTickets = dayTicketCounts.reduce((acc, value) => acc + value, 0);
+        const peakDayTickets = dayTicketCounts.length > 0 ? Math.max(...dayTicketCounts) : 0;
+
+        const capacity = parseInt(formData?.totalCapacity, 10);
+        const fallbackTicketsTotal = Array.isArray(formData?.tickets)
+            ? formData.tickets.reduce((acc, t) => acc + (parseInt(t?.quantity, 10) || 0), 0)
+            : 0;
+
+        const fallbackCapacity = Number.isFinite(capacity) && capacity > 0 ? capacity : fallbackTicketsTotal;
+        const dayCount = Math.max(1, getInclusiveIstDayRange(formData?.publicStartTime, formData?.publicEndTime).length || 0);
+
         return {
-            attendeeCount: Number.isFinite(guests) ? guests : 0,
-            attendeeLabel: 'Guests',
+            totalTickets,
+            peakDayTickets,
+            fallbackCapacity,
+            dayCount,
         };
-    }, [formData?.guests, formData?.listingType, formData?.tickets, formData?.totalCapacity]);
+    }, [formData?.publicEndTime, formData?.publicStartTime, formData?.ticketDayAllocations, formData?.tickets, formData?.totalCapacity, isPublicListing]);
+
+    const overallAttendeeCount = useMemo(() => {
+        if (isPublicListing) {
+            if (publicTicketDemand.totalTickets > 0) return publicTicketDemand.totalTickets;
+            if (publicTicketDemand.peakDayTickets > 0) return publicTicketDemand.peakDayTickets;
+            return publicTicketDemand.fallbackCapacity;
+        }
+
+        const guests = parseInt(formData?.guests, 10);
+        return Number.isFinite(guests) && guests > 0 ? guests : 0;
+    }, [formData?.guests, isPublicListing, publicTicketDemand.fallbackCapacity, publicTicketDemand.peakDayTickets, publicTicketDemand.totalTickets]);
+
+    const venueCapacityBaseline = useMemo(() => {
+        if (!isPublicListing) return overallAttendeeCount;
+        if (publicTicketDemand.peakDayTickets > 0) return publicTicketDemand.peakDayTickets;
+        return publicTicketDemand.fallbackCapacity;
+    }, [isPublicListing, overallAttendeeCount, publicTicketDemand.fallbackCapacity, publicTicketDemand.peakDayTickets]);
+
+    const eventDayCount = useMemo(() => {
+        if (!isPublicListing) return 1;
+        return Math.max(1, publicTicketDemand.dayCount || 1);
+    }, [isPublicListing, publicTicketDemand.dayCount]);
+
+    const attendeeInfo = useMemo(() => {
+        if (isPublicListing) {
+            const useVenueBaseline = activeCategory === 'Venue';
+            const attendeeCount = useVenueBaseline ? venueCapacityBaseline : overallAttendeeCount;
+            return {
+                attendeeCount,
+                attendeeLabel: 'Tickets',
+                capacityBaselineValue: venueCapacityBaseline,
+                capacityBaselineSource: publicTicketDemand.peakDayTickets > 0 ? 'peak-day' : 'fallback-total',
+            };
+        }
+        return {
+            attendeeCount: overallAttendeeCount,
+            attendeeLabel: 'Guests',
+            capacityBaselineValue: overallAttendeeCount,
+            capacityBaselineSource: 'guests',
+        };
+    }, [activeCategory, isPublicListing, overallAttendeeCount, publicTicketDemand.peakDayTickets, venueCapacityBaseline]);
+
+    const toDayString = useCallback((value) => {
+        const raw = value == null ? '' : String(value).trim();
+        if (!raw) return null;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+        // Always derive day in IST for timestamp-like inputs.
+        // Truncating the YYYY-MM-DD prefix from ISO strings can shift the day
+        // for values stored in UTC (for example IST midnight saved as previous UTC date).
+        return toIstDayString(raw);
+    }, []);
+
+    const selectedReservationDay = useMemo(() => {
+        if (isPublicListing) {
+            return toDayString(formData?.publicStartTime);
+        }
+        return toDayString(formData?.date) || toDayString(formData?.publicStartTime);
+    }, [formData?.date, formData?.publicStartTime, isPublicListing, toDayString]);
+
+    const selectedReservationFrom = useMemo(() => {
+        if (!isPublicListing) return null;
+        return toDayString(formData?.publicStartTime) || null;
+    }, [formData?.publicStartTime, isPublicListing, toDayString]);
+
+    const selectedReservationTo = useMemo(() => {
+        if (!isPublicListing) return null;
+        const explicitTo = toDayString(formData?.publicEndTime);
+        return explicitTo || selectedReservationFrom || null;
+    }, [formData?.publicEndTime, isPublicListing, selectedReservationFrom, toDayString]);
+
+    const reservationScopeLabel = useMemo(() => {
+        if (isPublicListing) {
+            const from = selectedReservationFrom || 'selected range';
+            const to = selectedReservationTo || from;
+            return from === to ? from : `${from} to ${to}`;
+        }
+        return selectedReservationDay || 'selected date';
+    }, [isPublicListing, selectedReservationDay, selectedReservationFrom, selectedReservationTo]);
+
+    const appendReservationQueryParams = useCallback((params) => {
+        if (!params) return;
+
+        if (isPublicListing) {
+            if (selectedReservationFrom && selectedReservationTo) {
+                params.set('from', String(selectedReservationFrom));
+                params.set('to', String(selectedReservationTo));
+                return;
+            }
+
+            if (selectedReservationFrom) {
+                params.set('day', String(selectedReservationFrom));
+            }
+            return;
+        }
+
+        if (selectedReservationDay) {
+            params.set('day', String(selectedReservationDay));
+        }
+    }, [isPublicListing, selectedReservationDay, selectedReservationFrom, selectedReservationTo]);
+
+    const formatDisplayDate = useCallback((value) => {
+        const day = toDayString(value);
+        if (!day) return '';
+        const d = new Date(`${day}T00:00:00`);
+        return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString();
+    }, [toDayString]);
+
+    const displayedDateLabel = useMemo(() => {
+        if (isPublicListing) {
+            const from = formatDisplayDate(formData?.publicStartTime);
+            const to = formatDisplayDate(formData?.publicEndTime);
+            if (from && to) return `${from} - ${to}`;
+            return from || to || 'Not set';
+        }
+
+        return formatDisplayDate(formData?.date) || 'Select';
+    }, [formData?.date, formData?.publicEndTime, formData?.publicStartTime, formatDisplayDate, isPublicListing]);
 
     const isVendorStepComplete = useMemo(() => {
         const services = Array.isArray(formData?.services) ? formData.services : [];
@@ -303,38 +601,243 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     const [priceRange, setPriceRange] = useState({ min: 0, max: 200000 });
     const [showAddServiceDropdown, setShowAddServiceDropdown] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+    const [demandPricingMultipliers, setDemandPricingMultipliers] = useState(DEFAULT_DEMAND_PRICING_MULTIPLIERS);
+
+    useEffect(() => {
+        if (isPublicListing && isCalendarOpen) {
+            setIsCalendarOpen(false);
+        }
+    }, [isCalendarOpen, isPublicListing]);
+
+    // Helper: only update demand multiplier state when values actually differ
+    // (avoids new object-ref on every poll → avoids cascading re-renders)
+    const stableSetDemandPricingMultipliers = useCallback((next) => {
+        setDemandPricingMultipliers((prev) => {
+            if (
+                prev.normal.min === next.normal.min &&
+                prev.normal.max === next.normal.max &&
+                prev.highDemand.min === next.highDemand.min &&
+                prev.highDemand.max === next.highDemand.max
+            ) {
+                return prev; // same values → keep same reference → no re-render
+            }
+            return next;
+        });
+    }, []);
+
+    // Guard: prevents the hydration effect from overwriting a fresh local selection
+    const selectionInProgressRef = useRef(false);
+    const selectionGuardTimerRef = useRef(null);
 
     const ITEMS_PER_PAGE = 9;
 
     // --- High Demand Logic ---
-    const isHighDemand = isDateHighDemand(formData.date);
-    const priceMultiplier = isHighDemand ? 1.5 : 1;
+    const isHighDemand = isDateHighDemand(selectedReservationDay || formData.date);
+    const activeDemandMultipliers = isHighDemand
+        ? demandPricingMultipliers.highDemand
+        : demandPricingMultipliers.normal;
+    const priceMultiplier = toPositiveNumber(activeDemandMultipliers?.min, 1);
+    const absoluteMaxMultiplier = Math.max(priceMultiplier, toPositiveNumber(activeDemandMultipliers?.max, priceMultiplier));
+    const relativeMaxMultiplier = absoluteMaxMultiplier / priceMultiplier;
 
-    const prevPriceMultiplierRef = useRef(priceMultiplier);
+    const resolvePricingQuantity = useCallback(({ vendorLike, category }) => {
+        const normalizedCategory = canonicalizeServiceLabel(category || vendorLike?.category || '');
+        const pricingModel = resolveServicePricingModel({
+            serviceLabel: normalizedCategory,
+            serviceCategory: vendorLike?.serviceCategory || normalizedCategory,
+            categoryId: vendorLike?.categoryId,
+            pricingUnit: vendorLike?.pricingUnit,
+        });
 
-    const persistVendorSelection = useCallback(async ({ category, vendor }) => {
+        if (pricingModel === 'per_attendee') {
+            return Math.max(1, Number(overallAttendeeCount || 0));
+        }
+
+        if (pricingModel === 'fixed') {
+            const qty = Number(vendorLike?.pricingQuantity);
+            return Number.isFinite(qty) && qty > 0 ? qty : 1;
+        }
+
+        return Math.max(1, Number(eventDayCount || 1));
+    }, [eventDayCount, overallAttendeeCount]);
+
+    const prevDemandPricingSignatureRef = useRef(`${priceMultiplier}:${absoluteMaxMultiplier}`);
+    const lastSyncedReservationDayRef = useRef(null);
+
+    const repriceVendorCard = useCallback((vendorCard) => {
+        const repriced = normalizeSelectedVendorPricing(vendorCard, {
+            minMultiplier: priceMultiplier,
+            maxMultiplier: absoluteMaxMultiplier,
+        });
+
+        const prevCardMinMultiplier = toPositiveNumber(vendorCard?.priceMultiplier, 1);
+        const repricedServices = Array.isArray(vendorCard?.services)
+            ? vendorCard.services.map((svc) => {
+                const basePrice = resolveBasePrice({
+                    baseValue: svc?.basePrice,
+                    scaledValue: svc?.price,
+                    minMultiplier: prevCardMinMultiplier,
+                });
+                return {
+                    ...svc,
+                    basePrice,
+                    price: Math.round(basePrice * priceMultiplier),
+                    priceMin: Math.round(basePrice * priceMultiplier),
+                    priceMax: Math.round(basePrice * absoluteMaxMultiplier),
+                };
+            })
+            : vendorCard?.services;
+
+        return {
+            ...repriced,
+            services: repricedServices,
+        };
+    }, [absoluteMaxMultiplier, priceMultiplier]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadDemandMultipliers = async () => {
+            try {
+                const response = await fetchWithAuth(
+                    `${API_BASE_URL}/api/events/config/fees`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+
+                const data = await safeJson(response);
+                if (!response.ok || !data?.success) return;
+
+                const next = normalizeDemandPricingMultipliers(data?.data?.demandPricingMultipliers);
+                if (!cancelled) {
+                    stableSetDemandPricingMultipliers(next);
+                }
+            } catch (error) {
+                console.error('Failed to fetch demand pricing multipliers:', error);
+            }
+        };
+
+        loadDemandMultipliers();
+        const id = setInterval(loadDemandMultipliers, 5000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(id);
+        };
+    }, [dispatch, stableSetDemandPricingMultipliers]);
+
+    const syncPlanningReservationDay = useCallback(async ({ day, silent = false } = {}) => {
+        if (isPublicListing) return false;
+        const normalizedDay = day == null ? '' : String(day).trim();
+        if (!eventId || !normalizedDay) return false;
+
+        const response = await fetchWithAuth(
+            `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(eventId))}/reservation-day`,
+            {
+                method: 'PATCH',
+                body: JSON.stringify({ day: normalizedDay }),
+            },
+            { dispatch, refreshAction: refreshAccessToken }
+        );
+
+        const data = await safeJson(response);
+        if (!response.ok || !data?.success) {
+            const err = new Error(data?.message || 'Failed to sync planning date');
+            err.status = response.status;
+            if (!silent) throw err;
+            console.error('Planning date sync failed:', err);
+            return false;
+        }
+
+        return true;
+    }, [dispatch, eventId, isPublicListing]);
+
+    useEffect(() => {
+        if (isPublicListing) return;
+        if (!eventId || !selectedReservationDay) return;
+        if (lastSyncedReservationDayRef.current === selectedReservationDay) return;
+
+        let cancelled = false;
+        const run = async () => {
+            try {
+                const synced = await syncPlanningReservationDay({ day: selectedReservationDay, silent: true });
+                if (!cancelled && synced) {
+                    lastSyncedReservationDayRef.current = selectedReservationDay;
+                }
+            } catch (error) {
+                console.error('Failed to sync reservation day:', error);
+            }
+        };
+
+        run();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [eventId, isPublicListing, selectedReservationDay, syncPlanningReservationDay]);
+
+    const persistVendorSelection = useCallback(async ({ category, vendor, dayOverride = null }) => {
         const normalizedCategory = canonicalizeServiceLabel(category);
-        if (!eventId || !normalizedCategory || !vendor) return true;
+        if (!eventId || !normalizedCategory) return true;
 
-        const vendorAuthId = vendor.vendorAuthId || vendor.authId;
-        if (!vendorAuthId) return true;
-
+        const vendorAuthId = vendor?.vendorAuthId || vendor?.authId || null;
         const selectedServiceId = (() => {
             const raw = vendor?.selectedPackage?.serviceId ?? vendor?.selectedPackage?.id ?? vendor?.serviceId;
             const s = raw != null ? String(raw).trim() : '';
             return s || null;
         })();
 
-        const attendeeCountForPricing = Math.max(1, Number(attendeeInfo?.attendeeCount || 0));
-        const pricingUnit = vendor?.pricingUnit
-            || (String(category || '').toLowerCase().includes('catering') ? 'PER_PLATE' : 'EVENT');
+        const pricingModel = resolveServicePricingModel({
+            serviceLabel: normalizedCategory,
+            serviceCategory: normalizedCategory,
+            categoryId: vendor?.categoryId,
+            pricingUnit: vendor?.pricingUnit,
+        });
+        const pricingUnit = vendor?.pricingUnit || inferPricingUnit({
+            serviceLabel: normalizedCategory,
+            serviceCategory: normalizedCategory,
+            categoryId: vendor?.categoryId,
+            pricingUnit: pricingModel === 'per_day' ? 'EVENT' : undefined,
+        });
+        const pricingQuantityRaw = Number(vendor?.pricingQuantity);
+        const fixedPricingQuantity = (pricingModel === 'fixed' && Number.isFinite(pricingQuantityRaw) && pricingQuantityRaw > 0)
+            ? pricingQuantityRaw
+            : null;
+        const fixedPricingQuantityUnit = pricingModel === 'fixed'
+            ? (() => {
+                const unitRaw = vendor?.pricingQuantityUnit != null ? String(vendor.pricingQuantityUnit).trim() : '';
+                if (unitRaw) return unitRaw;
+                return String(pricingUnit || '').toUpperCase() === 'PER_KG' ? 'kg' : null;
+            })()
+            : null;
         const unitPrice = Number(vendor?.unitPrice ?? vendor?.priceMin ?? 0);
-        const maxMultiplier = Number(vendor?.maxPriceMultiplier || DEFAULT_MAX_PRICE_MULTIPLIER);
+        const maxMultiplier = toPositiveNumber(relativeMaxMultiplier, 1);
+        const quantityMultiplier = resolvePricingQuantity({
+            vendorLike: { ...vendor, pricingUnit },
+            category: normalizedCategory,
+        });
 
-        const lineMin = pricingUnit === 'PER_PLATE'
-            ? Math.round(unitPrice * attendeeCountForPricing)
-            : Math.round(unitPrice);
-        const lineMax = Math.round(lineMin * (Number.isFinite(maxMultiplier) && maxMultiplier > 0 ? maxMultiplier : DEFAULT_MAX_PRICE_MULTIPLIER));
+        const lineMin = (vendorAuthId && Number.isFinite(unitPrice) && unitPrice > 0)
+            ? Math.round(unitPrice * quantityMultiplier)
+            : 0;
+        const lineMax = (vendorAuthId && lineMin > 0)
+            ? Math.round(lineMin * (Number.isFinite(maxMultiplier) && maxMultiplier > 0 ? maxMultiplier : 1))
+            : 0;
+
+        const reservationPayload = (() => {
+            if (isPublicListing) {
+                if (selectedReservationFrom && selectedReservationTo) {
+                    return { from: selectedReservationFrom, to: selectedReservationTo };
+                }
+                if (selectedReservationFrom) {
+                    return { day: selectedReservationFrom };
+                }
+                return {};
+            }
+
+            const reservationDay = dayOverride || selectedReservationDay;
+            return reservationDay ? { day: reservationDay } : {};
+        })();
 
         const response = await fetchWithAuth(
             `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(eventId))}/vendors`,
@@ -342,11 +845,26 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                 method: 'PATCH',
                 body: JSON.stringify({
                     service: normalizedCategory,
+                    ...reservationPayload,
                     vendorAuthId,
                     ...(selectedServiceId ? { serviceId: selectedServiceId } : {}),
+                    ...(!vendorAuthId
+                        ? {
+                            status: 'YET_TO_SELECT',
+                            alternativeNeeded: false,
+                            rejectionReason: null,
+                            pricingUnit: null,
+                            pricingQuantity: null,
+                            pricingQuantityUnit: null,
+                        }
+                        : {
+                            pricingUnit,
+                            ...(fixedPricingQuantity != null ? { pricingQuantity: fixedPricingQuantity } : {}),
+                            ...(fixedPricingQuantityUnit ? { pricingQuantityUnit: fixedPricingQuantityUnit } : {}),
+                        }),
                     servicePrice: {
-                        min: Number.isFinite(lineMin) && lineMin > 0 ? lineMin : 0,
-                        max: Number.isFinite(lineMax) && lineMax > 0 ? lineMax : 0,
+                        min: lineMin,
+                        max: lineMax,
                     },
                 }),
             },
@@ -361,20 +879,230 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         }
 
         return true;
-    }, [attendeeInfo?.attendeeCount, dispatch, eventId]);
+    }, [dispatch, eventId, isPublicListing, relativeMaxMultiplier, resolvePricingQuantity, selectedReservationDay, selectedReservationFrom, selectedReservationTo]);
+
+    const removeCategorySelections = useCallback((vendorsMap, categoryLike) => {
+        const next = { ...(vendorsMap && typeof vendorsMap === 'object' ? vendorsMap : {}) };
+        const canonical = canonicalizeServiceLabel(categoryLike);
+        Object.keys(next).forEach((key) => {
+            if (canonicalizeServiceLabel(key) === canonical) {
+                delete next[key];
+            }
+        });
+        return next;
+    }, []);
+
+    const upsertCategorySelection = useCallback((vendorsMap, categoryLike, vendor) => {
+        const canonical = canonicalizeServiceLabel(categoryLike);
+        const next = removeCategorySelections(vendorsMap, canonical);
+        next[canonical] = vendor;
+        return next;
+    }, [removeCategorySelections]);
+
+    const previousReservationDayRef = useRef(selectedReservationDay);
+    // Ref so the hydration effect can read current vendors without depending on them
+    // (depending on formData?.vendors caused a re-run loop that overwrote fresh selections)
+    const currentVendorsRef = useRef(formData?.vendors);
+    const priceMultiplierRef = useRef(priceMultiplier);
+    const absoluteMaxMultiplierRef = useRef(absoluteMaxMultiplier);
+    useEffect(() => {
+        currentVendorsRef.current = formData?.vendors;
+    }, [formData?.vendors]);
+    useEffect(() => {
+        priceMultiplierRef.current = priceMultiplier;
+        absoluteMaxMultiplierRef.current = absoluteMaxMultiplier;
+    }, [priceMultiplier, absoluteMaxMultiplier]);
 
     useEffect(() => {
-        const prevMultiplier = prevPriceMultiplierRef.current;
-        if (prevMultiplier === priceMultiplier) return;
-        prevPriceMultiplierRef.current = priceMultiplier;
+        const previousDay = previousReservationDayRef.current;
+        if (!eventId || !selectedReservationDay || !previousDay || previousDay === selectedReservationDay) {
+            previousReservationDayRef.current = selectedReservationDay;
+            return;
+        }
+
+        const selectedVendors = formData?.vendors && typeof formData.vendors === 'object' ? { ...formData.vendors } : {};
+        const categories = Object.keys(selectedVendors);
+        if (categories.length === 0) {
+            previousReservationDayRef.current = selectedReservationDay;
+            return;
+        }
+
+        let cancelled = false;
+
+        const revalidateForDay = async () => {
+            const nextVendors = { ...selectedVendors };
+            const removed = [];
+
+            for (const category of categories) {
+                const vendor = selectedVendors[category];
+                if (!vendor) continue;
+
+                try {
+                    await persistVendorSelection({ category, vendor, dayOverride: selectedReservationDay });
+                    const updated = {
+                        ...vendor,
+                        _selectionHoldStatus: 'held',
+                    };
+                    const normalizedMap = upsertCategorySelection(nextVendors, category, updated);
+                    Object.keys(nextVendors).forEach((k) => delete nextVendors[k]);
+                    Object.assign(nextVendors, normalizedMap);
+                } catch (error) {
+                    if (error?.status === 409) {
+                        const normalizedMap = removeCategorySelections(nextVendors, category);
+                        Object.keys(nextVendors).forEach((k) => delete nextVendors[k]);
+                        Object.assign(nextVendors, normalizedMap);
+                        try {
+                            await persistVendorSelection({ category, vendor: null, dayOverride: selectedReservationDay });
+                        } catch {
+                            // best-effort cleanup: local state is already pruned
+                        }
+                        removed.push(category);
+                    } else {
+                        console.error('Failed to revalidate vendor selection on date change:', error);
+                    }
+                }
+            }
+
+            if (cancelled) return;
+
+            if (removed.length > 0) {
+                handleChange('vendors', nextVendors);
+                toast.error(`Some selections are unavailable for ${reservationScopeLabel}. Please reselect: ${removed.join(', ')}`);
+            }
+
+            setVendorsRefreshKey((k) => k + 1);
+        };
+
+        revalidateForDay().catch((error) => {
+            console.error('Failed to refresh vendor lock validation for new date:', error);
+        });
+
+        previousReservationDayRef.current = selectedReservationDay;
+
+        return () => {
+            cancelled = true;
+        };
+    }, [eventId, formData?.vendors, handleChange, persistVendorSelection, removeCategorySelections, reservationScopeLabel, selectedReservationDay, upsertCategorySelection]);
+
+    // Poll periodically so auto-expired locks become selectable without manual refresh,
+    // and so sidebar selections auto-clear when holds expire.
+    useEffect(() => {
+        if (!eventId || !activeCategory) return;
+
+        const validateSelectedLocks = async () => {
+            if (selectionInProgressRef.current) return;
+
+            const selectedByCategory = currentVendorsRef.current && typeof currentVendorsRef.current === 'object'
+                ? currentVendorsRef.current
+                : {};
+            const selectedKeys = Object.keys(selectedByCategory);
+            if (selectedKeys.length === 0) return;
+
+            const selectionQs = new URLSearchParams({ includeVendors: 'true' });
+            appendReservationQueryParams(selectionQs);
+
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(eventId))}?${selectionQs.toString()}`,
+                { method: 'GET' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) return;
+
+            const heldByService = new Map();
+            const backendVendors = Array.isArray(data?.data?.vendors) ? data.data.vendors : [];
+            backendVendors.forEach((item) => {
+                const vendorAuthId = item?.vendorAuthId != null ? String(item.vendorAuthId).trim() : '';
+                if (!vendorAuthId) return;
+
+                const canonicalService = canonicalizeServiceLabel(item?.service);
+                const serviceId = item?.serviceId != null ? String(item.serviceId).trim() : null;
+                heldByService.set(canonicalService, { vendorAuthId, serviceId });
+            });
+
+            const next = { ...selectedByCategory };
+            let changed = false;
+
+            const removeCanonicalCategory = (canonical) => {
+                Object.keys(next).forEach((key) => {
+                    if (canonicalizeServiceLabel(key) === canonical) {
+                        delete next[key];
+                        changed = true;
+                    }
+                });
+            };
+
+            selectedKeys.forEach((categoryKey) => {
+                const selected = selectedByCategory[categoryKey];
+                const canonical = canonicalizeServiceLabel(categoryKey);
+                const held = heldByService.get(canonical);
+
+                if (!held) {
+                    removeCanonicalCategory(canonical);
+                    return;
+                }
+
+                const selectedVendorAuthId = String(selected?.vendorAuthId || selected?.authId || '').trim();
+                const selectedServiceId = (() => {
+                    const raw = selected?.selectedPackage?.serviceId ?? selected?.selectedPackage?.id ?? selected?.serviceId;
+                    const s = raw != null ? String(raw).trim() : '';
+                    return s || null;
+                })();
+
+                if (selectedVendorAuthId && held.vendorAuthId !== selectedVendorAuthId) {
+                    removeCanonicalCategory(canonical);
+                    return;
+                }
+
+                if (selectedServiceId && held.serviceId && held.serviceId !== selectedServiceId) {
+                    removeCanonicalCategory(canonical);
+                }
+            });
+
+            if (changed) {
+                handleChange('vendors', next);
+                toast.error('Some vendor holds expired and were removed.');
+            }
+        };
+
+        const tick = () => {
+            setVendorsRefreshKey((k) => k + 1);
+            validateSelectedLocks().catch((error) => {
+                console.error('Failed to validate lock status during polling:', error);
+            });
+        };
+
+        tick();
+        const id = setInterval(tick, 60000);
+
+        return () => clearInterval(id);
+    }, [activeCategory, appendReservationQueryParams, dispatch, eventId, handleChange]);
+
+    useEffect(() => {
+        const nextSignature = `${priceMultiplier}:${absoluteMaxMultiplier}`;
+        const prevSignature = prevDemandPricingSignatureRef.current;
+        if (prevSignature === nextSignature) return;
+        prevDemandPricingSignatureRef.current = nextSignature;
 
         const chosen = formData?.vendors && typeof formData.vendors === 'object' ? formData.vendors : {};
         const categories = Object.keys(chosen);
         if (categories.length === 0) return;
 
+        setVendorsByCategory((prev) => {
+            const next = {};
+            Object.entries(prev || {}).forEach(([category, list]) => {
+                next[category] = Array.isArray(list) ? list.map((vendorCard) => repriceVendorCard(vendorCard)) : [];
+            });
+            return next;
+        });
+
         const nextVendors = { ...chosen };
         categories.forEach((category) => {
-            nextVendors[category] = normalizeSelectedVendorPricing(chosen[category], priceMultiplier);
+            nextVendors[category] = normalizeSelectedVendorPricing(chosen[category], {
+                minMultiplier: priceMultiplier,
+                maxMultiplier: absoluteMaxMultiplier,
+            });
         });
 
         handleChange('vendors', nextVendors);
@@ -389,41 +1117,213 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                 }
             })
         ).catch(() => undefined);
-    }, [eventId, formData?.vendors, handleChange, persistVendorSelection, priceMultiplier]);
+    }, [absoluteMaxMultiplier, eventId, formData?.vendors, handleChange, persistVendorSelection, priceMultiplier, repriceVendorCard]);
 
     const handleSelectVendorWrapper = async (category, vendor) => {
+        // Mark selection in progress so the hydration effect doesn't overwrite
+        selectionInProgressRef.current = true;
+        if (selectionGuardTimerRef.current) clearTimeout(selectionGuardTimerRef.current);
+
         const hasExplicitUnitPricing = vendor?.unitPrice != null;
+
+        const explicitMinMultiplier = toPositiveNumber(vendor?.priceMultiplier, priceMultiplier);
+        const explicitAbsoluteMaxMultiplier = Math.max(
+            explicitMinMultiplier,
+            toPositiveNumber(vendor?.absoluteMaxMultiplier, absoluteMaxMultiplier)
+        );
+        const explicitRelativeMaxMultiplier = explicitAbsoluteMaxMultiplier / explicitMinMultiplier;
+        const explicitUnitPrice = toPositiveNumber(vendor?.unitPrice, toPositiveNumber(vendor?.priceMin, 0));
+        const explicitPriceMin = toPositiveNumber(vendor?.priceMin, explicitUnitPrice);
+        const explicitPriceMax = Math.max(
+            explicitPriceMin,
+            toPositiveNumber(vendor?.priceMax, Math.round(explicitPriceMin * explicitRelativeMaxMultiplier))
+        );
+        const explicitBaseUnitPrice = explicitUnitPrice > 0 ? (explicitUnitPrice / explicitMinMultiplier) : 0;
+        const explicitBasePriceMin = explicitPriceMin > 0 ? (explicitPriceMin / explicitMinMultiplier) : explicitBaseUnitPrice;
+        const explicitBasePriceMax = explicitPriceMax > 0
+            ? (explicitPriceMax / explicitAbsoluteMaxMultiplier)
+            : explicitBasePriceMin;
+
+        const serviceFallbackUnitPrice = getScaledMinFromServices({
+            vendorLike: vendor,
+            minMultiplier: toPositiveNumber(vendor?.priceMultiplier, priceMultiplier),
+            maxMultiplier: toPositiveNumber(vendor?.absoluteMaxMultiplier, absoluteMaxMultiplier),
+        });
+
+        const fallbackPriceMin = toPositiveNumber(vendor?.priceMin, serviceFallbackUnitPrice || 0);
 
         const baseVendor = hasExplicitUnitPricing
             ? {
                 ...vendor,
-                priceMin: vendor.priceMin != null ? vendor.priceMin : Number(vendor.unitPrice || 0),
-                priceMax: vendor.priceMax != null ? vendor.priceMax : Math.round(Number(vendor.unitPrice || 0) * DEFAULT_MAX_PRICE_MULTIPLIER),
-                maxPriceMultiplier: vendor.maxPriceMultiplier || DEFAULT_MAX_PRICE_MULTIPLIER,
+                baseUnitPrice: explicitBaseUnitPrice,
+                basePriceMin: explicitBasePriceMin,
+                basePriceMax: Math.max(explicitBasePriceMin, explicitBasePriceMax),
+                unitPrice: explicitUnitPrice,
+                priceMin: explicitPriceMin,
+                priceMax: explicitPriceMax,
+                priceMultiplier: explicitMinMultiplier,
+                absoluteMaxMultiplier: explicitAbsoluteMaxMultiplier,
+                maxPriceMultiplier: explicitRelativeMaxMultiplier,
             }
             : {
                 ...vendor,
-                priceMax: vendor.priceMax || Math.round((vendor.priceMin || 0) * DEFAULT_MAX_PRICE_MULTIPLIER),
-                maxPriceMultiplier: vendor.maxPriceMultiplier || DEFAULT_MAX_PRICE_MULTIPLIER,
+                priceMin: fallbackPriceMin,
+                priceMax: vendor.priceMax || Math.round((fallbackPriceMin || 0)),
+                maxPriceMultiplier: toPositiveNumber(relativeMaxMultiplier, 1),
             };
 
-        const adjustedVendor = normalizeSelectedVendorPricing(baseVendor, priceMultiplier);
+        const adjustedVendor = normalizeSelectedVendorPricing(baseVendor, {
+            minMultiplier: priceMultiplier,
+            maxMultiplier: absoluteMaxMultiplier,
+        });
 
         try {
             await persistVendorSelection({ category, vendor: adjustedVendor });
         } catch (e) {
             console.error('Failed to persist vendor selection:', e);
+
+            // Remove stale/conflicted card immediately so user doesn't keep selecting it.
+            setVendorsByCategory((prev) => {
+                const canonical = canonicalizeServiceLabel(category);
+                const list = Array.isArray(prev?.[canonical]) ? prev[canonical] : [];
+                const clickedVendorAuthId = String(adjustedVendor?.vendorAuthId || adjustedVendor?.authId || '').trim();
+                const clickedServiceId = String(adjustedVendor?.serviceId || '').trim();
+                return {
+                    ...prev,
+                    [canonical]: list.filter((v) => {
+                        const sameId = String(v?.id || '') === String(adjustedVendor?.id || '');
+                        const sameVendor = clickedVendorAuthId && String(v?.vendorAuthId || '').trim() === clickedVendorAuthId;
+                        const sameService = clickedServiceId && String(v?.serviceId || '').trim() === clickedServiceId;
+                        return !(sameId || sameVendor || sameService);
+                    }),
+                };
+            });
+
+            // If current selection for this service conflicts, deselect it first.
+            const selectedByCategory = formData?.vendors && typeof formData.vendors === 'object' ? formData.vendors : {};
+            const currentSelected = selectedByCategory?.[category] || selectedByCategory?.[canonicalizeServiceLabel(category)];
+            if (currentSelected && String(currentSelected?.id || '') === String(adjustedVendor?.id || '')) {
+                const cleared = removeCategorySelections(selectedByCategory, category);
+                handleChange('vendors', cleared);
+                try {
+                    await persistVendorSelection({ category, vendor: null, dayOverride: selectedReservationDay });
+                } catch {
+                    // best-effort cleanup
+                }
+            }
+
             if (e?.status === 409) {
-                toast.error('Vendor just became unavailable for this date. Refreshing list...');
+                toast.error('Vendor is currently unavailable for this date. Please choose another one.');
                 setVendorsRefreshKey((k) => k + 1);
             } else {
                 toast.error(e?.message || 'Failed to select vendor');
             }
+            selectionInProgressRef.current = false;
             return;
         }
 
-        handleSelectVendor(category, adjustedVendor);
+        const selectedByCategory = currentVendorsRef.current && typeof currentVendorsRef.current === 'object' ? currentVendorsRef.current : {};
+        const next = upsertCategorySelection(selectedByCategory, category, {
+            ...adjustedVendor,
+            _selectionHoldStatus: 'held',
+        });
+        handleChange('vendors', next);
+
+        // Keep the guard up for a few seconds so hydration doesn't race in
+        selectionGuardTimerRef.current = setTimeout(() => {
+            selectionInProgressRef.current = false;
+        }, 5000);
     };
+
+    const handleFinalizeReservation = useCallback(async () => {
+        const selectedByCategory = formData?.vendors && typeof formData.vendors === 'object'
+            ? { ...formData.vendors }
+            : {};
+
+        const categories = Object.keys(selectedByCategory);
+        if (categories.length === 0) {
+            toast.error('Select vendors before finalizing reservation.');
+            return;
+        }
+
+        if (!isPublicListing && selectedReservationDay) {
+            try {
+                const synced = await syncPlanningReservationDay({ day: selectedReservationDay });
+                if (synced) {
+                    lastSyncedReservationDayRef.current = selectedReservationDay;
+                }
+            } catch (error) {
+                toast.error(error?.message || 'Failed to sync updated event date. Please try again.');
+                return;
+            }
+        }
+
+        let nextVendors = { ...selectedByCategory };
+        const removed = [];
+
+        for (const category of categories) {
+            const vendor = nextVendors[category];
+            if (!vendor) continue;
+
+            const derivedRelativeMaxMultiplier = toPositiveNumber(relativeMaxMultiplier, 1);
+
+            const healedMin = toPositiveNumber(
+                vendor?.priceMin,
+                getScaledMinFromServices({
+                    vendorLike: vendor,
+                    minMultiplier: toPositiveNumber(vendor?.priceMultiplier, priceMultiplier),
+                    maxMultiplier: toPositiveNumber(vendor?.absoluteMaxMultiplier, absoluteMaxMultiplier),
+                })
+            );
+            const vendorForValidation = healedMin > 0
+                ? {
+                    ...vendor,
+                    unitPrice: toPositiveNumber(vendor?.unitPrice, healedMin),
+                    priceMin: healedMin,
+                    priceMax: Math.max(
+                        healedMin,
+                        toPositiveNumber(vendor?.priceMax, Math.round(healedMin * derivedRelativeMaxMultiplier))
+                    ),
+                    maxPriceMultiplier: derivedRelativeMaxMultiplier,
+                }
+                : vendor;
+
+            try {
+                await persistVendorSelection({
+                    category,
+                    vendor: vendorForValidation,
+                    dayOverride: selectedReservationDay,
+                });
+                nextVendors = upsertCategorySelection(nextVendors, category, {
+                    ...vendorForValidation,
+                    _selectionHoldStatus: 'held',
+                });
+            } catch (error) {
+                if (error?.status === 409) {
+                    nextVendors = removeCategorySelections(nextVendors, category);
+                    try {
+                        await persistVendorSelection({ category, vendor: null, dayOverride: selectedReservationDay });
+                    } catch {
+                        // best-effort cleanup
+                    }
+                    removed.push(category);
+                } else {
+                    toast.error(error?.message || 'Failed to validate current vendor locks.');
+                    return;
+                }
+            }
+        }
+
+        handleChange('vendors', nextVendors);
+
+        if (removed.length > 0) {
+            toast.error(`Some vendors were no longer locked for this date and were removed: ${removed.join(', ')}`);
+            setVendorsRefreshKey((k) => k + 1);
+            return;
+        }
+
+        handleNext();
+    }, [absoluteMaxMultiplier, formData?.vendors, handleChange, handleNext, isPublicListing, persistVendorSelection, priceMultiplier, relativeMaxMultiplier, removeCategorySelections, selectedReservationDay, syncPlanningReservationDay, upsertCategorySelection]);
 
     // Refresh list only when tab becomes visible; avoid aggressive interval polling.
     useEffect(() => {
@@ -470,34 +1370,53 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         });
     };
 
-    const handleRemoveService = (index) => {
-        const serviceToRemove = formData.services[index];
-        const newServices = formData.services.filter((_, i) => i !== index);
+    const handleRemoveService = async (index) => {
+        const previousServices = Array.isArray(formData.services) ? [...formData.services] : [];
+        const previousVendors = formData?.vendors && typeof formData.vendors === 'object' ? { ...formData.vendors } : {};
 
-        if (formData.vendors[serviceToRemove]) {
-            const newVendors = { ...formData.vendors };
-            delete newVendors[serviceToRemove];
-            handleChange('vendors', newVendors);
-            setTimeout(() => handleChange('services', newServices), 50);
-        } else {
-            handleChange('services', newServices);
-        }
+        const serviceToRemove = previousServices[index];
+        const newServices = previousServices.filter((_, i) => i !== index);
+        const newVendors = removeCategorySelections(previousVendors, serviceToRemove);
+
+        const previousActiveTab = activeServiceTab;
+
+        handleChange('vendors', newVendors);
+        handleChange('services', newServices);
 
         if (activeServiceTab >= index && activeServiceTab > 0) {
-            setActiveServiceTab(prev => prev - 1);
+            setActiveServiceTab((prev) => prev - 1);
         } else if (newServices.length <= activeServiceTab) {
             setActiveServiceTab(Math.max(0, newServices.length - 1));
         }
 
-        persistSelectedServices(newServices).catch((e) => {
+        try {
+            await persistSelectedServices(newServices);
+        } catch (e) {
             console.error('Failed to persist selected services:', e);
-        });
+            toast.error(e?.message || 'Failed to remove service');
+            handleChange('services', previousServices);
+            handleChange('vendors', previousVendors);
+            setActiveServiceTab(previousActiveTab);
+        }
     };
 
-    const handleRemoveVendorSelection = (category) => {
-        const newVendors = { ...formData.vendors };
-        delete newVendors[category];
+    const handleRemoveVendorSelection = async (category) => {
+        const previousVendors = formData?.vendors && typeof formData.vendors === 'object' ? { ...formData.vendors } : {};
+        const canonical = canonicalizeServiceLabel(category);
+        const current = previousVendors?.[category] || previousVendors?.[canonical];
+
+        const newVendors = removeCategorySelections(previousVendors, category);
         handleChange('vendors', newVendors);
+
+        try {
+            await persistVendorSelection({ category, vendor: null });
+        } catch (e) {
+            console.error('Failed to persist vendor deselection:', e);
+            toast.error(e?.message || 'Failed to remove selected vendor');
+            if (current) {
+                handleChange('vendors', previousVendors);
+            }
+        }
     };
 
     // Reset filters when changing category
@@ -515,8 +1434,28 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         let cancelled = false;
         const run = async () => {
             try {
+                // Keep backend planning day aligned before lock validation hydration.
+                // Otherwise the GET call with day override can clear still-valid locks from the previous day.
+                let dayForSelectionQuery = selectedReservationDay;
+                if (!isPublicListing && selectedReservationDay && lastSyncedReservationDayRef.current !== selectedReservationDay) {
+                    const synced = await syncPlanningReservationDay({ day: selectedReservationDay, silent: true });
+                    if (!cancelled && synced) {
+                        lastSyncedReservationDayRef.current = selectedReservationDay;
+                    } else if (!synced) {
+                        // Avoid destructive lock reconciliation against an unsynced override day.
+                        dayForSelectionQuery = null;
+                    }
+                }
+
+                const selectionQs = new URLSearchParams({ includeVendors: 'true' });
+                if (isPublicListing) {
+                    appendReservationQueryParams(selectionQs);
+                } else if (dayForSelectionQuery) {
+                    selectionQs.set('day', String(dayForSelectionQuery));
+                }
+
                 const response = await fetchWithAuth(
-                    `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(eventId))}`,
+                    `${API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(eventId))}?${selectionQs.toString()}`,
                     { method: 'GET' },
                     { dispatch, refreshAction: refreshAccessToken }
                 );
@@ -534,8 +1473,33 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                     }
                 }
 
-                if (!cancelled) {
+                if (!cancelled && !selectionInProgressRef.current) {
                     const knownServices = Array.isArray(formData.services) ? formData.services : [];
+                    const vendorProfiles = Array.isArray(selection?.vendorProfiles) ? selection.vendorProfiles : [];
+                    const profileByAuthId = new Map(
+                        vendorProfiles
+                            .map((profile) => [String(profile?.authId || '').trim(), profile])
+                            .filter(([authId]) => Boolean(authId))
+                    );
+
+                    const fetchVenueServiceDetails = async (serviceId) => {
+                        const id = String(serviceId || '').trim();
+                        if (!id) return null;
+
+                        try {
+                            const svcRes = await fetchWithAuth(
+                                `${API_BASE_URL}/api/vendor/public/services/${encodeURIComponent(id)}`,
+                                { method: 'GET' },
+                                { dispatch, refreshAction: refreshAccessToken }
+                            );
+                            const svcJson = await safeJson(svcRes);
+                            if (!svcRes.ok || !svcJson?.success) return null;
+                            return svcJson?.data?.service || null;
+                        } catch {
+                            return null;
+                        }
+                    };
+
                     const nextVendors = {};
 
                     const resolveServiceKey = (serviceValue) => {
@@ -550,7 +1514,8 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                     };
 
                     for (const item of (Array.isArray(selection?.vendors) ? selection.vendors : [])) {
-                        const vendorAuthId = item?.vendorAuthId ? String(item.vendorAuthId).trim() : '';
+                        const vendorAuthIdRaw = item?.vendorAuthId ?? item?.authId ?? null;
+                        const vendorAuthId = vendorAuthIdRaw ? String(vendorAuthIdRaw).trim() : '';
                         if (!vendorAuthId) continue;
 
                         const key = resolveServiceKey(item?.service);
@@ -558,11 +1523,101 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
 
                         const normalizedService = canonicalizeServiceLabel(item?.service);
                         const serviceId = item?.serviceId ? String(item.serviceId).trim() : null;
-                        const hydratedId = normalizedService === 'Venue' && serviceId ? serviceId : vendorAuthId;
+                        const hydratedId = serviceId || vendorAuthId;
+                        const profile = profileByAuthId.get(vendorAuthId) || null;
+                        const venueService = (normalizedService === 'Venue' && serviceId)
+                            ? await fetchVenueServiceDetails(serviceId)
+                            : null;
+                        const current = (currentVendorsRef.current || {})[key] || {};
+                        const matchedServiceFromCurrent = Array.isArray(current?.services)
+                            ? current.services.find((svc) => {
+                                const sid = String(svc?.serviceId || svc?.id || '').trim();
+                                return Boolean(serviceId && sid && sid === serviceId);
+                            })
+                            : null;
 
-                        const current = (formData?.vendors || {})[key] || {};
+                        const profileImage =
+                            profile?.images?.profile?.fileUrl ||
+                            profile?.images?.banner?.fileUrl ||
+                            null;
+
+                        const venueDetails = venueService?.details || {};
+                        const venueImage =
+                            Array.isArray(venueDetails?.images) && venueDetails.images.length > 0
+                                ? venueDetails.images[0]?.url
+                                : (venueDetails?.image || null);
+
+                        const fallbackLocation = profile?.location?.name || profile?.place || profile?.country || 'Location TBD';
+                        const location = normalizedService === 'Venue'
+                            ? (venueDetails?.locationAreaName || venueDetails?.location || fallbackLocation)
+                            : fallbackLocation;
+
                         const lineMin = Number(item?.servicePrice?.min ?? 0);
-                        const lineMax = Number(item?.servicePrice?.max ?? 0);
+                        const persistedPricingUnit = item?.pricingUnit != null ? String(item.pricingUnit).trim() : '';
+                        const hydratedPricingUnit = current?.pricingUnit || persistedPricingUnit || inferPricingUnit({
+                            serviceLabel: normalizedService,
+                            serviceCategory: normalizedService,
+                            categoryId: current?.categoryId,
+                            pricingUnit: current?.pricingUnit || persistedPricingUnit,
+                        });
+                        const hydratedPricingModel = resolveServicePricingModel({
+                            serviceLabel: normalizedService,
+                            serviceCategory: normalizedService,
+                            categoryId: current?.categoryId,
+                            pricingUnit: hydratedPricingUnit,
+                        });
+                        const persistedPricingQuantityRaw = Number(item?.pricingQuantity);
+                        const persistedPricingQuantity = Number.isFinite(persistedPricingQuantityRaw) && persistedPricingQuantityRaw > 0
+                            ? persistedPricingQuantityRaw
+                            : null;
+                        const persistedPricingQuantityUnit = item?.pricingQuantityUnit != null
+                            ? String(item.pricingQuantityUnit).trim() || null
+                            : null;
+                        const currentPricingQuantityRaw = Number(current?.pricingQuantity);
+                        const currentPricingQuantity = Number.isFinite(currentPricingQuantityRaw) && currentPricingQuantityRaw > 0
+                            ? currentPricingQuantityRaw
+                            : null;
+                        const inferredFixedQuantity = hydratedPricingModel === 'fixed'
+                            ? (() => {
+                                if (persistedPricingQuantity != null) return persistedPricingQuantity;
+                                if (currentPricingQuantity != null) return currentPricingQuantity;
+
+                                const lineMinRaw = Number(lineMin);
+                                const unitRaw = Number(current?.unitPrice ?? current?.priceMin ?? 0);
+                                if (Number.isFinite(lineMinRaw) && lineMinRaw > 0 && Number.isFinite(unitRaw) && unitRaw > 0) {
+                                    const guessed = lineMinRaw / unitRaw;
+                                    if (Number.isFinite(guessed) && guessed > 0) {
+                                        return Math.max(0.5, Math.round(guessed * 2) / 2);
+                                    }
+                                }
+
+                                return 1;
+                            })()
+                            : null;
+                        const quantityMultiplier = resolvePricingQuantity({
+                            vendorLike: {
+                                ...current,
+                                pricingUnit: hydratedPricingUnit,
+                                ...(inferredFixedQuantity != null ? { pricingQuantity: inferredFixedQuantity } : {}),
+                            },
+                            category: normalizedService,
+                        });
+                        const safePriceMultiplier = toPositiveNumber(priceMultiplierRef.current, 1);
+                        const safeAbsoluteMaxMultiplier = Math.max(
+                            safePriceMultiplier,
+                            toPositiveNumber(absoluteMaxMultiplierRef.current, safePriceMultiplier)
+                        );
+                        const activeRelativeMaxMultiplier = safeAbsoluteMaxMultiplier / safePriceMultiplier;
+                        const hydratedUnitMin = Number.isFinite(lineMin) && lineMin > 0
+                            ? Math.max(1, Math.round(lineMin / quantityMultiplier))
+                            : Number(current?.unitPrice || 0);
+                        const hydratedUnitMax = Math.max(
+                            hydratedUnitMin,
+                            Math.round(hydratedUnitMin * activeRelativeMaxMultiplier)
+                        );
+
+                        const baseUnitMin = Math.max(0, Math.round(hydratedUnitMin / safePriceMultiplier));
+                        const baseUnitMax = Math.max(0, Math.round(hydratedUnitMax / safeAbsoluteMaxMultiplier));
 
                         nextVendors[key] = {
                             ...current,
@@ -571,16 +1626,52 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                             authId: vendorAuthId,
                             serviceId,
                             category: normalizedService,
-                            name: current?.name || current?.vendorBusinessName || 'Selected Vendor',
-                            vendorBusinessName: current?.vendorBusinessName || current?.name || null,
-                            pricingUnit: current?.pricingUnit || (normalizedService === 'Catering & Drinks' ? 'PER_PLATE' : 'EVENT'),
-                            unitPrice: Number.isFinite(lineMin) && lineMin > 0 ? lineMin : Number(current?.unitPrice || 0),
-                            priceMin: Number.isFinite(lineMin) && lineMin > 0 ? lineMin : Number(current?.priceMin || 0),
-                            priceMax: Number.isFinite(lineMax) && lineMax > 0 ? lineMax : Number(current?.priceMax || 0),
+                            categoryId: normalizedService === 'Venue' ? 'venues' : (current?.categoryId || null),
+                            name: venueService?.name || current?.name || current?.vendorBusinessName || profile?.businessName || 'Selected Vendor',
+                            vendorBusinessName: current?.vendorBusinessName || profile?.businessName || current?.name || null,
+                            image: venueImage || current?.image || profileImage || pickFallbackImage(normalizedService, 0),
+                            banner: current?.banner || venueImage || profileImage || null,
+                            location,
+                            mapsUrl:
+                                venueDetails?.locationMapsUrl ||
+                                venueDetails?.mapsUrl ||
+                                current?.mapsUrl ||
+                                profile?.location?.mapsUrl ||
+                                null,
+                            details: normalizedService === 'Venue' ? (venueDetails || current?.details || {}) : (current?.details || {}),
+                            selectedPackage: serviceId
+                                ? {
+                                    serviceId,
+                                    id: serviceId,
+                                    name: (normalizedService === 'Venue'
+                                        ? (venueService?.name || current?.name || null)
+                                        : (matchedServiceFromCurrent?.name || current?.name || null)),
+                                    tier: matchedServiceFromCurrent?.tier || null,
+                                }
+                                : current?.selectedPackage,
+                            pricingUnit: hydratedPricingUnit,
+                            pricingQuantity: inferredFixedQuantity != null
+                                ? inferredFixedQuantity
+                                : (persistedPricingQuantity != null ? persistedPricingQuantity : current?.pricingQuantity),
+                            pricingQuantityUnit: inferredFixedQuantity != null
+                                ? (String(hydratedPricingUnit || '').toUpperCase() === 'PER_KG'
+                                    ? (persistedPricingQuantityUnit || 'kg')
+                                    : (persistedPricingQuantityUnit || current?.pricingQuantityUnit))
+                                : (persistedPricingQuantityUnit || current?.pricingQuantityUnit),
+                            baseUnitPrice: baseUnitMin,
+                            basePriceMin: baseUnitMin,
+                            basePriceMax: baseUnitMax > 0 ? baseUnitMax : baseUnitMin,
+                            priceMultiplier: safePriceMultiplier,
+                            absoluteMaxMultiplier: safeAbsoluteMaxMultiplier,
+                            maxPriceMultiplier: safeAbsoluteMaxMultiplier / safePriceMultiplier,
+                            unitPrice: Number.isFinite(hydratedUnitMin) && hydratedUnitMin > 0 ? hydratedUnitMin : Number(current?.unitPrice || 0),
+                            priceMin: Number.isFinite(hydratedUnitMin) && hydratedUnitMin > 0 ? hydratedUnitMin : Number(current?.priceMin || 0),
+                            priceMax: Number.isFinite(hydratedUnitMax) && hydratedUnitMax > 0 ? hydratedUnitMax : Number(current?.priceMax || 0),
+                            _selectionHoldStatus: current?._selectionHoldStatus === 'held' ? 'held' : 'restored',
                         };
                     }
 
-                    const normalizedCurrent = JSON.stringify(formData?.vendors || {});
+                    const normalizedCurrent = JSON.stringify(currentVendorsRef.current || {});
                     const normalizedNext = JSON.stringify(nextVendors);
                     if (normalizedCurrent !== normalizedNext) {
                         handleChange('vendors', nextVendors);
@@ -593,7 +1684,9 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
 
         run();
         return () => { cancelled = true; };
-    }, [dispatch, eventId, formData.services, handleChange, setActiveServiceTab]);
+    // NOTE: formData?.vendors, priceMultiplier, absoluteMaxMultiplier intentionally excluded.
+    // Refs are used instead to break re-run loops that overwrote fresh local selections.
+    }, [appendReservationQueryParams, dispatch, eventDayCount, eventId, formData.services, handleChange, isPublicListing, overallAttendeeCount, resolvePricingQuantity, selectedReservationDay, setActiveServiceTab, syncPlanningReservationDay]);
 
     // Fetch vendors from backend per category + filters
     const searchDebounceRef = useRef(null);
@@ -605,8 +1698,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         }
 
         searchDebounceRef.current = setTimeout(async () => {
-            const hasCachedForCategory = Array.isArray(vendorsByCategory[activeCategory]) && vendorsByCategory[activeCategory].length > 0;
-            setVendorsLoading(!hasCachedForCategory);
+            setVendorsLoading(true);
             setVendorsError(null);
 
             try {
@@ -619,7 +1711,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                     limit: '100',
                 });
                 if (searchQuery?.trim()) qs.set('q', searchQuery.trim());
-                if (formData?.date) qs.set('day', String(formData.date));
+                appendReservationQueryParams(qs);
 
                 const response = await fetchWithAuth(
                     `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(eventId))}/vendors?${qs.toString()}`,
@@ -632,12 +1724,20 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                     throw new Error(data?.message || 'Failed to fetch vendors');
                 }
 
+                const backendMultipliers = normalizeDemandPricingMultipliers(data?.data?.pricingMultipliers || data?.data?.demandPricingMultipliers);
+                stableSetDemandPricingMultipliers(backendMultipliers);
+
+                const backendDemandTier = String(data?.data?.demandTier || '').trim().toUpperCase();
+                const resolvedActiveMultipliers = backendDemandTier === 'HIGH_DEMAND'
+                    ? backendMultipliers.highDemand
+                    : backendMultipliers.normal;
+
                 const vendors = Array.isArray(data?.data?.vendors) ? data.data.vendors : [];
                 const mapped = activeCategory === 'Venue'
                     ? vendors.flatMap((v, idx) => {
                         const services = Array.isArray(v?.services) ? v.services : [];
                         if (services.length === 0) {
-                            return [mapBackendVendorToCard(v, 'Venue', idx, eventLat, eventLng)];
+                            return [mapBackendVendorToCard(v, 'Venue', idx, eventLat, eventLng, resolvedActiveMultipliers.min, resolvedActiveMultipliers.max)];
                         }
                         return services.map((svc, svcIdx) => mapBackendVenueServiceToCard({
                             vendor: v,
@@ -645,9 +1745,11 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                             index: idx * 100 + svcIdx,
                             eventLat,
                             eventLng,
+                            minMultiplier: resolvedActiveMultipliers.min,
+                            maxMultiplier: resolvedActiveMultipliers.max,
                         }));
                     })
-                    : vendors.map((v, idx) => mapBackendVendorToCard(v, activeCategory, idx, eventLat, eventLng));
+                    : vendors.map((v, idx) => mapBackendVendorToCard(v, activeCategory, idx, eventLat, eventLng, resolvedActiveMultipliers.min, resolvedActiveMultipliers.max));
 
                 setVendorsByCategory((prev) => ({
                     ...prev,
@@ -664,7 +1766,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         return () => {
             if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
         };
-    }, [activeCategory, dispatch, eventId, eventLat, eventLng, formData?.date, priceRange.max, priceRange.min, searchQuery, sortOption, vendorsRefreshKey]);
+    }, [activeCategory, appendReservationQueryParams, dispatch, eventId, eventLat, eventLng, priceRange.max, priceRange.min, searchQuery, sortOption, stableSetDemandPricingMultipliers, vendorsRefreshKey]);
 
     const filteredVendors = useMemo(() => {
         const fetched = vendorsByCategory[activeCategory];
@@ -736,24 +1838,19 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     const paginatedVendors = filteredVendors.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
     const allServicesSelected = formData.services?.every((service) => hasSelectedVendorForService(service));
-    const attendeeCountForPricing = Math.max(1, attendeeInfo.attendeeCount || 0);
-
     const getVendorLineMin = (v) => {
         const unitPrice = Number(v?.unitPrice ?? v?.priceMin ?? 0);
         if (!Number.isFinite(unitPrice) || unitPrice <= 0) return 0;
 
-        const pricingUnit = v?.pricingUnit
-            || (String(v?.category || '').toLowerCase().includes('catering') ? 'PER_PLATE' : 'EVENT');
-
-        const multiplier = pricingUnit === 'PER_PLATE' ? attendeeCountForPricing : 1;
+        const multiplier = resolvePricingQuantity({ vendorLike: v, category: v?.category });
         return Math.round(unitPrice * multiplier);
     };
 
     const estimatedTotal = Object.values(formData.vendors).reduce((acc, v) => acc + getVendorLineMin(v), 0);
     const estimatedMax = Object.values(formData.vendors).reduce(
         (acc, v) => {
-            const maxMultiplier = Number(v?.maxPriceMultiplier || DEFAULT_MAX_PRICE_MULTIPLIER);
-            const safeMultiplier = Number.isFinite(maxMultiplier) && maxMultiplier > 0 ? maxMultiplier : DEFAULT_MAX_PRICE_MULTIPLIER;
+            const maxMultiplier = Number(v?.maxPriceMultiplier || relativeMaxMultiplier || 1);
+            const safeMultiplier = Number.isFinite(maxMultiplier) && maxMultiplier > 0 ? maxMultiplier : (relativeMaxMultiplier || 1);
             return acc + Math.round(getVendorLineMin(v) * safeMultiplier);
         },
         0
@@ -774,6 +1871,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                         priceMultiplier={priceMultiplier}
                         attendeeCount={attendeeInfo.attendeeCount}
                         attendeeLabel={attendeeInfo.attendeeLabel}
+                        eventDayCount={eventDayCount}
                         guestCount={formData.guests}
                         mode={activeCategory === 'Venue' ? 'venue-service' : undefined}
                     />
@@ -902,18 +2000,21 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                                         className="flex-1 h-10 bg-transparent border-none focus:ring-0 text-primary placeholder-primary/40 font-bold text-sm px-4"
                                     />
                                     <div
-                                        className="hidden md:flex items-center gap-4 px-6 border-l border-gray-100 relative group cursor-pointer"
-                                        onClick={() => setIsCalendarOpen(!isCalendarOpen)}
+                                        className={`hidden md:flex items-center gap-4 px-6 border-l border-gray-100 relative group ${isPublicListing ? 'cursor-default' : 'cursor-pointer'}`}
+                                        onClick={isPublicListing ? undefined : () => setIsCalendarOpen(!isCalendarOpen)}
                                     >
                                         <BsCalendarEvent className="text-primary/40 group-hover:text-primary transition-colors" size={14} />
-                                        <div className="flex flex-col relative w-24">
-                                            <span className="text-[8px] font-bold uppercase tracking-widest text-primary/40">Date</span>
-                                            <span className="text-[10px] font-bold text-primary underline decoration-dotted underline-offset-4 cursor-pointer group-hover:text-secondary transition-colors truncate">
-                                                {formData.date ? new Date(formData.date).toLocaleDateString() : "Select"}
+                                        <div className={`flex flex-col relative ${isPublicListing ? 'w-48' : 'w-24'}`}>
+                                            <span className="text-[8px] font-bold uppercase tracking-widest text-primary/40">{isPublicListing ? 'Date Range' : 'Date'}</span>
+                                            <span
+                                                className={`text-[10px] font-bold text-primary transition-colors truncate ${isPublicListing ? '' : 'underline decoration-dotted underline-offset-4 cursor-pointer group-hover:text-secondary'}`}
+                                                title={displayedDateLabel}
+                                            >
+                                                {displayedDateLabel}
                                             </span>
 
                                             <AnimatePresence>
-                                                {isCalendarOpen && (
+                                                {!isPublicListing && isCalendarOpen && (
                                                     <SharedCalendar
                                                         selectedDate={formData.date}
                                                         onChange={(dateStr) => {
@@ -999,6 +2100,18 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                                         )}
                                     </div>
                                 </div>
+
+                                {isPublicListing && activeCategory === 'Venue' && attendeeInfo.capacityBaselineValue > 0 && (
+                                    <div className="rounded-2xl border border-primary/10 bg-white/80 px-4 py-3">
+                                        <p className="text-[10px] font-bold uppercase tracking-widest text-primary/50">Venue Capacity Baseline</p>
+                                        <p className="text-xs text-primary mt-1 font-semibold">
+                                            {attendeeInfo.capacityBaselineSource === 'peak-day'
+                                                ? `Using peak day tickets: ${attendeeInfo.capacityBaselineValue.toLocaleString()} (max day-wise allocation).`
+                                                : `Using fallback tickets total: ${attendeeInfo.capacityBaselineValue.toLocaleString()}.`
+                                            }
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -1025,7 +2138,6 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                                         isSelected={selectedVendorForActiveCategory?.id === vendor.id}
                                         onSelect={() => handleSelectVendorWrapper(activeCategoryRaw, vendor)}
                                         onViewDetails={() => setSelectedVendorForDetails(vendor)}
-                                        priceMultiplier={priceMultiplier}
                                     />
                                 ))}
                             </div>
@@ -1079,13 +2191,17 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                 {/* Right Floating Sidebar - Selection */}
                 <SelectionSidebar
                     vendors={formData.vendors}
+                    attendeeCount={attendeeInfo.attendeeCount}
+                    pricingAttendeeCount={overallAttendeeCount}
+                    attendeeLabel={attendeeInfo.attendeeLabel}
+                    eventDayCount={eventDayCount}
                     isHighDemand={isHighDemand}
                     estimatedTotal={estimatedTotal}
                     estimatedMax={estimatedMax}
                     allServicesSelected={allServicesSelected}
                     onRemoveVendor={handleRemoveVendorSelection}
                     onBack={handleBack}
-                    onNext={handleNext}
+                    onNext={handleFinalizeReservation}
                 />
             </div>
         </div>

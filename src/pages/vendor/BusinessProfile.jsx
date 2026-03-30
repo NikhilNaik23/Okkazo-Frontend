@@ -18,11 +18,40 @@ import { useDispatch, useSelector } from "react-redux";
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import LocationPicker from "../../components/Map/LocationPicker";
+import { fetchWithAuth } from "../../utils/apiHandler";
 import {
     fetchVendorApplication,
+    uploadVendorApplicationImage,
+    refreshAccessToken,
     selectVendorApplication,
     selectVendorApplicationLoading,
 } from "../../store/slices/authSlice";
+import {
+    fetchVendorEventRequests,
+    selectVendorEventRequests,
+} from "../../store/slices/vendorEventsSlice";
+
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const toDayKey = (value) => {
+    if (!value) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+    if (DAY_KEY_RE.test(raw)) return raw;
+
+    const isoDay = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (isoDay?.[1]) return isoDay[1];
+
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return null;
+
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+};
 
 const okkazoIcon = L.divIcon({
     html: `
@@ -43,10 +72,24 @@ const BusinessProfile = () => {
     const dispatch = useDispatch();
     const vendorApplication = useSelector(selectVendorApplication);
     const vendorApplicationLoading = useSelector(selectVendorApplicationLoading);
+    const vendorEventRequests = useSelector(selectVendorEventRequests);
 
     const [isEditingAbout, setIsEditingAbout] = useState(false);
-    const [aboutOverride, setAboutOverride] = useState(null);
     const [tempAbout, setTempAbout] = useState(vendorProfileData.about);
+    const [isSavingAbout, setIsSavingAbout] = useState(false);
+    const [isUploadingImage, setIsUploadingImage] = useState({ profile: false, banner: false });
+    const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+    const [isSavingLocation, setIsSavingLocation] = useState(false);
+    const [locationDraft, setLocationDraft] = useState({
+        location: '',
+        place: '',
+        country: '',
+        latitude: null,
+        longitude: null,
+    });
+
+    const profileImageInputRef = useRef(null);
+    const bannerImageInputRef = useRef(null);
     const didRefreshForCoordsRef = useRef(false);
 
     useEffect(() => {
@@ -54,6 +97,10 @@ const BusinessProfile = () => {
             dispatch(fetchVendorApplication());
         }
     }, [dispatch, vendorApplication, vendorApplicationLoading]);
+
+    useEffect(() => {
+        dispatch(fetchVendorEventRequests());
+    }, [dispatch]);
 
     useEffect(() => {
         if (didRefreshForCoordsRef.current) return;
@@ -70,7 +117,12 @@ const BusinessProfile = () => {
         }
     }, [dispatch, vendorApplication, vendorApplicationLoading]);
 
-    const about = aboutOverride ?? vendorApplication?.description ?? vendorProfileData.about;
+    useEffect(() => {
+        if (isEditingAbout) return;
+        setTempAbout(vendorApplication?.description || vendorProfileData.about);
+    }, [isEditingAbout, vendorApplication]);
+
+    const about = vendorApplication?.description ?? vendorProfileData.about;
 
     const approvedYear = useMemo(() => {
         const raw = vendorApplication?.approvedAt;
@@ -81,18 +133,67 @@ const BusinessProfile = () => {
         return date.getFullYear();
     }, [vendorApplication]);
 
+    const todayDayKey = useMemo(() => {
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    }, []);
+
+    const bookingStats = useMemo(() => {
+        const rows = Array.isArray(vendorEventRequests) ? vendorEventRequests : [];
+
+        let eventsServed = 0;
+        let upcomingEvents = 0;
+
+        rows.forEach((row) => {
+            const vendorItems = Array.isArray(row?.vendorItems) ? row.vendorItems : [];
+            const hasRejected = vendorItems.some((v) => String(v?.status || '').trim().toUpperCase() === 'REJECTED');
+            const isPending = vendorItems.some((v) => String(v?.status || '').trim().toUpperCase() === 'YET_TO_SELECT');
+            const isConfirmed = !hasRejected && !isPending;
+
+            if (!isConfirmed) return;
+
+            eventsServed += 1;
+            const eventDay = toDayKey(row?.eventDate);
+            if (eventDay && eventDay >= todayDayKey) upcomingEvents += 1;
+        });
+
+        return {
+            eventsServed,
+            upcomingEvents,
+            totalEvents: rows.length,
+        };
+    }, [todayDayKey, vendorEventRequests]);
+
     const stats = useMemo(() => {
         const base = Array.isArray(vendorProfileData.stats) ? vendorProfileData.stats : [];
-        if (base.length === 0) return base;
-        const next = base.map((s) => ({ ...s }));
-        // Replace first stat with "Active Since" driven by approved year.
-        next[0] = {
-            ...next[0],
-            label: 'Active Since',
-            value: approvedYear != null ? String(approvedYear) : next?.[0]?.value,
-        };
-        return next;
-    }, [approvedYear]);
+        const getIcon = (index) => base?.[index]?.icon || null;
+
+        return [
+            {
+                icon: getIcon(0),
+                label: 'Active Since',
+                value: approvedYear != null ? String(approvedYear) : '—',
+            },
+            {
+                icon: getIcon(1),
+                label: 'Events Served',
+                value: bookingStats.eventsServed.toLocaleString(),
+            },
+            {
+                icon: getIcon(2),
+                label: 'Upcoming Events',
+                value: bookingStats.upcomingEvents.toLocaleString(),
+            },
+            {
+                icon: getIcon(3),
+                label: 'Total Events',
+                value: bookingStats.totalEvents.toLocaleString(),
+            },
+        ];
+    }, [approvedYear, bookingStats]);
 
     const profileImageUrl = vendorApplication?.images?.profile?.fileUrl || null;
     const bannerImageUrl = vendorApplication?.images?.banner?.fileUrl || null;
@@ -162,46 +263,202 @@ const BusinessProfile = () => {
         link.remove();
     };
 
-    const handleSaveChanges = () => {
-        toast.promise(
-            new Promise((resolve) => setTimeout(resolve, 1000)),
-            {
-                loading: 'Saving changes...',
-                success: <b>Profile updated successfully!</b>,
-                error: <b>Could not save changes.</b>,
-            },
-            {
-                style: { borderRadius: '16px', background: '#0b2d49', color: '#fff' }
-            }
-        );
+    const safeJson = async (response) => {
+        try {
+            return await response.json();
+        } catch {
+            return null;
+        }
     };
 
-    const handleUpdateAbout = () => {
-        setAboutOverride(tempAbout);
-        setIsEditingAbout(false);
-        toast.success("Description updated!");
+    const updateMyProfile = async (payload, successMessage) => {
+        const response = await fetchWithAuth(
+            `${API_BASE_URL}/api/vendor/me/application/profile`,
+            {
+                method: 'PATCH',
+                body: JSON.stringify(payload),
+            },
+            { dispatch, refreshAction: refreshAccessToken }
+        );
+
+        const data = await safeJson(response);
+        if (!response.ok || !data?.success) {
+            throw new Error(data?.error?.message || data?.message || 'Failed to update profile');
+        }
+
+        await dispatch(fetchVendorApplication());
+        if (successMessage) toast.success(successMessage);
+
+        return data?.data || null;
+    };
+
+    const handleUpdateAbout = async () => {
+        const nextDescription = String(tempAbout || '').trim();
+        if (!nextDescription) {
+            toast.error('Description cannot be empty');
+            return;
+        }
+
+        if (nextDescription.length > 2000) {
+            toast.error('Description cannot exceed 2000 characters');
+            return;
+        }
+
+        try {
+            setIsSavingAbout(true);
+            await updateMyProfile({ description: nextDescription }, 'Description updated');
+            setIsEditingAbout(false);
+        } catch (error) {
+            toast.error(error?.message || 'Failed to update description');
+        } finally {
+            setIsSavingAbout(false);
+        }
+    };
+
+    const handleImageSelected = async (imageType, file) => {
+        if (!file) return;
+
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+        if (!allowedTypes.includes(file.type)) {
+            toast.error('Only JPEG and PNG images are allowed');
+            return;
+        }
+
+        const maxSize = 5 * 1024 * 1024;
+        if (file.size > maxSize) {
+            toast.error('Image must be 5MB or smaller');
+            return;
+        }
+
+        try {
+            setIsUploadingImage((prev) => ({ ...prev, [imageType]: true }));
+            await dispatch(uploadVendorApplicationImage({ imageType, file })).unwrap();
+            toast.success(`${imageType === 'profile' ? 'Profile' : 'Cover'} image updated`);
+        } catch (error) {
+            toast.error(String(error || `Failed to update ${imageType} image`));
+        } finally {
+            setIsUploadingImage((prev) => ({ ...prev, [imageType]: false }));
+        }
+    };
+
+    const openLocationModal = () => {
+        setLocationDraft({
+            location: String(vendorApplication?.location || '').trim(),
+            place: String(vendorApplication?.place || '').trim(),
+            country: String(vendorApplication?.country || '').trim(),
+            latitude: Number.isFinite(Number(vendorApplication?.latitude)) ? Number(vendorApplication?.latitude) : null,
+            longitude: Number.isFinite(Number(vendorApplication?.longitude)) ? Number(vendorApplication?.longitude) : null,
+        });
+        setIsLocationModalOpen(true);
+    };
+
+    const handleMapLocationSelect = async (data) => {
+        const lat = Number(data?.lat);
+        const lng = Number(data?.lng);
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            toast.error('Invalid location selected');
+            return;
+        }
+
+        try {
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+                { headers: { 'User-Agent': 'Okkazo-Frontend/1.0' } }
+            );
+            const geoData = await response.json();
+
+            const place = geoData?.address?.city
+                || geoData?.address?.town
+                || geoData?.address?.village
+                || geoData?.address?.suburb
+                || geoData?.address?.county
+                || '';
+            const country = geoData?.address?.country || '';
+
+            setLocationDraft((prev) => ({
+                ...prev,
+                location: String(data?.address || geoData?.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`).trim(),
+                place: String(place || '').trim(),
+                country: String(country || '').trim(),
+                latitude: lat,
+                longitude: lng,
+            }));
+        } catch {
+            setLocationDraft((prev) => ({
+                ...prev,
+                location: String(data?.address || `${lat.toFixed(4)}, ${lng.toFixed(4)}`).trim(),
+                latitude: lat,
+                longitude: lng,
+            }));
+        }
+    };
+
+    const handleSaveLocation = async () => {
+        const locationText = String(locationDraft.location || '').trim();
+        if (!locationText) {
+            toast.error('Location is required');
+            return;
+        }
+
+        const lat = Number(locationDraft.latitude);
+        const lng = Number(locationDraft.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+            toast.error('Please select a valid point on the map');
+            return;
+        }
+
+        try {
+            setIsSavingLocation(true);
+            await updateMyProfile(
+                {
+                    location: locationText,
+                    place: String(locationDraft.place || '').trim() || null,
+                    country: String(locationDraft.country || '').trim() || null,
+                    latitude: lat,
+                    longitude: lng,
+                },
+                'Location updated'
+            );
+            setIsLocationModalOpen(false);
+        } catch (error) {
+            toast.error(error?.message || 'Failed to update location');
+        } finally {
+            setIsSavingLocation(false);
+        }
     };
 
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
-            {/* Header Actions */}
-            <div className="flex justify-between items-center mb-10">
+            <div className="mb-10">
                 <h1 className="text-3xl font-black tracking-tight">Business Profile</h1>
-                <div className="flex items-center gap-4">
-                    <button className="px-6 py-3 bg-white border-2 border-[#e9eff1] text-[#0b2d49] rounded-2xl font-bold text-sm hover:border-[#0b2d49] transition-all flex items-center gap-2">
-                        <BsGlobe /> Preview Website
-                    </button>
-                    <button
-                        onClick={handleSaveChanges}
-                        className="px-6 py-3 bg-[#0b2d49] text-white rounded-2xl font-bold text-sm hover:bg-[#d7a444] transition-all shadow-lg active:scale-95"
-                    >
-                        Save Changes
-                    </button>
-                </div>
             </div>
 
             {/* Hero / Cover Section */}
             <div className="relative mb-20">
+                <input
+                    ref={bannerImageInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg"
+                    className="hidden"
+                    onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        handleImageSelected('banner', file);
+                        e.target.value = '';
+                    }}
+                />
+                <input
+                    ref={profileImageInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg"
+                    className="hidden"
+                    onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        handleImageSelected('profile', file);
+                        e.target.value = '';
+                    }}
+                />
+
                 <div className="h-80 w-full rounded-[3rem] bg-[#e9eff1] overflow-hidden group border border-white">
                     <img
                         src={bannerImageUrl || "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&q=80&w=1600"}
@@ -209,10 +466,11 @@ const BusinessProfile = () => {
                         alt="Cover"
                     />
                     <button
-                        onClick={() => toast.success("Cover photo update coming soon!")}
+                        onClick={() => bannerImageInputRef.current?.click()}
+                        disabled={isUploadingImage.banner}
                         className="absolute bottom-6 right-6 px-4 py-2 bg-white/90 backdrop-blur-md rounded-xl text-[#0b2d49] font-bold text-xs shadow-lg flex items-center gap-2 hover:bg-white transition-all"
                     >
-                        <BsCamera /> Change Cover
+                        <BsCamera /> {isUploadingImage.banner ? 'Updating Cover...' : 'Change Cover'}
                     </button>
                 </div>
 
@@ -227,7 +485,8 @@ const BusinessProfile = () => {
                             />
                         </div>
                         <button
-                            onClick={() => toast.success("Profile photo update coming soon!")}
+                            onClick={() => profileImageInputRef.current?.click()}
+                            disabled={isUploadingImage.profile}
                             className="absolute bottom-2 right-2 w-10 h-10 bg-[#0b2d49] text-white rounded-xl flex items-center justify-center border-2 border-white shadow-lg hover:bg-[#d7a444] transition-all"
                         >
                             <BsCamera size={18} />
@@ -279,9 +538,10 @@ const BusinessProfile = () => {
                                 />
                                 <button
                                     onClick={handleUpdateAbout}
+                                    disabled={isSavingAbout}
                                     className="px-8 py-3 bg-[#0b2d49] text-white rounded-xl font-bold text-sm shadow-lg shadow-[#0b2d49]/10 hover:bg-[#d7a444] transition-all"
                                 >
-                                    Update Description
+                                    {isSavingAbout ? 'Updating...' : 'Update Description'}
                                 </button>
                             </div>
                         ) : (
@@ -445,12 +705,20 @@ const BusinessProfile = () => {
                     <VendorAvailabilityCalendar />
 
                     <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-[#708aa0]/5">
-                        <h3 className="text-xl font-black flex items-center gap-3 mb-8">
-                            <div className="w-10 h-10 bg-[#0b2d49]/5 text-[#d7a444] rounded-xl flex items-center justify-center">
-                                <BsGeoAlt size={20} />
-                            </div>
-                            Service Area
-                        </h3>
+                        <div className="flex items-center justify-between gap-3 mb-8">
+                            <h3 className="text-xl font-black flex items-center gap-3">
+                                <div className="w-10 h-10 bg-[#0b2d49]/5 text-[#d7a444] rounded-xl flex items-center justify-center">
+                                    <BsGeoAlt size={20} />
+                                </div>
+                                Service Area
+                            </h3>
+                            <button
+                                onClick={openLocationModal}
+                                className="text-[10px] font-black uppercase text-[#d7a444] hover:underline flex items-center gap-2 tracking-widest leading-none shrink-0"
+                            >
+                                <BsPencilSquare size={14} /> Edit Location
+                            </button>
+                        </div>
                         <div className="h-96 w-full rounded-[2.5rem] bg-[#e9eff1] relative overflow-hidden border-2 border-dashed border-[#708aa0]/10 hover:border-[#d7a444]/50 transition-all">
                             {hasCoords && center ? (
                                 <MapContainer
@@ -479,8 +747,8 @@ const BusinessProfile = () => {
                                     <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-[#d7a444] shadow-sm mb-4">
                                         <BsGeoAlt size={28} />
                                     </div>
-                                    <p className="text-sm font-black text-[#0b2d49]">Coverage Map Placeholder</p>
-                                    <p className="text-xs text-[#708aa0] font-medium mt-2">Integrating with Leaflet for precise area selection</p>
+                                    <p className="text-sm font-black text-[#0b2d49]">Location not set</p>
+                                    <p className="text-xs text-[#708aa0] font-medium mt-2">Use Edit Location to pin your service area</p>
                                 </div>
                             )}
                         </div>
@@ -494,6 +762,99 @@ const BusinessProfile = () => {
                     </div>
                 </div>
             </div>
+
+            {isLocationModalOpen && (
+                <div className="fixed inset-0 z-[220] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="relative isolate w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-gray-100 overflow-hidden">
+                        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
+                            <h3 className="text-lg font-black text-[#0b2d49]">Update Service Area</h3>
+                            <button
+                                onClick={() => setIsLocationModalOpen(false)}
+                                className="px-3 py-1.5 rounded-lg bg-[#f8fafb] text-[#708aa0] text-xs font-black uppercase tracking-widest hover:bg-[#e9eff1]"
+                            >
+                                Close
+                            </button>
+                        </div>
+
+                        <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-widest text-[#708aa0] mb-2">Address</label>
+                                    <textarea
+                                        value={locationDraft.location}
+                                        onChange={(e) => setLocationDraft((prev) => ({ ...prev, location: e.target.value }))}
+                                        className="w-full min-h-28 p-4 rounded-2xl bg-[#f8fafb] border border-gray-100 focus:outline-none focus:ring-2 focus:ring-[#d7a444]/30 text-sm font-medium text-[#0b2d49] resize-none"
+                                        placeholder="Select from map or type your address"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-[#708aa0] mb-2">Place</label>
+                                        <input
+                                            value={locationDraft.place}
+                                            onChange={(e) => setLocationDraft((prev) => ({ ...prev, place: e.target.value }))}
+                                            className="w-full h-11 px-3 rounded-xl bg-[#f8fafb] border border-gray-100 focus:outline-none focus:ring-2 focus:ring-[#d7a444]/30 text-sm font-medium text-[#0b2d49]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-[#708aa0] mb-2">Country</label>
+                                        <input
+                                            value={locationDraft.country}
+                                            onChange={(e) => setLocationDraft((prev) => ({ ...prev, country: e.target.value }))}
+                                            className="w-full h-11 px-3 rounded-xl bg-[#f8fafb] border border-gray-100 focus:outline-none focus:ring-2 focus:ring-[#d7a444]/30 text-sm font-medium text-[#0b2d49]"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-[#708aa0] mb-2">Latitude</label>
+                                        <input
+                                            value={locationDraft.latitude != null ? String(locationDraft.latitude) : ''}
+                                            readOnly
+                                            className="w-full h-11 px-3 rounded-xl bg-[#f8fafb] border border-gray-100 text-sm font-bold text-[#0b2d49]/80"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-widest text-[#708aa0] mb-2">Longitude</label>
+                                        <input
+                                            value={locationDraft.longitude != null ? String(locationDraft.longitude) : ''}
+                                            readOnly
+                                            className="w-full h-11 px-3 rounded-xl bg-[#f8fafb] border border-gray-100 text-sm font-bold text-[#0b2d49]/80"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="relative isolate rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+                                <LocationPicker
+                                    lat={locationDraft.latitude}
+                                    lng={locationDraft.longitude}
+                                    onSelect={handleMapLocationSelect}
+                                    className="h-[420px]"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
+                            <button
+                                onClick={() => setIsLocationModalOpen(false)}
+                                className="px-5 py-2.5 rounded-xl border border-gray-100 bg-white text-[#708aa0] text-xs font-black uppercase tracking-widest hover:bg-[#f8fafb]"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveLocation}
+                                disabled={isSavingLocation}
+                                className="px-5 py-2.5 rounded-xl bg-[#0b2d49] text-white text-xs font-black uppercase tracking-widest hover:bg-[#d7a444] disabled:opacity-60"
+                            >
+                                {isSavingLocation ? 'Saving...' : 'Save Location'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
