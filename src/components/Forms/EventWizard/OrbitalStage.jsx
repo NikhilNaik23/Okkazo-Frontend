@@ -10,6 +10,8 @@ import { DatePicker, TimePicker, ProgressIndicator, MapModal } from './OrbitalSt
 import OrbitalTickets from './OrbitalTickets';
 import OrbitalPromote from './OrbitalPromote';
 import CustomDatePicker from '../PromoteEvent/Wizard/CustomDatePicker';
+import { getInclusiveIstDayRange } from '../../../utils/istDateTime';
+import { validateDayTierAllocations } from '../../../utils/dayTierAllocation';
 
 const PREDEFINED_INTERESTS = [
     "Tech & Innovation", "Art & Design", "Music & Live Events", "Food & Culinary",
@@ -86,7 +88,20 @@ const SpinnerStage = ({ formData, handleChange, setFormData, minDateString, onSa
             case 'tickets':
                 const validCapacity = formData.totalCapacity > 0;
                 const totalAssigned = formData.tickets.reduce((a, t) => a + (parseInt(t.quantity) || 0), 0);
-                return validCapacity && totalAssigned === parseInt(formData.totalCapacity);
+                const scheduleDays = getInclusiveIstDayRange(formData.publicStartTime, formData.publicEndTime);
+                const dayAllocations = formData.ticketDayAllocations && typeof formData.ticketDayAllocations === 'object'
+                    ? formData.ticketDayAllocations
+                    : {};
+                const dayTierAllocations = formData.ticketDayTierAllocations && typeof formData.ticketDayTierAllocations === 'object'
+                    ? formData.ticketDayTierAllocations
+                    : {};
+                const allocationValidation = validateDayTierAllocations({
+                    days: scheduleDays,
+                    tickets: formData.tickets,
+                    dayAllocations,
+                    dayTierAllocations,
+                });
+                return validCapacity && totalAssigned === parseInt(formData.totalCapacity, 10) && allocationValidation.isValid;
             case 'promote': return true; // Optional toggles
             default: return false;
         }

@@ -45,6 +45,34 @@ const STEPS = [
 const MotionDiv = motion.div;
 const MotionP = motion.p;
 
+const isDraftLikeId = (value) => {
+    const id = String(value || '').trim();
+    return id.startsWith('draft_');
+};
+
+const clearPlanningDraftsByIds = (ids = []) => {
+    const normalizedIds = new Set(
+        ids
+            .map((id) => String(id || '').trim())
+            .filter(Boolean)
+    );
+
+    if (normalizedIds.size === 0) return;
+
+    try {
+        const drafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
+        if (!Array.isArray(drafts) || drafts.length === 0) return;
+
+        const nextDrafts = drafts.filter((d) => !normalizedIds.has(String(d?.id || '').trim()));
+        if (nextDrafts.length !== drafts.length) {
+            localStorage.setItem('planningWizardDrafts', JSON.stringify(nextDrafts));
+            window.dispatchEvent(new Event('savedUpdated'));
+        }
+    } catch {
+        // non-critical
+    }
+};
+
 // ─── Inline progress indicator ───────────────────────────────────────────────
 const FlowProgress = ({ activeStep, error }) => (
     <div className="w-full max-w-md mx-auto mt-8">
@@ -148,17 +176,36 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
         dispatch(clearPlanningError());
 
         const draftIdBeforeSave = formData.id;
+        const rawFormEventId = String(formData?.id || '').trim();
+        const persistedEventIdFromForm = rawFormEventId && !isDraftLikeId(rawFormEventId) ? rawFormEventId : '';
+        const isPublicEvent = String(formData?.listingType || '').toLowerCase() === 'public';
+        let savedEventId = persistedEventIdFromForm || null;
 
-        // ── 1. Save event ────────────────────────────────────────────────────
-        setActiveStep('save');
-        const saveResult = await dispatch(saveEventPlanning({ formData }));
-        if (saveEventPlanning.rejected.match(saveResult)) {
-            setFlowError(saveResult.payload || 'Failed to save event. Please try again.');
-            setFlowActive(false);
-            return;
+        // ── 1. Save event only once; retries should reuse existing PAYMENT_PENDING event ──
+        if (!savedEventId) {
+            setActiveStep('save');
+            const saveResult = await dispatch(saveEventPlanning({ formData }));
+            if (saveEventPlanning.rejected.match(saveResult)) {
+                setFlowError(saveResult.payload || 'Failed to save event. Please try again.');
+                setFlowActive(false);
+                return;
+            }
+
+            savedEventId = String(saveResult.payload.eventId || '').trim();
+            if (!savedEventId) {
+                setFlowError('Failed to initialize event for payment. Please try again.');
+                setFlowActive(false);
+                return;
+            }
+
+            handleChange('id', savedEventId);
+
+            // Public event becomes PAYMENT_PENDING immediately after save.
+            // Remove local draft now to avoid duplicate Draft + Payment Pending cards.
+            if (isPublicEvent) {
+                clearPlanningDraftsByIds([draftIdBeforeSave, savedEventId]);
+            }
         }
-        const savedEventId = saveResult.payload.eventId;
-        handleChange('id', savedEventId);
 
         // ── 2. Create Razorpay order ─────────────────────────────────────────
         setActiveStep('order');
@@ -173,6 +220,15 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
             return;
         }
         const { razorpayOrderId: rzpOrderId, amount, currency, keyId: rzpKeyId } = orderResult.payload;
+        const normalizedOrderId = String(rzpOrderId || '').trim();
+        const normalizedKeyId = String(rzpKeyId || '').trim();
+        const normalizedAmount = Number(amount);
+
+        if (!normalizedOrderId || !normalizedKeyId || !Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+            setFlowError('Invalid payment order response. Please retry. If the issue persists, ask support to verify RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET in order-service.');
+            setFlowActive(false);
+            return;
+        }
 
         // ── 3. Load Razorpay SDK & open popup ────────────────────────────────
         setActiveStep('razor');
@@ -185,12 +241,12 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
 
         await new Promise((resolve) => {
             const options = {
-                key: rzpKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
-                amount,
+                key: normalizedKeyId,
+                amount: normalizedAmount,
                 currency: currency || 'INR',
                 name: 'Okkazo',
                 description: `Planning Fee – ${formData.title || formData.type || 'Event'}`,
-                order_id: rzpOrderId,
+                order_id: normalizedOrderId,
                 theme: { color: '#09637E' },
                 ...(paymentMethod === 'upi'
                     ? {
@@ -235,19 +291,7 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                     handleChange('transactionId', txnId);
 
                     // Clear draft(s) once payment is successful
-                    try {
-                        const idsToRemove = new Set([
-                            String(savedEventId),
-                            draftIdBeforeSave ? String(draftIdBeforeSave) : null,
-                        ].filter(Boolean));
-
-                        const drafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
-                        if (Array.isArray(drafts) && drafts.length > 0) {
-                            const nextDrafts = drafts.filter((d) => !idsToRemove.has(String(d.id)));
-                            localStorage.setItem('planningWizardDrafts', JSON.stringify(nextDrafts));
-                            window.dispatchEvent(new Event('savedUpdated'));
-                        }
-                    } catch { /* non-critical */ }
+                    clearPlanningDraftsByIds([savedEventId, draftIdBeforeSave]);
 
                     setFlowActive(false);
                     setLocalSuccess(true);
@@ -255,8 +299,31 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                 },
             };
 
-            const rzp = new window.Razorpay(options);
-            rzp.open();
+            try {
+                if (!window.Razorpay) {
+                    setFlowError('Payment gateway is not available. Please refresh and try again.');
+                    setFlowActive(false);
+                    resolve();
+                    return;
+                }
+
+                const rzp = new window.Razorpay(options);
+
+                if (typeof rzp?.on === 'function') {
+                    rzp.on('payment.failed', (err) => {
+                        const desc = err?.error?.description || err?.error?.reason || 'Payment failed. Please try again.';
+                        setFlowError(desc);
+                        setFlowActive(false);
+                        resolve();
+                    });
+                }
+
+                rzp.open();
+            } catch (e) {
+                setFlowError(e?.message || 'Unable to open payment gateway. Please try again.');
+                setFlowActive(false);
+                resolve();
+            }
         });
     }, [dispatch, formData, handleChange, paymentMethod, platformFee]);
 
@@ -340,7 +407,7 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                                         <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 mb-8">
                                             <div className="flex justify-between items-center mb-3">
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Planning Fee</span>
-                                                <span className="text-2xl font-serif-premium italic font-bold text-[#09637E]">₹{(platformFee ?? 15000).toLocaleString()}</span>
+                                                <span className="text-2xl font-serif-premium italic font-bold text-[#09637E]">₹{(platformFee ?? 150).toLocaleString()}</span>
                                             </div>
                                             <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
                                                 Secures your dates. Adjusted against final bill after vendor selection.
@@ -379,7 +446,7 @@ const StepPayment = ({ onNext, onBack, formData, handleChange }) => {
                                         <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 mb-8">
                                             <div className="flex justify-between items-center mb-3">
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Planning Fee</span>
-                                                <span className="text-2xl font-serif-premium italic font-bold text-[#09637E]">₹{(platformFee ?? 15000).toLocaleString()}</span>
+                                                <span className="text-2xl font-serif-premium italic font-bold text-[#09637E]">₹{(platformFee ?? 150).toLocaleString()}</span>
                                             </div>
                                             <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
                                                 Pay securely via UPI. You can use Google Pay, PhonePe, Paytm, or any UPI app.

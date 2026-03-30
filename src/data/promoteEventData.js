@@ -25,6 +25,8 @@ export const initialPromoteEventState = {
     totalCapacity: "",
     ticketType: "paid", // "paid" or "free"
     tickets: [],
+    ticketDayAllocations: {},
+    ticketDayTierAllocations: {},
     banner: null,
     bannerFile: null,   // raw File object for upload
     authDocuments: [],  // Array of { name, size, type, file, preview }

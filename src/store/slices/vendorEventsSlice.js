@@ -88,6 +88,40 @@ export const acceptVendorEventRequest = createAsyncThunk(
     }
 );
 
+export const lockVendorEventServicePrice = createAsyncThunk(
+    'vendorEvents/lockVendorEventServicePrice',
+    async ({ eventId, service, price }, { dispatch, rejectWithValue }) => {
+        try {
+            if (!eventId) return rejectWithValue('Event ID is required');
+            if (!service || !String(service).trim()) return rejectWithValue('Service is required');
+
+            const quote = Number(price);
+            if (!Number.isFinite(quote) || quote <= 0) {
+                return rejectWithValue('Price must be greater than 0');
+            }
+
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/vendor/requests/${encodeURIComponent(String(eventId))}/lock-price`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({ service: String(service).trim(), price: quote }),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                const msg = data?.message || `Failed to lock price (HTTP ${response.status})`;
+                return rejectWithValue(msg);
+            }
+
+            return data.data || {};
+        } catch (error) {
+            return rejectWithValue(error.message || 'Failed to lock price');
+        }
+    }
+);
+
 export const rejectVendorEventRequest = createAsyncThunk(
     'vendorEvents/rejectVendorEventRequest',
     async ({ eventId, service, reason }, { dispatch, rejectWithValue }) => {

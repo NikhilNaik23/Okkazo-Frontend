@@ -183,6 +183,15 @@ const StepConfirmation = ({ eventId, totalMin, totalMax }) => {
             return;
         }
         const { razorpayOrderId: rzpOrderId, amount, currency, keyId: rzpKeyId } = orderResult.payload;
+        const normalizedOrderId = String(rzpOrderId || '').trim();
+        const normalizedKeyId = String(rzpKeyId || '').trim();
+        const normalizedAmount = Number(amount);
+
+        if (!normalizedOrderId || !normalizedKeyId || !Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+            setFlowError('Invalid payment order response. Please retry. If the issue persists, ask support to verify RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET in order-service.');
+            setFlowActive(false);
+            return;
+        }
 
         // 2) Load Razorpay SDK
         setActiveStep('razor');
@@ -196,12 +205,12 @@ const StepConfirmation = ({ eventId, totalMin, totalMax }) => {
         // 3) Open Razorpay Checkout
         await new Promise((resolve) => {
             const options = {
-                key: rzpKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
-                amount,
+                key: normalizedKeyId,
+                amount: normalizedAmount,
                 currency: currency || 'INR',
                 name: 'Okkazo',
                 description: `Planning Deposit – ${planning?.eventTitle || planning?.eventType || 'Event'}`,
-                order_id: rzpOrderId,
+                order_id: normalizedOrderId,
                 theme: { color: '#09637E' },
                 modal: {
                     ondismiss: () => {

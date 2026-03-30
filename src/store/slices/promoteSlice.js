@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { fetchWithAuth } from '../../utils/apiHandler';
 import { refreshAccessToken } from './authSlice';
+import { getInclusiveIstDayRange, toIstIsoString } from '../../utils/istDateTime';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -16,11 +17,7 @@ const safeJson = async (response) => {
 
 /** Convert a JS Date or ISO string to a local-time ISO string (prevents UTC shift) */
 const toLocalIso = (value) => {
-    if (!value) return null;
-    const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return null;
-    const pad = (n) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.000Z`;
+    return toIstIsoString(value);
 };
 
 /**
@@ -30,6 +27,7 @@ const toLocalIso = (value) => {
  * - tickets, schedule, ticketAvailability, venue, promotion → JSON strings
  */
 const buildPromoteFormData = (formData) => {
+    const ticketType = (formData.ticketType || 'paid').toLowerCase() === 'free' ? 'free' : 'paid';
     const tiers = (formData.tickets || [])
         .filter((t) => t && t.name && Number(t.quantity) > 0)
         .map((t) => ({
@@ -38,7 +36,37 @@ const buildPromoteFormData = (formData) => {
             quantity: Number(t.quantity),
         }));
 
-    const ticketType = (formData.ticketType || 'paid').toLowerCase() === 'free' ? 'free' : 'paid';
+    const ticketDayAllocations = formData.ticketDayAllocations && typeof formData.ticketDayAllocations === 'object'
+        ? formData.ticketDayAllocations
+        : {};
+    const ticketDayTierAllocations = formData.ticketDayTierAllocations && typeof formData.ticketDayTierAllocations === 'object'
+        ? formData.ticketDayTierAllocations
+        : {};
+    const scheduleStart = toLocalIso(formData.startDate);
+    const scheduleEnd = toLocalIso(formData.endDate);
+    const tierNamesById = Object.fromEntries(
+        (formData.tickets || [])
+            .map((t) => ({ id: String(t?.id ?? ''), name: String(t?.name || '').trim() }))
+            .filter((t) => t.id && t.name)
+            .map((t) => [t.id, t.name])
+    );
+    const dayWiseAllocations = getInclusiveIstDayRange(scheduleStart, scheduleEnd).map((day) => {
+        const parsed = parseInt(ticketDayAllocations[day], 10);
+        const dayCount = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+        const tierBreakdown = ticketType === 'paid'
+            ? Object.entries(ticketDayTierAllocations?.[day] || {})
+                .map(([tierId, ticketCount]) => ({
+                    tierName: tierNamesById[String(tierId)] || '',
+                    ticketCount: Math.max(0, parseInt(ticketCount, 10) || 0),
+                }))
+                .filter((row) => row.tierName)
+            : [];
+        return {
+            day,
+            ticketCount: dayCount,
+            tierBreakdown,
+        };
+    });
 
     // Selected promotion values (dynamic; configured by admin)
     const promotionArr = Object.entries(formData.promotions || {})
@@ -59,10 +87,11 @@ const buildPromoteFormData = (formData) => {
             noOfTickets: Number(formData.totalCapacity || 0),
             ticketType,
             tiers: ticketType === 'paid' ? tiers : [],
+            dayWiseAllocations,
         },
         schedule: {
-            startAt: toLocalIso(formData.startDate),
-            endAt: toLocalIso(formData.endDate),
+            startAt: scheduleStart,
+            endAt: scheduleEnd,
         },
         ticketAvailability: {
             startAt: toLocalIso(formData.ticketReleaseDate),

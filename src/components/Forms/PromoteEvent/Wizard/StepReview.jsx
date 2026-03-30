@@ -6,6 +6,7 @@ import {
     selectPromotePackages,
     selectPromotionsConfigStatus,
 } from '../../../../store/slices/promotionsConfigSlice';
+import { getInclusiveIstDayRange } from '../../../../utils/istDateTime';
 
 const StepReview = ({ formData, platformFee = 15000, serviceChargePercent = 2.5 }) => {
     const dispatch = useDispatch();
@@ -52,6 +53,16 @@ const StepReview = ({ formData, platformFee = 15000, serviceChargePercent = 2.5 
     const subtotal = platformFee + promoCosts;
     const tax = subtotal * 0.05;
     const finalTotal = subtotal + tax;
+    const scheduleDays = getInclusiveIstDayRange(formData.startDate, formData.endDate);
+    const dayAllocationMap = formData.ticketDayAllocations && typeof formData.ticketDayAllocations === 'object'
+        ? formData.ticketDayAllocations
+        : {};
+
+    const getDayLabel = (day) => {
+        const d = new Date(`${day}T00:00:00+05:30`);
+        if (Number.isNaN(d.getTime())) return day;
+        return d.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
+    };
 
     return (
         <div className="w-full max-w-4xl animate-in fade-in slide-in-from-bottom-8 duration-700">
@@ -112,6 +123,20 @@ const StepReview = ({ formData, platformFee = 15000, serviceChargePercent = 2.5 
                             </div>
                         </div>
                     </div>
+
+                    {scheduleDays.length > 0 && (
+                        <div className="bg-white p-6 rounded-2xl shadow-lg border border-[#09637E]/5">
+                            <p className="text-[10px] text-[#09637E]/60 font-black uppercase tracking-widest mb-3">Daily Ticket Plan</p>
+                            <div className="space-y-2">
+                                {scheduleDays.map((day) => (
+                                    <div key={day} className="flex items-center justify-between border-b border-[#09637E]/10 last:border-b-0 pb-2 last:pb-0">
+                                        <span className="text-sm font-semibold text-[#09637E]">{getDayLabel(day)}</span>
+                                        <span className="text-sm font-black text-[#09637E]/70">{parseInt(dayAllocationMap[day], 10) || 0} tickets</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Costs Breakdown */}

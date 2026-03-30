@@ -93,7 +93,7 @@ const InternalLocationMarker = ({ lat, lng, onSelect }) => {
                 <Marker position={[lat, lng]} icon={okkazoIcon} />
             )}
             {isChecking && (
-                <div className="absolute inset-0 bg-white/20 backdrop-blur-sm z-1000 flex items-center justify-center">
+                <div className="absolute inset-0 bg-white/20 backdrop-blur-sm z-[30] flex items-center justify-center">
                     <div className="bg-white p-4 rounded-xl shadow-xl flex items-center gap-3">
                         <div className="w-5 h-5 border-2 border-[#d7a444] border-t-transparent rounded-full animate-spin"></div>
                         <span className="text-sm font-bold text-[#0b2d49]">Verifying Area...</span>
@@ -173,11 +173,16 @@ const LocationPicker = ({ lat: initialLat, lng: initialLng, onSelect, className,
         if (onSelect) onSelect(data);
     };
 
+    const containerClassName = [
+        'relative isolate w-full overflow-hidden z-0 bg-gray-100',
+        className || 'h-80 rounded-2xl border border-gray-200',
+    ].join(' ');
+
     return (
-        <div className={className || "h-80 w-full rounded-2xl overflow-visible border border-gray-200 relative z-0 bg-gray-100"}>
+        <div className={containerClassName}>
             {/* Search Bar Overlay - Integrated into the map area top-left */}
             {!hideSearch && (
-            <div className="absolute top-4 left-4 right-4 md:right-auto md:w-full md:max-w-md z-[1000]">
+            <div className="absolute top-4 left-4 right-4 md:right-auto md:w-full md:max-w-md z-[20]">
                 <div className="relative group">
                     <div className="absolute left-5 top-1/2 -translate-y-1/2 text-teal-900/30 group-focus-within:text-teal-700 transition-colors">
                         <BsSearch size={16} />

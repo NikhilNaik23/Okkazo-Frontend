@@ -2,9 +2,14 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { BsHeart, BsFillCartCheckFill, BsArrowRight, BsX } from 'react-icons/bs';
 import { MdLocationOn, MdRestaurant } from 'react-icons/md';
+import { inferPricingUnit, resolveServicePricingModel } from '../../../../utils/pricing';
 
 const SelectionSidebar = ({
     vendors,
+    attendeeCount,
+    pricingAttendeeCount,
+    attendeeLabel,
+    eventDayCount,
     isHighDemand,
     estimatedTotal,
     estimatedMax,
@@ -20,8 +25,28 @@ const SelectionSidebar = ({
         return String(Math.round(n));
     };
 
+    const attendeeCountForPricing = Math.max(1, Number(pricingAttendeeCount || attendeeCount || 0));
+    const dayCountForPricing = Math.max(1, Number(eventDayCount || 1));
+
+    const getHoldMeta = (vendor) => {
+        const state = String(vendor?._selectionHoldStatus || '').trim().toLowerCase();
+        if (state === 'restored') {
+            return {
+                label: 'Restored',
+                className: 'bg-amber-50 text-amber-700 border-amber-200',
+                title: 'Restored from previous choice. Select again to re-hold.',
+            };
+        }
+
+        return {
+            label: 'Held',
+            className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            title: 'Actively held in your current selection flow.',
+        };
+    };
+
     return (
-        <div className="hidden lg:flex flex-col w-[25vw] min-w-[320px] max-w-[400px] h-[calc(100vh-6rem)] sticky top-24 right-0 p-8 pl-0 pointer-events-none z-50">
+        <div className="hidden lg:flex flex-col w-[25vw] min-w-[320px] max-w-100 h-[calc(100vh-6rem)] sticky top-24 right-0 p-8 pl-0 pointer-events-none z-50">
             <div className="pointer-events-auto flex flex-col h-full bg-white/60 backdrop-blur-2xl rounded-[3rem] border border-white/50 shadow-[0_20px_80px_-20px_rgba(9,99,126,0.15)] overflow-hidden relative">
                 {/* Decorative Background */}
                 <div className="absolute top-0 right-0 w-64 h-64 bg-secondary/5 rounded-full blur-[80px] -z-10" />
@@ -52,6 +77,36 @@ const SelectionSidebar = ({
                                 const maxFallback = Number.isFinite(minPrice) && minPrice > 0 ? Math.round(minPrice * 1.5) : 0;
                                 const maxPrice = Number(vendor?.priceMax ?? maxFallback);
                                 const displayName = vendor?.name || vendor?.vendorBusinessName || 'Selected Vendor';
+                                const holdMeta = getHoldMeta(vendor);
+                                const isVenueCategory = String(category || '').trim().toLowerCase() === 'venue';
+                                const pricingUnit = vendor?.pricingUnit || inferPricingUnit({
+                                    serviceLabel: category,
+                                    serviceCategory: category,
+                                    categoryId: vendor?.categoryId,
+                                });
+                                const pricingModelRaw = resolveServicePricingModel({
+                                    serviceLabel: category,
+                                    serviceCategory: category,
+                                    categoryId: vendor?.categoryId,
+                                    pricingUnit,
+                                });
+                                const pricingModel = isVenueCategory ? 'per_day' : pricingModelRaw;
+                                const fixedQuantityRaw = Number(vendor?.pricingQuantity);
+                                const fixedQuantity = Number.isFinite(fixedQuantityRaw) && fixedQuantityRaw > 0 ? fixedQuantityRaw : 1;
+                                const lineMultiplier = pricingModel === 'per_attendee'
+                                    ? attendeeCountForPricing
+                                    : (pricingModel === 'per_day' ? dayCountForPricing : fixedQuantity);
+                                const displayMin = Math.round((Number.isFinite(minPrice) ? minPrice : 0) * lineMultiplier);
+                                const displayMax = Math.round((Number.isFinite(maxPrice) ? maxPrice : 0) * lineMultiplier);
+                                const unitLabel = pricingUnit === 'PER_PLATE'
+                                    ? 'plate'
+                                    : (pricingUnit === 'PER_PERSON'
+                                        ? 'person'
+                                        : (pricingUnit === 'PER_KG'
+                                            ? 'kg'
+                                            : (pricingUnit === 'PER_100_UNITS'
+                                                ? '100 units'
+                                                : (pricingModel === 'per_day' ? 'day/event' : 'package'))));
 
                                 return (
                             <motion.div
@@ -69,7 +124,26 @@ const SelectionSidebar = ({
                                 <div className="flex-1 min-w-0">
                                     <span className="text-[9px] font-bold uppercase tracking-widest text-primary/40 block mb-0.5">{category}</span>
                                     <h4 className="text-sm font-serif-premium font-bold text-primary truncate">{displayName}</h4>
-                                    <span className="text-xs font-bold text-secondary">₹{formatPriceCompact(minPrice)} - ₹{formatPriceCompact(maxPrice)}</span>
+                                    <span
+                                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider border mb-1 ${holdMeta.className}`}
+                                        title={holdMeta.title}
+                                    >
+                                        {holdMeta.label}
+                                    </span>
+                                    <span className="text-xs font-bold text-secondary">₹{formatPriceCompact(displayMin)} - ₹{formatPriceCompact(displayMax)}</span>
+                                    {pricingModel === 'per_attendee' ? (
+                                        <span className="text-[9px] font-bold text-primary/45 block">
+                                            ₹{formatPriceCompact(minPrice)} / {unitLabel} x {attendeeCountForPricing} {String(attendeeLabel || 'Guests').toLowerCase()}
+                                        </span>
+                                    ) : pricingModel === 'per_day' ? (
+                                        <span className="text-[9px] font-bold text-primary/45 block">
+                                            ₹{formatPriceCompact(minPrice)} / {unitLabel} x {dayCountForPricing} day{dayCountForPricing > 1 ? 's' : ''}
+                                        </span>
+                                    ) : (
+                                        <span className="text-[9px] font-bold text-primary/45 block">
+                                            ₹{formatPriceCompact(minPrice)} / {unitLabel} x {fixedQuantity} (fixed)
+                                        </span>
+                                    )}
                                 </div>
                                 <button
                                     onClick={() => onRemoveVendor(category)}
@@ -86,7 +160,7 @@ const SelectionSidebar = ({
                 </div>
 
                 {/* Totals Section */}
-                <div className="p-8 pt-6 bg-gradient-to-t from-white via-white to-transparent">
+                <div className="p-8 pt-6 bg-linear-to-t from-white via-white to-transparent">
                     <div className="flex items-center gap-3 mb-6 p-4 bg-primary/5 rounded-2xl border border-primary/5">
                         <div className="w-8 h-8 rounded-full bg-secondary/10 flex items-center justify-center text-secondary">
                             <BsFillCartCheckFill size={14} />
@@ -105,6 +179,15 @@ const SelectionSidebar = ({
                                 <span className="text-xs font-bold text-primary/40 block">- ₹{(estimatedMax).toLocaleString()}</span>
                             </div>
                         </div>
+                    </div>
+
+                    <div className="mb-5 space-y-2">
+                        <p className="text-[10px] leading-relaxed font-bold text-red-600">
+                            Availability note: If you have not finished checkout (deposit fee paid), selected vendors/services may or may not remain available. Temporary holds auto-expire in about 10 minutes.
+                        </p>
+                        <p className="text-[10px] leading-relaxed font-bold text-red-500/90">
+                            Note: Final quotation lies in this displayed range.
+                        </p>
                     </div>
 
                     <button

@@ -6,7 +6,7 @@ const MotionButton = motion.button;
 const MotionDiv = motion.div;
 
 const PaymentSummary = ({ onBack, formData, platformFee }) => {
-    const shownFee = (typeof platformFee === 'number' && Number.isFinite(platformFee)) ? platformFee : 15000;
+    const shownFee = (typeof platformFee === 'number' && Number.isFinite(platformFee)) ? platformFee : 150;
     return (
         <div className="w-full md:w-5/12 bg-[#09637E] relative p-12 text-white flex flex-col justify-between overflow-hidden shrink-0">
             <div className="absolute top-0 right-0 w-64 h-64 bg-teal-400/20 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2" />

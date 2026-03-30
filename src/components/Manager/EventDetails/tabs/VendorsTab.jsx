@@ -12,9 +12,9 @@ import {
 } from '../../../../store/slices/planningSlice';
 import { fetchWithAuth } from '../../../../utils/apiHandler';
 import { refreshAccessToken } from '../../../../store/slices/authSlice';
-import { ensureEventConversation, sendConversationMessage } from '../../../../utils/chatApi';
+import { ensureEventConversation, ensureEventDmConversation, sendConversationMessage } from '../../../../utils/chatApi';
 import { encodeRichChatMessage } from '../../../../utils/richChat';
-import { computeMoneyRangeFromBase } from '../../../../utils/pricing';
+import { computeMoneyRangeFromBase, derivePricingDemandFromEvent } from '../../../../utils/pricing';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 const DEFAULT_VENDOR_RADIUS_KM = 120;
@@ -46,10 +46,11 @@ const formatMoneyShort = (value) => {
     return `₹${n.toFixed(0)}`;
 };
 
-const formatMoneyRangeFromBasePrice = (price, { serviceLabel, guestCount } = {}) => {
+const formatMoneyRangeFromBasePrice = (price, { serviceLabel, guestCount, dayCount } = {}) => {
     const range = computeMoneyRangeFromBase({
         basePrice: price,
         guestCount,
+        dayCount,
         serviceLabel,
     });
 
@@ -69,10 +70,11 @@ const buildAlternativesMessage = ({ serviceLabel, alternatives = [], radiusKm } 
     return `The vendor for ${serviceLabel} is not available. Please select one of the alternatives${withinText}.`;
 };
 
-const normalizeVendorSlotServicePrice = ({ price, min, guestCount, serviceLabel } = {}) => {
+const normalizeVendorSlotServicePrice = ({ price, min, guestCount, dayCount, serviceLabel } = {}) => {
     return computeMoneyRangeFromBase({
         basePrice: price ?? min,
         guestCount,
+        dayCount,
         serviceLabel,
     });
 };
@@ -88,6 +90,8 @@ const VendorsTab = () => {
     const [showAlternatives, setShowAlternatives] = useState(null);
     const [alternativesByKey, setAlternativesByKey] = useState({});
     const [guestCountForPricing, setGuestCountForPricing] = useState(null);
+    const [dayCountForPricing, setDayCountForPricing] = useState(1);
+    const [clientAuthId, setClientAuthId] = useState('');
 
     const selectVendorForService = async ({ service, vendorAuthId, serviceId, price }) => {
         if (!eventId) return;
@@ -108,6 +112,7 @@ const VendorsTab = () => {
                         servicePrice: normalizeVendorSlotServicePrice({
                             price,
                             guestCount: guestCountForPricing,
+                            dayCount: dayCountForPricing,
                             serviceLabel: service,
                         }),
                     }),
@@ -176,11 +181,18 @@ const VendorsTab = () => {
         try {
             if (!eventId) throw new Error('Missing eventId');
 
-            const convo = await ensureEventConversation({
-                eventId,
-                dispatch,
-                refreshAction: refreshAccessToken,
-            });
+            const convo = clientAuthId
+                ? await ensureEventDmConversation({
+                    eventId,
+                    otherAuthId: clientAuthId,
+                    dispatch,
+                    refreshAction: refreshAccessToken,
+                })
+                : await ensureEventConversation({
+                    eventId,
+                    dispatch,
+                    refreshAction: refreshAccessToken,
+                });
 
             const conversationId = String(convo?._id || convo?.id || '').trim();
             if (!conversationId) throw new Error('Invalid conversation');
@@ -278,8 +290,16 @@ const VendorsTab = () => {
             .then((action) => {
                 if (cancelled) return;
                 if (action?.meta?.requestStatus === 'fulfilled') {
-                    const n = action?.payload?.guestCount;
-                    setGuestCountForPricing(typeof n === 'number' ? n : null);
+                    const resolvedClientAuthId = String(
+                        action?.payload?.authId
+                        || action?.payload?.userAuthId
+                        || action?.payload?.ownerAuthId
+                        || ''
+                    ).trim();
+                    const pricingDemand = derivePricingDemandFromEvent(action?.payload || {});
+                    setClientAuthId(resolvedClientAuthId);
+                    setGuestCountForPricing(pricingDemand?.attendeeCount ?? null);
+                    setDayCountForPricing(pricingDemand?.dayCount ?? 1);
                 }
             })
             .catch(() => undefined);
@@ -323,11 +343,36 @@ const VendorsTab = () => {
 
                 const icon = (profile?.businessName || formatServiceLabel(service)).substring(0, 2).toUpperCase();
                 const color = availability === 'available' ? 'blue' : availability === 'unavailable' ? 'orange' : 'purple';
+                const serviceNameRaw = v?.serviceName != null ? String(v.serviceName).trim() : '';
+                const serviceName = serviceNameRaw || formatServiceLabel(service);
+
+                const quotedPriceRaw = Number(v?.vendorQuotedPrice);
+                const quotedPrice = Number.isFinite(quotedPriceRaw) && quotedPriceRaw > 0 ? quotedPriceRaw : 0;
+
+                const commissionAmountRaw = Number(v?.commissionAmount);
+                const commissionAmount = Number.isFinite(commissionAmountRaw) && commissionAmountRaw >= 0
+                    ? commissionAmountRaw
+                    : 0;
+
+                const commissionPercentRaw = Number(v?.commissionPercent);
+                const commissionPercent = Number.isFinite(commissionPercentRaw) && commissionPercentRaw >= 0
+                    ? commissionPercentRaw
+                    : 0;
+
+                const minRaw = Number(v?.servicePrice?.min);
+                const maxRaw = Number(v?.servicePrice?.max);
+                const minPrice = Number.isFinite(minRaw) && minRaw > 0 ? minRaw : 0;
+                const maxPrice = Number.isFinite(maxRaw) && maxRaw > 0 ? maxRaw : 0;
+
+                const isPriceLocked = Boolean(v?.priceLocked) && quotedPrice > 0;
+                const totalFees = isPriceLocked ? (quotedPrice + commissionAmount) : 0;
 
                 return {
                     id: `${service}:${vendorAuthId || 'NONE'}`,
                     service,
                     category: formatServiceLabel(service),
+                    serviceName,
+                    serviceId: v?.serviceId || null,
                     vendorAuthId: vendorAuthId || null,
                     businessName: vendorAuthId ? (profile?.businessName || 'Vendor') : 'Yet to select',
                     serviceCategory: profile?.serviceCategory || null,
@@ -339,9 +384,14 @@ const VendorsTab = () => {
                     rejectionReason: v?.rejectionReason || null,
                     alternativeNeeded: Boolean(v?.alternativeNeeded),
                     servicePrice: {
-                        min: Number(v?.servicePrice?.min || 0),
-                        max: Number(v?.servicePrice?.max || 0),
+                        min: minPrice,
+                        max: maxPrice,
                     },
+                    lockedPrice: quotedPrice,
+                    commissionAmount,
+                    commissionPercent,
+                    totalFees,
+                    priceLocked: isPriceLocked,
                     icon,
                     color,
                 };
@@ -444,9 +494,7 @@ const VendorsTab = () => {
                                                 {vendor.location && (
                                                     <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {vendor.location}{vendor.country ? `, ${vendor.country}` : ''}</span>
                                                 )}
-                                                {vendor.vendorAuthId && (
-                                                    <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 text-amber-400" /> {vendor.vendorAuthId}</span>
-                                                )}
+                                                <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 text-amber-400" /> Service: {vendor.serviceName}</span>
                                             </div>
                                             {vendor.status === 'REJECTED' && vendor.rejectionReason && (
                                                 <div className="mt-2 text-sm text-red-700 font-medium">
@@ -462,6 +510,20 @@ const VendorsTab = () => {
                                             {vendor.servicePrice?.min || vendor.servicePrice?.max
                                                 ? `${formatMoneyShort(vendor.servicePrice?.min)} – ${formatMoneyShort(vendor.servicePrice?.max)}`
                                                 : '—'}
+                                        </p>
+                                        <p className="mt-1 text-xs font-bold uppercase tracking-wide text-gray-400">Locked Price</p>
+                                        <p className={`text-sm font-extrabold ${vendor.priceLocked && vendor.lockedPrice ? 'text-teal-700' : 'text-gray-500'}`}>
+                                            {vendor.priceLocked && vendor.lockedPrice ? formatMoneyShort(vendor.lockedPrice) : '—'}
+                                        </p>
+                                        <p className="mt-1 text-xs font-bold uppercase tracking-wide text-gray-400">Commission Fee</p>
+                                        <p className={`text-sm font-extrabold ${vendor.priceLocked ? 'text-amber-700' : 'text-gray-500'}`}>
+                                            {vendor.priceLocked
+                                                ? `${formatMoneyShort(vendor.commissionAmount)}${vendor.commissionPercent > 0 ? ` (${vendor.commissionPercent}%)` : ''}`
+                                                : '—'}
+                                        </p>
+                                        <p className="mt-1 text-xs font-bold uppercase tracking-wide text-gray-400">Total Fee</p>
+                                        <p className={`text-sm font-extrabold ${vendor.priceLocked ? 'text-teal-700' : 'text-gray-500'}`}>
+                                            {vendor.priceLocked ? formatMoneyShort(vendor.totalFees) : '—'}
                                         </p>
                                     </div>
 
@@ -559,7 +621,7 @@ const VendorsTab = () => {
                                                             </div>
                                                         </div>
                                                         <div className="flex justify-between items-center">
-                                                            <p className="font-extrabold text-gray-900">{formatMoneyRangeFromBasePrice(alt?.price, { serviceLabel: vendor.service, guestCount: guestCountForPricing })}</p>
+                                                            <p className="font-extrabold text-gray-900">{formatMoneyRangeFromBasePrice(alt?.price, { serviceLabel: vendor.service, guestCount: guestCountForPricing, dayCount: dayCountForPricing })}</p>
                                                             <button
                                                                 onClick={() => selectVendorForService({
                                                                     service: vendor.service,

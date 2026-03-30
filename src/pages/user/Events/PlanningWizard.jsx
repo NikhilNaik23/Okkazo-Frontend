@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { BsArrowRight } from "react-icons/bs";
@@ -18,6 +18,12 @@ import { myOrganizedEvents } from "../../../data/myEventsData";
 import StepTickets from "../../../components/Forms/PromoteEvent/Wizard/StepTickets";
 import StepPromote from "../../../components/Forms/PromoteEvent/Wizard/StepPromote";
 import { fetchPlanningByEventId } from "../../../store/slices/planningSlice";
+import { getInclusiveIstDayRange, getIstDayStringFromNow, toIstDayString } from "../../../utils/istDateTime";
+import {
+    mapDayTierAllocationsFromBackend,
+    normalizeDayTierAllocations,
+    validateDayTierAllocations,
+} from "../../../utils/dayTierAllocation";
 
 const _motion = motion;
 const DEFAULT_TICKET_TIER_ID = 'default-tier';
@@ -34,9 +40,7 @@ const PlanningWizard = () => {
     const [manifestOrbitalStepId, setManifestOrbitalStepId] = useState(null);
 
     // Date calculation for minimum allowed booking (Available from Today + 6)
-    const minDate = new Date();
-    minDate.setDate(minDate.getDate() + 6);
-    const minDateString = minDate.toISOString().split('T')[0];
+    const minDateString = getIstDayStringFromNow(6) || '';
 
     const [formData, setFormData] = useState({
         title: "",
@@ -56,6 +60,8 @@ const PlanningWizard = () => {
         tickets: [{ id: DEFAULT_TICKET_TIER_ID, name: "General Admission", price: null, quantity: "" }], // Prepopulate defaut tier
         totalCapacity: "",
         ticketType: "paid",
+        ticketDayAllocations: {},
+        ticketDayTierAllocations: {},
         eventDescription: "",
         promotions: {},
     });
@@ -139,6 +145,8 @@ const PlanningWizard = () => {
                     tickets: [{ id: DEFAULT_TICKET_TIER_ID, name: "General Admission", price: null, quantity: "" }],
                     totalCapacity: "",
                     ticketType: "paid",
+                    ticketDayAllocations: {},
+                    ticketDayTierAllocations: {},
                     eventDescription: "",
                     promotions: {},
                 }),
@@ -146,73 +154,95 @@ const PlanningWizard = () => {
             }));
 
             const handleStepLogic = (data) => {
-                    const defaultData = {
-                        title: "",
-                        type: "Birthday",
-                        listingType: "Private",
-                        location: "",
-                        lat: null,
-                        lng: null,
-                        locationValid: false,
-                        date: "",
-                        startTime: "",
-                        endTime: "",
-                        guests: "",
-                        services: [],
-                        vendors: {},
-                        platformFeePaid: false,
-                        tickets: [{ id: DEFAULT_TICKET_TIER_ID, name: "General Admission", price: null, quantity: "" }],
-                        totalCapacity: "",
-                        ticketType: "paid",
-                        eventDescription: "",
-                        promotions: {}
-                    };
-
-                    const mergedData = { ...defaultData, ...data };
-                    // Ensure critical arrays/objects are safe
-                    if (!mergedData.services) mergedData.services = [];
-                    if (!mergedData.vendors) mergedData.vendors = {};
-
-                    setFormData(mergedData);
-
-                    const getStepIndex = (cid) => {
-                        const s = ['manifest', 'category', 'payment', 'vendor', 'review', 'confirmation'];
-                        // Get idx and add 1, if not found (like when changing types dynamically which rarely happens on initial load) default to 1
-                        const idx = s.indexOf(cid);
-                        return idx !== -1 ? idx + 1 : 1;
-                    };
-
-                    // If it is paid/Immediate Action, go to Vendor Selection
-                    let targetStep = 1;
-
-                    if (mergedData.platformFeePaid || mergedData.isPaid) {
-                        targetStep = getStepIndex('vendor'); // Vendor Selection
-                    } else if (mergedData.services && mergedData.services.length > 0) {
-                        targetStep = getStepIndex('payment'); // Payment
-                    } else if (mergedData.location && (mergedData.date || mergedData.publicStartTime)) {
-                        targetStep = 2; // Preview / Service Selection or Tickets
-                    }
-
-                    // Override with URL params if present
-                    if (urlStep) {
-                        const parsed = parseInt(urlStep, 10);
-                        if (!Number.isNaN(parsed)) targetStep = parsed;
-                    }
-
-                    if (urlTab) {
-                        const parsedTab = parseInt(urlTab, 10);
-                        if (!Number.isNaN(parsedTab)) setActiveServiceTab(parsedTab);
-                    }
-
-                    setCurrentStep(targetStep);
-                    setIsPreviewMode(false);
+                const defaultData = {
+                    title: "",
+                    type: "Birthday",
+                    listingType: "Private",
+                    location: "",
+                    lat: null,
+                    lng: null,
+                    locationValid: false,
+                    date: "",
+                    startTime: "",
+                    endTime: "",
+                    guests: "",
+                    services: [],
+                    vendors: {},
+                    platformFeePaid: false,
+                    tickets: [{ id: DEFAULT_TICKET_TIER_ID, name: "General Admission", price: null, quantity: "" }],
+                    totalCapacity: "",
+                    ticketType: "paid",
+                    ticketDayAllocations: {},
+                    ticketDayTierAllocations: {},
+                    eventDescription: "",
+                    promotions: {}
                 };
+
+                const mergedData = { ...defaultData, ...data };
+                // Ensure critical arrays/objects are safe
+                if (!mergedData.services) mergedData.services = [];
+                if (!mergedData.vendors) mergedData.vendors = {};
+
+                setFormData((prev) => {
+                    const sameEvent = String(prev?.id || '').trim() === String(mergedData?.id || '').trim();
+
+                    const incomingServices = Array.isArray(mergedData.services) ? mergedData.services : [];
+                    const previousServices = Array.isArray(prev?.services) ? prev.services : [];
+                    const safeServices = (incomingServices.length > 0 || !sameEvent)
+                        ? incomingServices
+                        : previousServices;
+
+                    const incomingVendors = mergedData.vendors && typeof mergedData.vendors === 'object' ? mergedData.vendors : {};
+                    const previousVendors = prev?.vendors && typeof prev.vendors === 'object' ? prev.vendors : {};
+                    const incomingVendorCount = Object.keys(incomingVendors).length;
+                    const previousVendorCount = Object.keys(previousVendors).length;
+                    const safeVendors = (incomingVendorCount > 0 || !sameEvent)
+                        ? incomingVendors
+                        : previousVendors;
+
+                    return {
+                        ...mergedData,
+                        services: safeServices,
+                        vendors: safeVendors,
+                    };
+                });
+
+                const getStepIndex = (cid) => {
+                    const s = ['manifest', 'category', 'payment', 'vendor', 'review', 'confirmation'];
+                    // Get idx and add 1, if not found (like when changing types dynamically which rarely happens on initial load) default to 1
+                    const idx = s.indexOf(cid);
+                    return idx !== -1 ? idx + 1 : 1;
+                };
+
+                // If it is paid/Immediate Action, go to Vendor Selection
+                let targetStep = 1;
+
+                if (mergedData.platformFeePaid || mergedData.isPaid) {
+                    targetStep = getStepIndex('vendor'); // Vendor Selection
+                } else if (mergedData.services && mergedData.services.length > 0) {
+                    targetStep = getStepIndex('payment'); // Payment
+                } else if (mergedData.location && (mergedData.date || mergedData.publicStartTime)) {
+                    targetStep = 2; // Preview / Service Selection or Tickets
+                }
+
+                // Override with URL params if present
+                if (urlStep) {
+                    const parsed = parseInt(urlStep, 10);
+                    if (!Number.isNaN(parsed)) targetStep = parsed;
+                }
+
+                if (urlTab) {
+                    const parsedTab = parseInt(urlTab, 10);
+                    if (!Number.isNaN(parsedTab)) setActiveServiceTab(parsedTab);
+                }
+
+                setCurrentStep(targetStep);
+                setIsPreviewMode(false);
+            };
 
             const toDateInput = (value) => {
                 if (!value) return '';
-                const d = new Date(value);
-                if (Number.isNaN(d.getTime())) return '';
-                return d.toISOString().split('T')[0];
+                return toIstDayString(value) || '';
             };
 
             const toPromotionMap = (arr) => {
@@ -223,6 +253,18 @@ const PlanningWizard = () => {
                         .filter(Boolean)
                         .map((v) => [v, true])
                 );
+            };
+
+            const toDayAllocationMap = (arr) => {
+                const values = Array.isArray(arr) ? arr : [];
+                const out = {};
+                for (const row of values) {
+                    const day = String(row?.day || '').trim();
+                    if (!day) continue;
+                    const count = parseInt(row?.ticketCount, 10);
+                    out[day] = Number.isFinite(count) && count > 0 ? count : '';
+                }
+                return out;
             };
 
             const load = async () => {
@@ -269,6 +311,20 @@ const PlanningWizard = () => {
                             }))
                             : [];
 
+                        const mappedTicketRows = isPublic
+                            ? (mappedTiers.length > 0
+                                ? mappedTiers
+                                : [{ id: DEFAULT_TICKET_TIER_ID, name: 'General Admission', price: 0, quantity: p?.tickets?.totalTickets ?? '' }])
+                            : [{ id: DEFAULT_TICKET_TIER_ID, name: 'General Admission', price: null, quantity: '' }];
+
+                        const mappedDayAllocations = isPublic ? toDayAllocationMap(p?.tickets?.dayWiseAllocations) : {};
+                        const mappedDayTierAllocations = isPublic
+                            ? mapDayTierAllocationsFromBackend({
+                                dayWiseAllocations: p?.tickets?.dayWiseAllocations,
+                                tickets: mappedTicketRows,
+                            })
+                            : {};
+
                         const mapped = {
                             id: p?.eventId || eventId,
                             title: p?.eventTitle || '',
@@ -287,11 +343,9 @@ const PlanningWizard = () => {
 
                             totalCapacity: isPublic ? (p?.tickets?.totalTickets ?? '') : '',
                             ticketType: isPublic ? (p?.tickets?.ticketType || 'paid') : 'paid',
-                            tickets: isPublic
-                                ? (mappedTiers.length > 0
-                                    ? mappedTiers
-                                    : [{ id: DEFAULT_TICKET_TIER_ID, name: 'General Admission', price: 0, quantity: p?.tickets?.totalTickets ?? '' }])
-                                : [{ id: DEFAULT_TICKET_TIER_ID, name: 'General Admission', price: null, quantity: '' }],
+                            ticketDayAllocations: mappedDayAllocations,
+                            ticketDayTierAllocations: mappedDayTierAllocations,
+                            tickets: mappedTicketRows,
 
                             publicStartTime: isPublic ? (p?.schedule?.startAt || '') : '',
                             publicEndTime: isPublic ? (p?.schedule?.endAt || '') : '',
@@ -353,6 +407,56 @@ const PlanningWizard = () => {
 
     const handleChange = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
 
+    useEffect(() => {
+        if (formData.listingType !== 'Public') return;
+
+        setFormData((prev) => {
+            const days = getInclusiveIstDayRange(prev.publicStartTime, prev.publicEndTime);
+            const existing = prev.ticketDayAllocations && typeof prev.ticketDayAllocations === 'object'
+                ? prev.ticketDayAllocations
+                : {};
+            const cap = parseInt(prev.totalCapacity, 10);
+            const hasCap = Number.isFinite(cap) && cap > 0;
+
+            const nextAllocations = {};
+            for (const day of days) {
+                const parsed = parseInt(existing[day], 10);
+                if (!Number.isFinite(parsed) || parsed <= 0) {
+                    nextAllocations[day] = '';
+                    continue;
+                }
+                nextAllocations[day] = hasCap ? Math.min(parsed, cap) : parsed;
+            }
+
+            const existingKeys = Object.keys(existing);
+            const nextKeys = Object.keys(nextAllocations);
+            const allocationsUnchanged =
+                existingKeys.length === nextKeys.length &&
+                nextKeys.every((k) => String(existing[k] ?? '') === String(nextAllocations[k] ?? ''));
+
+            const existingDayTier = prev.ticketDayTierAllocations && typeof prev.ticketDayTierAllocations === 'object'
+                ? prev.ticketDayTierAllocations
+                : {};
+            const nextDayTier = normalizeDayTierAllocations({
+                days,
+                tickets: prev.tickets,
+                existing: existingDayTier,
+                dayAllocations: nextAllocations,
+                ticketType: prev.ticketType,
+            });
+
+            const tierUnchanged =
+                JSON.stringify(existingDayTier) === JSON.stringify(nextDayTier);
+
+            if (allocationsUnchanged && tierUnchanged) return prev;
+            return {
+                ...prev,
+                ticketDayAllocations: nextAllocations,
+                ticketDayTierAllocations: nextDayTier,
+            };
+        });
+    }, [formData.listingType, formData.publicStartTime, formData.publicEndTime, formData.totalCapacity, formData.ticketType, formData.tickets]);
+
     const handleToggleService = (category) => {
         setFormData(prev => {
             const isSelected = prev.services.includes(category);
@@ -394,6 +498,26 @@ const PlanningWizard = () => {
             // 1. Identification
             const eventId = searchParams.get('eventId');
             let draftId = eventId || formData.id;
+
+            const normalizedId = String(draftId || '').trim();
+            const isPersistedPublicEvent =
+                String(formData?.listingType || '').toLowerCase() === 'public' &&
+                Boolean(normalizedId) &&
+                !normalizedId.startsWith('draft_');
+
+            if (isPersistedPublicEvent) {
+                // Public events become backend-owned once created (e.g., PAYMENT_PENDING).
+                // Do not keep writing local drafts for persisted IDs.
+                const existingDrafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
+                if (Array.isArray(existingDrafts) && existingDrafts.length > 0) {
+                    const updatedDrafts = existingDrafts.filter((d) => String(d?.id || '').trim() !== normalizedId);
+                    if (updatedDrafts.length !== existingDrafts.length) {
+                        localStorage.setItem('planningWizardDrafts', JSON.stringify(updatedDrafts));
+                        window.dispatchEvent(new Event('savedUpdated'));
+                    }
+                }
+                return true;
+            }
 
             if (!draftId) {
                 draftId = `draft_${Date.now()}`;
@@ -475,6 +599,21 @@ const PlanningWizard = () => {
             )
         }));
     };
+
+    const manifestScheduleDays = getInclusiveIstDayRange(formData.publicStartTime, formData.publicEndTime);
+    const manifestDayAllocations = formData.ticketDayAllocations && typeof formData.ticketDayAllocations === 'object'
+        ? formData.ticketDayAllocations
+        : {};
+    const manifestDayTierAllocations = formData.ticketDayTierAllocations && typeof formData.ticketDayTierAllocations === 'object'
+        ? formData.ticketDayTierAllocations
+        : {};
+    const publicAllocationValidation = validateDayTierAllocations({
+        days: manifestScheduleDays,
+        tickets: formData.tickets,
+        dayAllocations: manifestDayAllocations,
+        dayTierAllocations: manifestDayTierAllocations,
+    });
+    const isPublicDayAllocationReady = publicAllocationValidation.isValid;
 
     const isNextDisabled = (currentComponentId === 'category' && formData.services.length === 0) ||
         (currentComponentId === 'vendor' && Object.keys(formData.vendors).length < formData.services.length) ||
@@ -617,7 +756,8 @@ const PlanningWizard = () => {
                                             (!formData.salesEndTime || (new Date(formData.salesEndTime) > new Date(formData.salesStartTime) && new Date(formData.salesEndTime) < new Date(formData.publicStartTime))) &&
                                             formData.banner && formData.eventDescription &&
                                             formData.totalCapacity > 0 &&
-                                            formData.tickets.reduce((a, t) => a + (parseInt(t.quantity) || 0), 0) === parseInt(formData.totalCapacity)
+                                            formData.tickets.reduce((a, t) => a + (parseInt(t.quantity) || 0), 0) === parseInt(formData.totalCapacity, 10) &&
+                                            isPublicDayAllocationReady
                                         ) : (
                                             formData.date && formData.date >= minDateString && formData.startTime &&
                                             formData.guests && formData.guests > 0
