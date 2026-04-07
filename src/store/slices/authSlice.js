@@ -232,6 +232,54 @@ export const registerVendor = createAsyncThunk(
     }
 );
 
+export const sendVendorPhoneOtp = createAsyncThunk(
+    'auth/sendVendorPhoneOtp',
+    async ({ phone }, { rejectWithValue }) => {
+        try {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/auth/vendor/phone-otp/send`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ phone }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                return rejectWithValue(data.message || 'Failed to send OTP');
+            }
+
+            return data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
+export const verifyVendorPhoneOtp = createAsyncThunk(
+    'auth/verifyVendorPhoneOtp',
+    async ({ phone, otp }, { rejectWithValue }) => {
+        try {
+            const response = await fetchWithNgrok(`${API_BASE_URL}/auth/vendor/phone-otp/verify`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ phone, otp }),
+            });
+
+            const data = await response.json();
+            if (!response.ok) {
+                return rejectWithValue(data.message || 'OTP verification failed');
+            }
+
+            return data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
 // Async thunk for uploading a vendor document
 export const uploadVendorDocument = createAsyncThunk(
     'auth/uploadVendorDocument',
@@ -367,12 +415,12 @@ export const updateProfile = createAsyncThunk(
             // Never allow client-side self-service updates to mutate protected fields.
             // Backend also enforces this, but stripping here avoids unnecessary 400s.
             const {
-                email,
-                authId,
-                role,
-                memberSince,
-                createdAt,
-                updatedAt,
+                email: _email,
+                authId: _authId,
+                role: _role,
+                memberSince: _memberSince,
+                createdAt: _createdAt,
+                updatedAt: _updatedAt,
                 ...safeProfileData
             } = profileData || {};
 

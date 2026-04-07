@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   BsShieldLock,
   BsBell,
@@ -9,12 +9,26 @@ import {
   BsCreditCard
 } from "react-icons/bs";
 import { toast } from "react-hot-toast";
+import { useDispatch } from "react-redux";
 import {
   isStrongPassword,
   PASSWORD_REQUIREMENTS_MESSAGE,
 } from "../../utils/passwordValidation";
+import { fetchWithAuth } from "../../utils/apiHandler";
+import { refreshAccessToken } from "../../store/slices/authSlice";
+
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
+const safeJson = async (response) => {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+};
 
 const AccountSettings = () => {
+  const dispatch = useDispatch();
   const [notifications, setNotifications] = useState({
     email: true,
     app: true,
@@ -31,6 +45,9 @@ const AccountSettings = () => {
     newPassword: "",
     confirmNewPassword: "",
   });
+  const [payoutStatus, setPayoutStatus] = useState(null);
+  const [isLoadingPayoutStatus, setIsLoadingPayoutStatus] = useState(false);
+  const [isCreatingOnboardingLink, setIsCreatingOnboardingLink] = useState(false);
 
   const hasPasswordInput =
     passwordForm.currentPassword ||
@@ -81,6 +98,88 @@ const AccountSettings = () => {
       <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-sm transition-all ${enabled ? 'left-7' : 'left-1'}`}></div>
     </button>
   );
+
+  const loadPayoutStatus = useCallback(async () => {
+    setIsLoadingPayoutStatus(true);
+    try {
+      const response = await fetchWithAuth(
+        `${API_BASE_URL}/api/orders/vendor-payouts/onboarding-status`,
+        { method: "GET" },
+        { dispatch, refreshAction: refreshAccessToken }
+      );
+
+      const data = await safeJson(response);
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || "Failed to load payout status");
+      }
+
+      setPayoutStatus(data.data || null);
+    } catch (error) {
+      toast.error(error?.message || "Failed to load payout status");
+    } finally {
+      setIsLoadingPayoutStatus(false);
+    }
+  }, [dispatch]);
+
+  const handleConnectPayouts = async () => {
+    const mode = String(payoutStatus?.vendorPayoutMode || "DEMO").trim().toUpperCase();
+    if (mode === "DEMO") {
+      toast("Vendor payouts are currently in demo mode. Ask admin to switch to Razorpay mode for live onboarding.");
+      return;
+    }
+
+    setIsCreatingOnboardingLink(true);
+    try {
+      const callbackUrl = `${window.location.origin}${window.location.pathname}`;
+      const response = await fetchWithAuth(
+        `${API_BASE_URL}/api/orders/vendor-payouts/onboarding-link`,
+        {
+          method: "POST",
+          body: JSON.stringify({ callbackUrl }),
+        },
+        { dispatch, refreshAction: refreshAccessToken }
+      );
+
+      const data = await safeJson(response);
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || "Failed to create onboarding link");
+      }
+
+      const onboardingUrl = String(data?.data?.onboardingUrl || "").trim();
+      if (!onboardingUrl) {
+        throw new Error("Razorpay onboarding URL is missing");
+      }
+
+      window.open(onboardingUrl, "_blank", "noopener,noreferrer");
+      toast.success("Razorpay onboarding opened in a new tab");
+      loadPayoutStatus();
+    } catch (error) {
+      toast.error(error?.message || "Failed to start payout onboarding");
+    } finally {
+      setIsCreatingOnboardingLink(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPayoutStatus();
+  }, [loadPayoutStatus]);
+
+  const onboardingStatus = String(payoutStatus?.onboardingStatus || "NOT_STARTED").trim().toUpperCase();
+  const payoutsEnabled = Boolean(payoutStatus?.payoutsEnabled);
+  const vendorPayoutMode = String(payoutStatus?.vendorPayoutMode || "DEMO").trim().toUpperCase() === "RAZORPAY"
+    ? "RAZORPAY"
+    : "DEMO";
+  const isDemoPayoutMode = vendorPayoutMode === "DEMO";
+
+  const payoutBadge = isDemoPayoutMode
+    ? { label: "Demo Mode", tone: "bg-indigo-50 text-indigo-700 border-indigo-200" }
+    : payoutsEnabled
+    ? { label: "Connected", tone: "bg-green-50 text-green-700 border-green-200" }
+    : onboardingStatus === "PENDING"
+      ? { label: "Pending Setup", tone: "bg-amber-50 text-amber-700 border-amber-200" }
+      : onboardingStatus === "REJECTED"
+        ? { label: "Needs Attention", tone: "bg-red-50 text-red-700 border-red-200" }
+        : { label: "Not Connected", tone: "bg-gray-50 text-gray-700 border-gray-200" };
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -231,17 +330,59 @@ const AccountSettings = () => {
         </div>
 
         {/* Payout & Billing */}
-        <div className="bg-white rounded-[2.5rem] shadow-sm border border-[#708aa0]/5 overflow-hidden opacity-80">
+        <div className="bg-white rounded-[2.5rem] shadow-sm border border-[#708aa0]/5 overflow-hidden">
           <div className="p-8 border-b border-gray-50 bg-gray-50/30">
             <h2 className="text-xl font-black text-[#0b2d49] mb-1">Payout & Billing Settings</h2>
-            <p className="text-xs text-[#708aa0] font-medium uppercase tracking-widest">Manage your bank account information and payment methods.</p>
+            <p className="text-xs text-[#708aa0] font-medium uppercase tracking-widest">
+              {isDemoPayoutMode
+                ? "Demo payout mode is enabled by admin. No live Razorpay transfer will happen."
+                : "Connect Razorpay payouts. Bank details stay inside Razorpay, not in Okkazo."}
+            </p>
           </div>
-          <div className="p-20 flex flex-col items-center justify-center text-center">
-            <div className="w-20 h-20 bg-[#e9eff1] rounded-full flex items-center justify-center text-[#708aa0] mb-6">
-              <BsCreditCard size={32} />
+          <div className="p-10">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 rounded-3xl border border-[#708aa0]/10 bg-[#f8fbfc] p-8">
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 bg-[#e9eff1] rounded-2xl flex items-center justify-center text-[#708aa0]">
+                  <BsCreditCard size={24} />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-[#0b2d49] uppercase tracking-tight">Razorpay Payout Account</p>
+                  <p className="text-xs text-[#708aa0] font-semibold mt-1">
+                    Status: <span className={`inline-flex items-center px-2 py-0.5 rounded border ${payoutBadge.tone}`}>{payoutBadge.label}</span>
+                  </p>
+                  <p className="text-xs text-[#708aa0] font-medium mt-2 max-w-xl">
+                    {isDemoPayoutMode
+                      ? "Admin has enabled demo payout mode for testing. Vendors are treated as payout-ready without connecting Razorpay."
+                      : "Complete onboarding on Razorpay to receive payouts. Okkazo stores only payout account linkage and payout amounts."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  onClick={loadPayoutStatus}
+                  disabled={isLoadingPayoutStatus}
+                  className="px-5 py-3 rounded-2xl border border-gray-200 bg-white text-[#0b2d49] font-bold text-sm hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isLoadingPayoutStatus ? "Refreshing..." : "Refresh Status"}
+                </button>
+                <button
+                  onClick={handleConnectPayouts}
+                  disabled={isCreatingOnboardingLink || isDemoPayoutMode}
+                  className="px-5 py-3 rounded-2xl bg-[#10b981] text-white font-bold text-sm hover:bg-[#0b2d49] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isDemoPayoutMode
+                    ? "Demo Mode Enabled"
+                    : (isCreatingOnboardingLink
+                      ? "Opening..."
+                      : (payoutsEnabled ? "Reopen Razorpay Onboarding" : "Connect Razorpay Payouts"))}
+                </button>
+              </div>
             </div>
-            <p className="text-sm font-black text-[#0b2d49] uppercase tracking-tight">Billing features coming soon</p>
-            <p className="text-xs text-[#708aa0] font-bold mt-2">Our team is working on the secure payment gateway integration.</p>
+
+            <div className="mt-6 text-xs text-[#708aa0] font-semibold bg-white border border-[#708aa0]/10 rounded-2xl p-4">
+              Payout formula: vendor receive = locked price - commission. Only settlement values and transfer identifiers are stored.
+            </div>
           </div>
         </div>
       </div>

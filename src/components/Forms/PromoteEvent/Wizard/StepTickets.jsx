@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BsPlus, BsTrash3, BsTicketPerforated, BsBoxSeam, BsCurrencyRupee, BsShieldCheck } from "react-icons/bs";
+import { BsPlus, BsTrash3, BsTicketPerforated, BsCurrencyRupee, BsShieldCheck } from "react-icons/bs";
 import { getInclusiveIstDayRange } from '../../../../utils/istDateTime';
 import { getTierDescriptors, getDayTierTotal, validateDayTierAllocations } from '../../../../utils/dayTierAllocation';
 
 const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
     const { tickets, totalCapacity, ticketType } = formData;
-    const scheduleDays = getInclusiveIstDayRange(formData.startDate, formData.endDate);
+    const scheduleDays = useMemo(
+        () => getInclusiveIstDayRange(formData.startDate, formData.endDate),
+        [formData.startDate, formData.endDate]
+    );
     const firstDay = scheduleDays[0] || null;
     const dayAllocations = formData.ticketDayAllocations && typeof formData.ticketDayAllocations === 'object'
         ? formData.ticketDayAllocations
@@ -18,15 +21,17 @@ const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
     const tierIds = useMemo(() => tierDescriptors.map((tier) => tier.id), [tierDescriptors]);
     const [sameAsFirstDays, setSameAsFirstDays] = useState({});
 
-    const totalAssigned = tickets.reduce((acc, t) => acc + (parseInt(t.quantity) || 0), 0);
-    const isCapacityMet = totalCapacity > 0 && totalAssigned === parseInt(totalCapacity, 10);
-
     const allocationValidation = useMemo(() => validateDayTierAllocations({
         days: scheduleDays,
         tickets,
         dayAllocations,
         dayTierAllocations,
     }), [scheduleDays, tickets, dayAllocations, dayTierAllocations]);
+
+    const totalAssigned = ticketType === 'paid'
+        ? Object.values(allocationValidation.tierTotalById || {}).reduce((sum, value) => sum + (parseInt(value, 10) || 0), 0)
+        : tickets.reduce((acc, t) => acc + (parseInt(t.quantity) || 0), 0);
+    const isCapacityMet = totalCapacity > 0 && totalAssigned === parseInt(totalCapacity, 10);
 
     const getDayLabel = (day) => {
         const d = new Date(`${day}T00:00:00+05:30`);
@@ -47,6 +52,57 @@ const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
             return unchanged ? prev : next;
         });
     }, [scheduleDays, firstDay]);
+
+    useEffect(() => {
+        if (ticketType !== 'paid') return;
+
+        setFormData((prev) => {
+            const prevTickets = Array.isArray(prev.tickets) ? prev.tickets : [];
+            if (prevTickets.length === 0) return prev;
+
+            const prevDays = getInclusiveIstDayRange(prev.startDate, prev.endDate);
+            const prevDayTier = prev.ticketDayTierAllocations && typeof prev.ticketDayTierAllocations === 'object'
+                ? prev.ticketDayTierAllocations
+                : {};
+
+            const tierTotalsById = Object.fromEntries(
+                prevTickets.map((ticket) => [String(ticket?.id ?? ''), 0])
+            );
+
+            for (const day of prevDays) {
+                const dayEntry = prevDayTier[day] && typeof prevDayTier[day] === 'object'
+                    ? prevDayTier[day]
+                    : {};
+
+                for (const ticket of prevTickets) {
+                    const tierId = String(ticket?.id ?? '');
+                    if (!tierId) continue;
+                    const parsed = parseInt(dayEntry[tierId], 10);
+                    if (Number.isFinite(parsed) && parsed > 0) {
+                        tierTotalsById[tierId] += parsed;
+                    }
+                }
+            }
+
+            let changed = false;
+            const nextTickets = prevTickets.map((ticket) => {
+                const tierId = String(ticket?.id ?? '');
+                const nextQuantity = tierId ? Math.max(0, tierTotalsById[tierId] || 0) : 0;
+                const currentQuantity = parseInt(ticket?.quantity, 10);
+                if (!Number.isFinite(currentQuantity) || currentQuantity !== nextQuantity) {
+                    changed = true;
+                    return { ...ticket, quantity: nextQuantity };
+                }
+                return ticket;
+            });
+
+            if (!changed) return prev;
+            return {
+                ...prev,
+                tickets: nextTickets,
+            };
+        });
+    }, [ticketType, scheduleDays, dayTierAllocations, tickets, setFormData]);
 
     const handleTypeChange = (type) => {
         if (type === 'free') {
@@ -153,7 +209,7 @@ const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
 
             <div className="mb-12 relative flex flex-col md:flex-row md:items-end justify-between gap-8">
                 <div>
-                    <p className="text-[#088395] font-black uppercase tracking-[0.3em] text-[10px] mb-4">Step 03 - Ticket Management</p>
+                    <p className="text-[#088395] font-black uppercase tracking-[0.3em] text-[10px] mb-4">Step 05 - Ticket Management</p>
                     <h2 className="text-4xl md:text-5xl font-serif-premium text-[#09637E] italic leading-tight">Define value tiers.</h2>
                 </div>
 
@@ -175,127 +231,146 @@ const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
                 </div>
             </div>
 
-            <div className="mb-12 bg-[#09637E] rounded-[2.5rem] p-10 shadow-2xl relative overflow-hidden group">
-                <div className="absolute right-0 top-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-32 -mt-32" />
+            <div className="mb-12 grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+                <div className="xl:col-span-4 bg-[#09637E] rounded-[2rem] p-6 shadow-2xl relative overflow-hidden group">
+                    <div className="absolute right-0 top-0 w-44 h-44 bg-white/5 rounded-full blur-3xl -mr-20 -mt-20" />
 
-                <div className="relative z-10 flex flex-col md:flex-row md:items-center gap-10">
-                    <div className="flex-1">
-                        <label className="block text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mb-4">Total Event Capacity</label>
-                        <div className="flex items-baseline gap-4 border-b border-white/10 pb-4 focus-within:border-[#7AB2B2] transition-colors">
-                            <input
-                                type="number"
-                                value={totalCapacity}
-                                placeholder="Total expected attendees..."
-                                onChange={(e) => handleCapacityChange(e.target.value)}
-                                className="w-full bg-transparent text-5xl font-serif-premium italic text-white placeholder-white/10 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            />
-                            <span className="text-[#7AB2B2] font-black uppercase tracking-widest text-xs opacity-60">Tickets</span>
+                    <div className="relative z-10 space-y-5">
+                        <div>
+                            <label className="block text-[10px] font-black text-white/40 uppercase tracking-[0.25em] mb-3">Total Event Capacity</label>
+                            <div className="flex items-end gap-3 border-b border-white/10 pb-3 focus-within:border-[#7AB2B2] transition-colors">
+                                <input
+                                    type="number"
+                                    value={totalCapacity}
+                                    placeholder="Total"
+                                    onChange={(e) => handleCapacityChange(e.target.value)}
+                                    className="w-full bg-transparent text-4xl font-serif-premium italic text-white placeholder-white/20 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                />
+                                <span className="text-[#7AB2B2] font-black uppercase tracking-widest text-[10px]">Tickets</span>
+                            </div>
                         </div>
-                    </div>
 
-                    <div className="md:w-64 space-y-4">
-                        <div className="flex justify-between items-end mb-2">
-                            <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Allocation</span>
-                            <span className={`text-xl font-serif-premium italic ${isCapacityMet ? 'text-[#7AB2B2]' : 'text-white'}`}>
-                                {totalAssigned} / {totalCapacity || 0}
-                            </span>
+                        <div>
+                            <div className="flex justify-between items-end mb-2">
+                                <span className="text-[9px] font-black text-white/40 uppercase tracking-widest">Allocated</span>
+                                <span className={`text-lg font-serif-premium italic ${isCapacityMet ? 'text-[#7AB2B2]' : 'text-white'}`}>
+                                    {totalAssigned} / {totalCapacity || 0}
+                                </span>
+                            </div>
+                            <div className="h-2.5 bg-white/10 rounded-full overflow-hidden p-0.5 border border-white/5">
+                                <div
+                                    className={`h-full rounded-full transition-all duration-700 ${totalAssigned > (totalCapacity || 0) ? 'bg-red-400' : isCapacityMet ? 'bg-[#7AB2B2]' : 'bg-[#088395]'} shadow-[0_0_10px_rgba(122,178,178,0.3)]`}
+                                    style={{ width: `${Math.min(100, (totalAssigned / (totalCapacity || 1)) * 100)}%` }}
+                                />
+                            </div>
                         </div>
-                        <div className="h-3 bg-white/10 rounded-full overflow-hidden p-0.5 border border-white/5">
-                            <div
-                                className={`h-full rounded-full transition-all duration-700 ${totalAssigned > (totalCapacity || 0) ? 'bg-red-400' : isCapacityMet ? 'bg-[#7AB2B2]' : 'bg-[#088395]'} shadow-[0_0_10px_rgba(122,178,178,0.3)]`}
-                                style={{ width: `${Math.min(100, (totalAssigned / (totalCapacity || 1)) * 100)}%` }}
-                            />
-                        </div>
+
+                        {ticketType === 'paid' && (
+                            <p className="text-[9px] text-[#EBF4F6]/65 font-bold uppercase tracking-wider">
+                                Tier quantities are auto-calculated from Tickets Per Day.
+                            </p>
+                        )}
+
                         {ticketType === 'paid' && !allocationValidation.isValid && (
-                            <p className="text-[8px] text-amber-200 font-bold uppercase tracking-widest">Match day totals and tier totals</p>
+                            <p className="text-[8px] text-amber-200 font-bold uppercase tracking-widest">Match day totals before continuing</p>
                         )}
                     </div>
                 </div>
-            </div>
 
-            {ticketType === 'paid' && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
-                    {tickets.map((ticket, idx) => (
-                        <div
-                            key={ticket.id}
-                            className="relative group bg-white rounded-[2.5rem] p-8 border border-[#09637E]/5 hover:border-[#088395]/30 transition-all duration-500 shadow-xl overflow-hidden animate-in fade-in slide-in-from-left-4"
-                            style={{ animationDelay: `${idx * 100}ms` }}
-                        >
-                            <div className="absolute -right-12 -top-12 w-48 h-48 bg-[#088395]/5 rounded-full blur-3xl group-hover:bg-[#088395]/10 transition-all duration-700" />
-
-                            <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-end relative z-10">
-                                <div className="md:col-span-1 hidden md:flex pb-2">
-                                    <div className="w-12 h-12 rounded-2xl bg-[#09637E]/5 flex items-center justify-center text-[#09637E]/40 group-hover:text-[#088395] group-hover:bg-[#088395]/10 transition-all">
-                                        <BsTicketPerforated size={20} />
-                                    </div>
+                <div className="xl:col-span-8 bg-white rounded-[2rem] p-6 border border-[#09637E]/10 shadow-xl">
+                    {ticketType === 'paid' ? (
+                        <>
+                            <div className="flex items-center justify-between mb-5">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#09637E]/55">Ticket Tiers</p>
+                                    <h3 className="text-2xl font-serif-premium italic text-[#09637E]">Set names and prices.</h3>
                                 </div>
+                                <span className="px-3 py-1 rounded-full bg-[#EBF4F6] text-[10px] font-black uppercase tracking-widest text-[#088395]">
+                                    {tickets.length} tier{tickets.length === 1 ? '' : 's'}
+                                </span>
+                            </div>
 
-                                <div className="md:col-span-4">
-                                    <label className="block text-[9px] font-black text-[#09637E]/40 uppercase tracking-[0.2em] mb-3">Tier Designation</label>
-                                    <input
-                                        type="text"
-                                        value={ticket.name}
-                                        placeholder="e.g. VIP Backstage"
-                                        onChange={(e) => onChange(ticket.id, 'name', e.target.value)}
-                                        className="w-full bg-transparent text-2xl font-serif-premium italic text-[#09637E] placeholder-[#09637E]/20 outline-none border-b border-[#09637E]/10 pb-2 focus:border-[#088395] transition-all"
-                                    />
-                                </div>
-
-                                <div className="md:col-span-3">
-                                    <label className="block text-[9px] font-black text-[#09637E]/40 uppercase tracking-[0.2em] mb-3">Entrance Fee</label>
-                                    <div className="flex items-baseline gap-2 group/input">
-                                        <span className="text-[#088395] font-serif-premium italic text-2xl">Rs</span>
-                                        <input
-                                            type="number"
-                                            value={ticket.price}
-                                            placeholder="Min. 1"
-                                            onChange={(e) => onChange(ticket.id, 'price', e.target.value === "" ? "" : parseFloat(e.target.value))}
-                                            onWheel={(e) => e.target.blur()}
-                                            className="w-full bg-transparent text-3xl font-serif-premium italic text-[#09637E] placeholder-[#09637E]/20 outline-none border-b border-[#09637E]/10 pb-2 focus:border-[#088395] transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="md:col-span-3">
-                                    <label className="block text-[9px] font-black text-[#09637E]/40 uppercase tracking-[0.2em] mb-3">Availability</label>
-                                    <div className="flex items-center gap-3">
-                                        <BsBoxSeam className="text-[#09637E]/20" />
-                                        <input
-                                            type="number"
-                                            value={ticket.quantity}
-                                            placeholder="Quantity"
-                                            onChange={(e) => onChange(ticket.id, 'quantity', e.target.value === "" ? "" : parseInt(e.target.value, 10))}
-                                            onWheel={(e) => e.target.blur()}
-                                            className="w-full bg-transparent text-2xl font-serif-premium italic text-[#09637E] placeholder-[#09637E]/20 outline-none border-b border-[#09637E]/10 pb-2 focus:border-[#088395] transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="md:col-span-1 flex justify-end pb-1">
-                                    <button
-                                        onClick={() => onRemove(ticket.id)}
-                                        className="w-12 h-12 rounded-full text-[#09637E]/30 hover:text-red-500 hover:bg-red-50 transition-all duration-300 flex items-center justify-center group/del"
-                                        title="Remove Tier"
+                            <div className="space-y-4">
+                                {tickets.map((ticket, idx) => (
+                                    <div
+                                        key={ticket.id}
+                                        className="relative group rounded-2xl border border-[#09637E]/10 px-4 py-4 bg-[#EBF4F6]/35"
+                                        style={{ animationDelay: `${idx * 90}ms` }}
                                     >
-                                        <BsTrash3 size={18} />
-                                    </button>
+                                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                                            <div className="md:col-span-1 hidden md:flex pb-1">
+                                                <div className="w-10 h-10 rounded-xl bg-[#09637E]/5 flex items-center justify-center text-[#088395]">
+                                                    <BsTicketPerforated size={16} />
+                                                </div>
+                                            </div>
+
+                                            <div className="md:col-span-5">
+                                                <label className="block text-[9px] font-black text-[#09637E]/45 uppercase tracking-[0.2em] mb-2">Tier Designation</label>
+                                                <input
+                                                    type="text"
+                                                    value={ticket.name}
+                                                    placeholder="e.g. VIP Backstage"
+                                                    onChange={(e) => onChange(ticket.id, 'name', e.target.value)}
+                                                    className="w-full bg-transparent text-xl font-serif-premium italic text-[#09637E] placeholder-[#09637E]/20 outline-none border-b border-[#09637E]/15 pb-2 focus:border-[#088395] transition-all"
+                                                />
+                                            </div>
+
+                                            <div className="md:col-span-4">
+                                                <label className="block text-[9px] font-black text-[#09637E]/45 uppercase tracking-[0.2em] mb-2">Entrance Fee</label>
+                                                <div className="flex items-baseline gap-2">
+                                                    <span className="text-[#088395] font-serif-premium italic text-xl">Rs</span>
+                                                    <input
+                                                        type="number"
+                                                        value={ticket.price}
+                                                        placeholder="Min. 1"
+                                                        onChange={(e) => onChange(ticket.id, 'price', e.target.value === "" ? "" : parseFloat(e.target.value))}
+                                                        onWheel={(e) => e.target.blur()}
+                                                        className="w-full bg-transparent text-2xl font-serif-premium italic text-[#09637E] placeholder-[#09637E]/20 outline-none border-b border-[#09637E]/15 pb-2 focus:border-[#088395] transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="md:col-span-1 flex justify-end pb-1">
+                                                <button
+                                                    onClick={() => onRemove(ticket.id)}
+                                                    className="w-10 h-10 rounded-full text-[#09637E]/35 hover:text-red-500 hover:bg-red-50 transition-all duration-300 flex items-center justify-center"
+                                                    title="Remove Tier"
+                                                >
+                                                    <BsTrash3 size={16} />
+                                                </button>
+                                            </div>
+
+                                            <div className="md:col-span-12">
+                                                <p className="text-[9px] font-black uppercase tracking-wider text-[#09637E]/50">
+                                                    Quantity comes from Tickets Per Day: {allocationValidation.tierTotalById[String(ticket.id)] || 0}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <button
+                                onClick={onAdd}
+                                className="w-full py-6 mt-5 border-2 border-dashed border-[#09637E]/12 rounded-2xl text-[#09637E]/65 font-black uppercase tracking-[0.25em] text-[10px] flex items-center justify-center gap-3 hover:bg-[#09637E]/5 hover:border-[#088395] hover:text-[#088395] transition-all active:scale-[0.99]"
+                            >
+                                <div className="w-9 h-9 rounded-full bg-[#09637E]/6 flex items-center justify-center">
+                                    <BsPlus size={24} />
                                 </div>
+                                Architect New Ticket Tier
+                            </button>
+                        </>
+                    ) : (
+                        <div className="min-h-[220px] flex items-center justify-center text-center px-6">
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#09637E]/55 mb-3">Free Mode</p>
+                                <p className="text-2xl font-serif-premium italic text-[#09637E] mb-2">Single General Admission tier enabled.</p>
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-[#09637E]/45">Set daily allocation below to distribute free entries.</p>
                             </div>
                         </div>
-                    ))}
-
-                    <button
-                        onClick={onAdd}
-                        className="w-full py-8 mt-6 border-2 border-dashed border-[#09637E]/10 rounded-[2.5rem] text-[#09637E]/60 font-black uppercase tracking-[0.3em] text-[10px] flex flex-col items-center justify-center gap-4 hover:bg-[#09637E]/5 hover:border-[#088395] hover:text-[#088395] transition-all active:scale-[0.98] group relative overflow-hidden"
-                    >
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#088395]/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                        <div className="w-12 h-12 rounded-full bg-[#09637E]/5 flex items-center justify-center group-hover:bg-[#088395] group-hover:text-[#EBF4F6] transition-all duration-500 group-hover:rotate-90">
-                            <BsPlus size={32} />
-                        </div>
-                        <span>Architect New Ticket Tier</span>
-                    </button>
+                    )}
                 </div>
-            )}
+            </div>
 
             <div className="mt-10 bg-white rounded-[2rem] p-6 border border-[#09637E]/10 shadow-lg">
                 <div className="flex items-center justify-between mb-4">
@@ -307,7 +382,7 @@ const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
 
                 {scheduleDays.length === 0 ? (
                     <p className="text-[10px] font-semibold text-[#09637E]/50 uppercase tracking-wider">
-                        Set schedule dates in Step 5, then return here to enter day-wise tier allocations.
+                        Set schedule dates in Step 4, then return here to enter day-wise tier allocations.
                     </p>
                 ) : (
                     <div className="space-y-3">
@@ -357,7 +432,6 @@ const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
                                                     <input
                                                         type="number"
                                                         min="0"
-                                                        max={tier.quantity || undefined}
                                                         disabled={Boolean(sameAsFirstDays[day]) && day !== firstDay}
                                                         value={dayTierAllocations?.[day]?.[tier.id] ?? ''}
                                                         onChange={(e) => handleDayTierAllocationChange(day, tier.id, e.target.value)}
@@ -377,8 +451,8 @@ const StepTickets = ({ formData, setFormData, onAdd, onRemove, onChange }) => {
                                 {tierDescriptors.map((tier) => (
                                     <div key={`tier-total-${tier.id}`} className="flex items-center justify-between text-[11px]">
                                         <span className="font-semibold text-[#09637E]/70 truncate max-w-[70%]">{tier.name || 'Tier'}</span>
-                                        <span className={`font-black ${allocationValidation.tierTotalById[tier.id] === allocationValidation.tierTargetById[tier.id] ? 'text-[#088395]' : 'text-red-500'}`}>
-                                            {allocationValidation.tierTotalById[tier.id] || 0} / {allocationValidation.tierTargetById[tier.id] || 0}
+                                        <span className="font-black text-[#088395]">
+                                            {allocationValidation.tierTotalById[tier.id] || 0}
                                         </span>
                                     </div>
                                 ))}

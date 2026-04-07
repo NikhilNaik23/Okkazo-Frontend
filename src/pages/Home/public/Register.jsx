@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
+import { motion } from "framer-motion";
 import { BsShop } from "react-icons/bs";
 import { ArrowLeft } from "lucide-react";
-import { motion } from "framer-motion";
 import { toast } from "react-hot-toast";
 import {
     registerUser,
@@ -21,6 +21,7 @@ import {
     PASSWORD_PATTERN,
     PASSWORD_REQUIREMENTS_MESSAGE,
 } from "../../../utils/passwordValidation";
+import { isDisposableEmail } from "../../../utils/emailValidation";
 
 const Register = () => {
     const navigate = useNavigate();
@@ -41,6 +42,7 @@ const Register = () => {
         password: "",
         confirmPassword: "",
     });
+    const AnimatedContainer = motion.div;
 
     // Redirect to login after successful registration
     useEffect(() => {
@@ -98,6 +100,11 @@ const Register = () => {
             return;
         }
 
+        if (isDisposableEmail(formData.email)) {
+            toast.error("Temporary/disposable emails are not allowed. Please use a valid email.");
+            return;
+        }
+
         dispatch(
             registerUser({
                 username: formData.username,
@@ -109,7 +116,7 @@ const Register = () => {
 
     return (
         <>
-            <motion.div
+            <AnimatedContainer
                 initial={{ opacity: 0, x: 50 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 50 }}
@@ -282,7 +289,7 @@ const Register = () => {
 
                 {/* Right Side - Image & Branding */}
                 <BrandingPanel />
-            </motion.div>
+            </AnimatedContainer>
 
             <SimpleModal
                 isOpen={activeModal === "terms"}

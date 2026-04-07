@@ -7,6 +7,75 @@ const StepSchedule = ({ formData, setFormData }) => {
     // Current date for min attribute
     const minDate = new Date();
 
+    const toDate = (value) => {
+        if (!value) return null;
+        const date = value instanceof Date ? new Date(value) : new Date(value);
+        return Number.isNaN(date.getTime()) ? null : date;
+    };
+
+    const toStartOfDay = (value) => {
+        const date = toDate(value);
+        if (!date) return null;
+        date.setHours(0, 0, 0, 0);
+        return date;
+    };
+
+    const isSameCalendarDay = (a, b) => {
+        const da = toDate(a);
+        const db = toDate(b);
+        if (!da || !db) return false;
+        return da.getFullYear() === db.getFullYear()
+            && da.getMonth() === db.getMonth()
+            && da.getDate() === db.getDate();
+    };
+
+    const startDateValue = toDate(formData.startDate);
+    const endDateValue = toDate(formData.endDate);
+    const endMinDate = startDateValue ? toStartOfDay(startDateValue) : minDate;
+    const endDayAnchor = endDateValue || startDateValue;
+    const startOfDayTime = new Date();
+    startOfDayTime.setHours(0, 0, 0, 0);
+    const endOfDayTime = new Date();
+    endOfDayTime.setHours(23, 45, 0, 0);
+    const endMinTime = startDateValue && endDayAnchor && isSameCalendarDay(startDateValue, endDayAnchor)
+        ? startDateValue
+        : startOfDayTime;
+
+    const handleStartDateChange = (date) => {
+        setFormData((prev) => {
+            if (!date) {
+                return {
+                    ...prev,
+                    startDate: date,
+                };
+            }
+
+            const prevEnd = toDate(prev.endDate);
+            const nextEndDate = !prevEnd || prevEnd < date ? date : prev.endDate;
+
+            const prevSalesEnd = toDate(prev.ticketSalesEndDate);
+            const nextTicketSalesEndDate = prevSalesEnd && prevSalesEnd > date ? date : prev.ticketSalesEndDate;
+
+            return {
+                ...prev,
+                startDate: date,
+                endDate: nextEndDate,
+                ticketSalesEndDate: nextTicketSalesEndDate,
+            };
+        });
+    };
+
+    const handleEndDateChange = (date) => {
+        setFormData((prev) => {
+            if (!date) return { ...prev, endDate: date };
+            const start = toDate(prev.startDate);
+            if (start && date < start) {
+                return { ...prev, endDate: start };
+            }
+            return { ...prev, endDate: date };
+        });
+    };
+
     const handleLocationSelect = ({ lat, lng, address }) => {
         setFormData({
             ...formData,
@@ -67,7 +136,7 @@ const StepSchedule = ({ formData, setFormData }) => {
                             <p className="text-[#088395] font-black uppercase tracking-[0.2em] text-[10px] ml-1">Starts</p>
                             <CustomDatePicker
                                 selected={formData.startDate ? new Date(formData.startDate) : null}
-                                onChange={(date) => setFormData({ ...formData, startDate: date })}
+                                onChange={handleStartDateChange}
                                 minDate={(() => {
                                     const d = new Date();
                                     d.setDate(d.getDate() + 11);
@@ -90,8 +159,10 @@ const StepSchedule = ({ formData, setFormData }) => {
                             <p className="text-[#088395] font-black uppercase tracking-[0.2em] text-[10px] ml-1">Ends</p>
                             <CustomDatePicker
                                 selected={formData.endDate ? new Date(formData.endDate) : null}
-                                onChange={(date) => setFormData({ ...formData, endDate: date })}
-                                minDate={formData.startDate ? new Date(formData.startDate) : minDate}
+                                onChange={handleEndDateChange}
+                                minDate={endMinDate}
+                                minTime={endMinTime}
+                                maxTime={endOfDayTime}
                                 placeholderText="Select Event End..."
                                 className="w-full"
                             />

@@ -31,6 +31,24 @@ const safeJson = async (response) => {
     }
 };
 
+const resolveBannerUrl = (value) => {
+    if (!value) return null;
+
+    if (typeof value === 'string') {
+        const s = value.trim();
+        return s || null;
+    }
+
+    if (typeof value === 'object') {
+        const candidates = [value.url, value.fileUrl, value.secure_url, value.src, value.image];
+        for (const item of candidates) {
+            if (typeof item === 'string' && item.trim()) return item.trim();
+        }
+    }
+
+    return null;
+};
+
 const mapApiTicketToCard = (ticket, idx) => {
     const startAt = ticket?.schedule?.startAt ? new Date(ticket.schedule.startAt) : null;
     const validDate = startAt && !Number.isNaN(startAt.getTime()) ? startAt : null;
@@ -50,7 +68,7 @@ const mapApiTicketToCard = (ticket, idx) => {
         id: ticket?.ticketId || `ticket-${idx}`,
         title: ticket?.eventTitle || 'Event Ticket',
         location: ticket?.venue?.locationName || 'TBA',
-        image: ticket?.eventBanner?.url || myOrganizedEvents?.[idx % (myOrganizedEvents.length || 1)]?.image,
+        image: resolveBannerUrl(ticket?.eventBanner) || myOrganizedEvents?.[idx % (myOrganizedEvents.length || 1)]?.image,
         statusTag: 'Confirmed Guest',
         month,
         day,
@@ -165,17 +183,20 @@ const mapPlanningToCardEvent = (planning, idx) => {
         if (rawStatus === 'PENDING APPROVAL') return 'Pending Approval';
         if (rawStatus === 'CONFIRMED') return 'Confirmed';
         if (rawStatus === 'REJECTED') return 'Rejected';
-        if (rawStatus === 'COMPLETED') return 'Live';
+        if (rawStatus === 'COMPLETED') return 'Completed';
+        if (rawStatus === 'VENDOR PAYMENT PENDING' || rawStatus === 'VENDOR_PAYMENT_PENDING') return 'Completed';
+        if (rawStatus === 'CLOSED') return 'Completed';
         if (rawStatus === 'APPROVED') return 'Approved';
         return rawStatus ? rawStatus[0] + rawStatus.slice(1).toLowerCase() : 'Pending Approval';
     })();
 
     const fallbackImage = myOrganizedEvents?.[idx % (myOrganizedEvents?.length || 1)]?.image;
-    const image = planning?.eventBanner?.url || fallbackImage;
+    const image = resolveBannerUrl(planning?.eventBanner) || fallbackImage;
 
     const sold = (() => {
         if (!isPublic) return '';
         if (status === 'Live') return 'Live now';
+        if (status === 'Completed') return 'Completed';
         if (status === 'Pending Approval') return 'In review';
         if (status === 'Immediate Action') return 'Action required';
         if (status === 'Rejected') return 'Needs changes';

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mail, Phone, Star, MoreHorizontal, Edit, ExternalLink, MoreVertical } from 'lucide-react';
+import { Mail, Phone, Star } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const ManagerVendorCard = ({
@@ -10,9 +10,7 @@ const ManagerVendorCard = ({
     rating = 0,
     reviewCount = 0,
     email = 'email@example.com',
-    phone = '+1 234 567 8900',
-    onEdit,
-    onUpdateStatus
+    phone = '+1 234 567 8900'
 }) => {
 
     // Professional Status Styles
@@ -55,9 +53,6 @@ const ManagerVendorCard = ({
                                     {category}
                                 </p>
                             </div>
-                            <button className="text-gray-400 hover:text-gray-600 transition-colors">
-                                <MoreHorizontal className="w-4 h-4" />
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -91,23 +86,6 @@ const ManagerVendorCard = ({
                 </div>
             </div>
 
-            {/* Footer Actions - Slight off-white background */}
-            <div className="bg-gray-50 border-t border-gray-100 flex divide-x divide-gray-100">
-                <button
-                    onClick={onEdit}
-                    className="flex-1 py-3 flex items-center justify-center gap-2 text-xs font-bold text-gray-600 hover:text-gray-900 hover:bg-white transition-colors"
-                >
-                    <Edit className="w-3.5 h-3.5" />
-                    Edit
-                </button>
-                <button
-                    onClick={onUpdateStatus}
-                    className="flex-1 py-3 flex items-center justify-center gap-2 text-xs font-bold text-gray-600 hover:text-gray-900 hover:bg-white transition-colors"
-                >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    Profile
-                </button>
-            </div>
         </motion.div>
     );
 };

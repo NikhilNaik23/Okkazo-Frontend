@@ -17,6 +17,65 @@ const toNonNegativeNumber = (value, fallback = 0) => {
     return Number.isFinite(n) && n >= 0 ? n : fallback;
 };
 
+const formatUnavailableReason = (reason) => {
+    const raw = String(reason || '').trim();
+    if (!raw) return 'Currently locked for selected date';
+    return raw
+        .toLowerCase()
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (ch) => ch.toUpperCase());
+};
+
+const resolveVendorImage = (vendor) => {
+    return (
+        vendor?.banner ||
+        vendor?.image ||
+        vendor?.profileImage ||
+        vendor?._raw?.banner ||
+        vendor?._raw?.images?.banner?.fileUrl ||
+        vendor?._raw?.images?.profile?.fileUrl ||
+        'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=2069&auto=format&fit=crop'
+    );
+};
+
+const normalizeInclusionItems = (value) => {
+    if (Array.isArray(value)) {
+        return value
+            .flatMap((item) => normalizeInclusionItems(item))
+            .filter(Boolean);
+    }
+
+    if (typeof value === 'string') {
+        const raw = value.trim();
+        if (!raw) return [];
+
+        // Support comma/newline separated payloads from mixed backends.
+        if (raw.includes('\n') || raw.includes(',')) {
+            return raw
+                .split(/\n|,/)
+                .map((part) => part.trim())
+                .filter(Boolean);
+        }
+
+        return [raw];
+    }
+
+    if (value && typeof value === 'object') {
+        const candidate = value?.name || value?.label || value?.title || value?.item || null;
+        if (typeof candidate === 'string' && candidate.trim()) {
+            return [candidate.trim()];
+        }
+
+        // Some payloads wrap items as an object map.
+        const values = Object.values(value);
+        if (values.length > 0) {
+            return values.flatMap((item) => normalizeInclusionItems(item)).filter(Boolean);
+        }
+    }
+
+    return [];
+};
+
 const VendorDetailsModal = ({
     vendor,
     onClose,
@@ -57,6 +116,17 @@ const VendorDetailsModal = ({
             document.body.style.overflow = 'unset';
         };
     }, []);
+
+    const expandedPackageSafe = expandedPackage || {};
+    const expandedInclusionItems = React.useMemo(() => {
+        return normalizeInclusionItems(
+            expandedPackageSafe?.details?.items
+            ?? expandedPackageSafe?.details?.inclusions
+            ?? expandedPackageSafe?.items
+            ?? expandedPackageSafe?.inclusions
+            ?? []
+        );
+    }, [expandedPackageSafe]);
 
     if (!vendor) return null;
 
@@ -176,6 +246,8 @@ const VendorDetailsModal = ({
     };
 
     const headerDistanceText = formatDistance(vendor?.distanceKm);
+    const isUnavailable = vendor?.isAvailable === false;
+    const unavailableMessage = formatUnavailableReason(vendor?.unavailableReason);
 
     const detailRows = isVenueServiceMode
         ? [
@@ -211,7 +283,7 @@ const VendorDetailsModal = ({
 
                 {/* Left Side - Image & Quick Info */}
                 <div className="w-full md:w-5/12 relative h-[30vh] md:h-auto">
-                    <img src={vendor.image} className="absolute inset-0 w-full h-full object-cover" alt={vendor.name} />
+                    <img src={resolveVendorImage(vendor)} className="absolute inset-0 w-full h-full object-cover" alt={vendor.name} />
                     <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent opacity-90" />
 
                     <div className="absolute inset-0 p-10 flex flex-col justify-end text-white">
@@ -267,6 +339,11 @@ const VendorDetailsModal = ({
                 <div className="w-full md:w-7/12 bg-white flex flex-col h-full overflow-hidden relative z-10">
                     {/* Fixed Tabs Header */}
                     <div className="px-10 pt-10 pb-0 shrink-0 bg-white z-20">
+                        {isUnavailable && (
+                            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[11px] font-semibold text-red-700">
+                                {unavailableMessage}
+                            </div>
+                        )}
                         <div className="flex items-center gap-8 border-b border-gray-100 pb-0 overflow-x-auto">
                             {tabs.map((tab) => (
                                 <button
@@ -400,7 +477,7 @@ const VendorDetailsModal = ({
                                                                             step="0.5"
                                                                             value={packageQty}
                                                                             onChange={(e) => handlePackageQuantityChange(pkgId, e.target.value)}
-                                                                            className="w-full max-w-[180px] px-3 py-2 rounded-lg border border-primary/15 bg-white text-primary font-semibold"
+                                                                            className="w-full max-w-45 px-3 py-2 rounded-lg border border-primary/15 bg-white text-primary font-semibold"
                                                                         />
                                                                     </div>
                                                                 )}
@@ -427,9 +504,10 @@ const VendorDetailsModal = ({
                                                                             onSelect(updatedVendor);
                                                                             onClose();
                                                                         }}
-                                                                        className="py-3 rounded-xl bg-primary text-white font-bold text-[10px] uppercase tracking-widest hover:bg-secondary transition-colors shadow-lg shadow-primary/20"
+                                                                        disabled={isUnavailable}
+                                                                        className={`py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-colors shadow-lg ${isUnavailable ? 'bg-gray-200 text-gray-500 cursor-not-allowed shadow-none' : 'bg-primary text-white hover:bg-secondary shadow-primary/20'}`}
                                                                     >
-                                                                        Add Combined
+                                                                        {isUnavailable ? 'Locked' : 'Add Combined'}
                                                                     </button>
                                                                 </div>
                                                             </div>
@@ -458,7 +536,7 @@ const VendorDetailsModal = ({
                                                             step="0.5"
                                                             value={resolvePackageQuantity(expandedPackageId)}
                                                             onChange={(e) => handlePackageQuantityChange(expandedPackageId, e.target.value)}
-                                                            className="w-full max-w-[220px] px-3 py-2 rounded-lg border border-primary/15 bg-white text-primary font-semibold"
+                                                            className="w-full max-w-55 px-3 py-2 rounded-lg border border-primary/15 bg-white text-primary font-semibold"
                                                         />
                                                     </div>
                                                 )}
@@ -467,18 +545,18 @@ const VendorDetailsModal = ({
                                                     <div className="flex justify-between items-start mb-8 border-b border-primary/5 pb-8">
                                                         <div>
                                                             <span className="text-secondary font-serif-premium italic text-lg mb-1 block">Selected Tier</span>
-                                                            <h2 className="text-3xl md:text-4xl font-bold text-primary mb-2">{expandedPackage.name || vendor.name}</h2>
-                                                            <p className="text-gray-500">{expandedPackage.description || 'Package details'}</p>
+                                                            <h2 className="text-3xl md:text-4xl font-bold text-primary mb-2">{expandedPackageSafe.name || vendor.name}</h2>
+                                                            <p className="text-gray-500">{expandedPackageSafe.description || 'Package details'}</p>
                                                         </div>
                                                         <div className="text-right">
-                                                            <div className="text-4xl font-serif-premium text-primary">₹{getPackageUnitPrice(expandedPackage).toLocaleString()}</div>
+                                                            <div className="text-4xl font-serif-premium text-primary">₹{getPackageUnitPrice(expandedPackageSafe).toLocaleString()}</div>
                                                             <div className="text-xs font-bold uppercase tracking-widest text-gray-400">/ {packageUnitLabel}</div>
                                                         </div>
                                                     </div>
 
                                                     <h3 className="text-sm font-bold uppercase tracking-widest text-primary mb-6">Complete Inclusions</h3>
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
-                                                        {(expandedPackage?.details?.items || []).map((item, idx) => (
+                                                        {expandedInclusionItems.map((item, idx) => (
                                                             <div key={idx} className="flex items-start gap-3 p-4 bg-white rounded-xl border border-gray-100">
                                                                 <div className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
                                                                     <BsCheck size={12} strokeWidth={1} />
@@ -517,14 +595,15 @@ const VendorDetailsModal = ({
                                                                     pricingUnit: selectionPricingUnit,
                                                                     pricingQuantity: expandedQty,
                                                                     pricingQuantityUnit: isPerKgPricing ? 'kg' : null,
-                                                                    selectedPackage: expandedPackage,
+                                                                    selectedPackage: expandedPackageSafe,
                                                                 });
                                                                 onSelect(updatedVendor);
                                                                 onClose();
                                                             }}
-                                                            className="px-8 py-4 bg-primary text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-secondary transition-colors shadow-lg"
+                                                            disabled={isUnavailable}
+                                                            className={`px-8 py-4 rounded-xl font-bold text-xs uppercase tracking-widest transition-colors shadow-lg ${isUnavailable ? 'bg-gray-200 text-gray-500 cursor-not-allowed shadow-none' : 'bg-primary text-white hover:bg-secondary'}`}
                                                         >
-                                                            Add to Event
+                                                            {isUnavailable ? 'Locked' : 'Add to Event'}
                                                         </button>
                                                     </div>
                                                 </div>
@@ -553,12 +632,15 @@ const VendorDetailsModal = ({
                                     onSelect(updatedVendor);
                                     onClose();
                                 }}
+                                disabled={isUnavailable}
                                 className={`w-full py-4 rounded-2xl text-xs font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 shadow-xl
-                                ${isSelected
-                                        ? 'bg-secondary text-white shadow-secondary/20'
-                                        : 'bg-primary text-white hover:bg-secondary shadow-primary/20'}`}
+                                ${isUnavailable
+                                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed shadow-none'
+                                        : (isSelected
+                                            ? 'bg-secondary text-white shadow-secondary/20'
+                                            : 'bg-primary text-white hover:bg-secondary shadow-primary/20')}`}
                             >
-                                {isSelected ? 'Selected' : 'Select This Venue'} <BsArrowRight />
+                                {isUnavailable ? 'Locked for Date' : (isSelected ? 'Selected' : 'Select This Venue')} <BsArrowRight />
                             </button>
                         </div>
                     )}

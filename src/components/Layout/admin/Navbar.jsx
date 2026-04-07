@@ -2,17 +2,21 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { MdLogout, MdClose } from "react-icons/md";
 import { adminMenuSections, adminBottomItems } from "../../../data/adminData";
-import { vendorNotificationsData } from "../../../data/vendorNotificationsData";
 import { useStaffUnread } from "../../../context/useStaffUnread";
+import useNotificationFeed from "../../../hooks/useNotificationFeed";
 
 const Navbar = ({ isOpen, onClose, onToggleNotifications }) => {
   const location = useLocation();
   const { totalUnreadCount: unreadChatCount } = useStaffUnread();
+  const { unreadCount } = useNotificationFeed({
+    enabled: true,
+    fetchItems: false,
+    fetchUnread: true,
+  });
+  const unreadNotifications = unreadCount > 0;
 
   const menuSections = adminMenuSections;
   const bottomItems = adminBottomItems;
-
-  const unreadNotifications = vendorNotificationsData.new.some((n) => n.unread);
 
   const handleLogout = () => {
     localStorage.clear();

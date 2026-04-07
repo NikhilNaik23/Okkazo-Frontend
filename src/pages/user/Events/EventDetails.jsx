@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { BsArrowLeft, BsCheckCircleFill, BsBookmarkHeart, BsBookmarkHeartFill } from "react-icons/bs";
 import { allEvents, popularEvents } from "../../../data/eventsData";
@@ -6,12 +6,101 @@ import { toast, Toaster } from "react-hot-toast";
 import EventInfoGrid from "../../../components/User/Events/EventInfoGrid";
 import TicketSelector from "../../../components/User/Events/TicketSelector";
 
+const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const normalizeDayKey = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const day = raw.includes("T") ? raw.slice(0, 10) : raw;
+    return DAY_KEY_RE.test(day) ? day : "";
+};
+
+const formatTicketDayLabel = (dayValue) => {
+    const key = normalizeDayKey(dayValue);
+    if (!key) return "Date TBA";
+
+    const [yy, mm, dd] = key.split("-").map((v) => Number(v));
+    const dt = new Date(Date.UTC(yy, (mm || 1) - 1, dd || 1));
+    if (Number.isNaN(dt.getTime())) return key;
+
+    return dt.toLocaleDateString("en-IN", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        timeZone: "Asia/Kolkata",
+    });
+};
+
+const normalizeEventForTicketing = (rawEvent) => {
+    const eventWithCategories = { ...(rawEvent || {}) };
+
+    eventWithCategories.description =
+        eventWithCategories.description
+        || eventWithCategories.eventDescription
+        || eventWithCategories.raw?.eventDescription
+        || "";
+
+    if (!eventWithCategories.categories || eventWithCategories.categories.length === 0) {
+        eventWithCategories.categories = [
+            {
+                name: "General Admission",
+                price: eventWithCategories.price || "Free"
+            }
+        ];
+    }
+
+    const rows = Array.isArray(eventWithCategories?.ticketDayWiseAllocations)
+        ? eventWithCategories.ticketDayWiseAllocations
+        : (Array.isArray(eventWithCategories?.raw?.tickets?.dayWiseAllocations)
+            ? eventWithCategories.raw.tickets.dayWiseAllocations
+            : []);
+
+    eventWithCategories.ticketDayWiseAllocations = rows
+        .map((row) => {
+            const day = normalizeDayKey(row?.day);
+            if (!day) return null;
+
+            const ticketCountRaw = Number(row?.ticketCount || 0);
+            const ticketCount = Number.isFinite(ticketCountRaw) && ticketCountRaw > 0 ? ticketCountRaw : 0;
+
+            const tierBreakdown = (Array.isArray(row?.tierBreakdown) ? row.tierBreakdown : [])
+                .map((tier) => {
+                    const name = String(tier?.name || tier?.tierName || "").trim();
+                    if (!name) return null;
+
+                    const countRaw = Number(tier?.ticketCount ?? tier?.noOfTickets ?? tier?.available ?? tier?.quantity ?? 0);
+                    const tierCount = Number.isFinite(countRaw) && countRaw > 0 ? countRaw : 0;
+                    const priceRaw = Number(tier?.price || 0);
+                    const price = Number.isFinite(priceRaw) && priceRaw >= 0 ? priceRaw : 0;
+
+                    return {
+                        name,
+                        ticketCount: tierCount,
+                        price,
+                    };
+                })
+                .filter(Boolean);
+
+            return {
+                day,
+                ticketCount,
+                tierBreakdown,
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) => String(a.day).localeCompare(String(b.day)));
+
+    return eventWithCategories;
+};
+
 const EventDetails = () => {
     const { eventId } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
     const [event, setEvent] = useState(null);
     const [ticketSelection, setTicketSelection] = useState({}); // { "Category A": 2, "Category B": 0 }
+    const [selectedTicketDay, setSelectedTicketDay] = useState("");
     const [isSaved, setIsSaved] = useState(false);
 
     const resolvedDescription = String(
@@ -30,20 +119,7 @@ const EventDetails = () => {
     useEffect(() => {
         const stateEvent = location?.state?.event;
         if (stateEvent && String(stateEvent.id) === String(eventId)) {
-            const eventWithCategories = { ...stateEvent };
-            eventWithCategories.description =
-                eventWithCategories.description
-                || eventWithCategories.eventDescription
-                || eventWithCategories.raw?.eventDescription
-                || "";
-            if (!eventWithCategories.categories || eventWithCategories.categories.length === 0) {
-                eventWithCategories.categories = [
-                    {
-                        name: "General Admission",
-                        price: eventWithCategories.price || "Free"
-                    }
-                ];
-            }
+            const eventWithCategories = normalizeEventForTicketing(stateEvent);
             setEvent(eventWithCategories);
 
             const savedItems = JSON.parse(localStorage.getItem('saved') || '[]');
@@ -54,21 +130,7 @@ const EventDetails = () => {
         const combinedEvents = [...allEvents, ...popularEvents];
         const foundEvent = combinedEvents.find(e => String(e.id) === String(eventId));
         if (foundEvent) {
-            // Normalize event data
-            const eventWithCategories = { ...foundEvent };
-            eventWithCategories.description =
-                eventWithCategories.description
-                || eventWithCategories.eventDescription
-                || eventWithCategories.raw?.eventDescription
-                || "";
-            if (!eventWithCategories.categories || eventWithCategories.categories.length === 0) {
-                eventWithCategories.categories = [
-                    {
-                        name: "General Admission",
-                        price: eventWithCategories.price || "Free"
-                    }
-                ];
-            }
+            const eventWithCategories = normalizeEventForTicketing(foundEvent);
             setEvent(eventWithCategories);
             // Check if saved
             const savedItems = JSON.parse(localStorage.getItem('saved') || '[]');
@@ -78,6 +140,21 @@ const EventDetails = () => {
             navigate("/user/dashboard");
         }
     }, [eventId, location, navigate]);
+
+    useEffect(() => {
+        if (!event) return;
+
+        const rows = Array.isArray(event?.ticketDayWiseAllocations) ? event.ticketDayWiseAllocations : [];
+        const firstDay = rows.length > 0 ? normalizeDayKey(rows[0]?.day) : "";
+
+        setSelectedTicketDay((prev) => {
+            const current = normalizeDayKey(prev);
+            if (current && rows.some((row) => normalizeDayKey(row?.day) === current)) return current;
+            return firstDay;
+        });
+
+        setTicketSelection({});
+    }, [event?.id]);
 
     const toggleSave = () => {
         const savedItems = JSON.parse(localStorage.getItem('saved') || '[]');
@@ -103,34 +180,102 @@ const EventDetails = () => {
         window.dispatchEvent(new Event('savedUpdated'));
     };
 
-    if (!event) return null;
+    const dayWiseAllocations = Array.isArray(event?.ticketDayWiseAllocations)
+        ? event.ticketDayWiseAllocations
+        : [];
+    const hasDayWiseTicketing = dayWiseAllocations.length > 0;
 
-    // Simulate available tickets logic
-    const availableTickets = event.id > 100 ? 50 : 150;
+    const normalizedSelectedDay = normalizeDayKey(selectedTicketDay);
+    const activeDayAllocation = hasDayWiseTicketing
+        ? (dayWiseAllocations.find((row) => normalizeDayKey(row?.day) === normalizedSelectedDay) || dayWiseAllocations[0])
+        : null;
+    const activeDayKey = normalizeDayKey(activeDayAllocation?.day);
 
     // Helper to parse price reliably
     const getNumericPrice = (p) => {
-        if (!p || typeof p !== 'string') return 0;
+        if (p == null) return 0;
+        if (typeof p === 'number') return Number.isFinite(p) ? p : 0;
+        if (typeof p !== 'string') return 0;
         const numeric = p.replace(/[^0-9.]/g, '');
         return numeric ? parseFloat(numeric) : 0;
     };
 
-    const handleQuantityChange = (categoryName, delta) => {
+    const categoriesForSelection = useMemo(() => {
+        const fallbackCategories = Array.isArray(event?.categories) ? event.categories : [];
+
+        if (!activeDayAllocation || !Array.isArray(activeDayAllocation?.tierBreakdown) || activeDayAllocation.tierBreakdown.length === 0) {
+            return fallbackCategories.map((cat) => ({ ...cat, available: null }));
+        }
+
+        const priceByTierName = new Map(
+            fallbackCategories.map((cat) => [String(cat?.name || '').trim().toLowerCase(), cat?.price])
+        );
+
+        return activeDayAllocation.tierBreakdown
+            .map((tier) => {
+                const name = String(tier?.name || '').trim();
+                if (!name) return null;
+
+                const availableRaw = Number(tier?.ticketCount || 0);
+                const available = Number.isFinite(availableRaw) && availableRaw > 0 ? availableRaw : 0;
+                const fallbackPrice = priceByTierName.get(name.toLowerCase());
+                const numericPrice = Number(tier?.price || 0);
+                const price = fallbackPrice || (numericPrice > 0 ? `₹${numericPrice.toLocaleString('en-IN')}` : 'Free');
+
+                return {
+                    name,
+                    price,
+                    available,
+                };
+            })
+            .filter(Boolean);
+    }, [event?.categories, activeDayAllocation]);
+
+    const categoryAvailabilityByName = useMemo(() => {
+        const out = new Map();
+        for (const cat of categoriesForSelection) {
+            const key = String(cat?.name || '').trim();
+            if (!key) continue;
+            const availableRaw = Number(cat?.available);
+            if (Number.isFinite(availableRaw) && availableRaw >= 0) {
+                out.set(key, Math.floor(availableRaw));
+            }
+        }
+        return out;
+    }, [categoriesForSelection]);
+
+    const baseAvailableTicketsRaw = Number(event?.raw?.tickets?.noOfTickets ?? event?.raw?.tickets?.totalTickets ?? 0);
+    const baseAvailableTickets = Number.isFinite(baseAvailableTicketsRaw) && baseAvailableTicketsRaw > 0
+        ? Math.floor(baseAvailableTicketsRaw)
+        : 0;
+    const availableTickets = activeDayAllocation
+        ? Math.max(0, Number(activeDayAllocation?.ticketCount || 0))
+        : baseAvailableTickets;
+
+    const handleQuantityChange = (categoryName, delta, maxAvailableForCategory = null) => {
         setTicketSelection(prev => {
             const currentQty = prev[categoryName] || 0;
             const newQty = Math.max(0, currentQty + delta);
 
-            // Optional: Check total available tickets limit if needed
-            // const totalSelected = Object.values(prev).reduce((a, b) => a + b, 0) - currentQty + newQty;
-            // if (totalSelected > availableTickets) return prev;
+            if (delta > 0 && Number.isFinite(Number(maxAvailableForCategory)) && Number(maxAvailableForCategory) >= 0) {
+                if (newQty > Number(maxAvailableForCategory)) {
+                    return prev;
+                }
+            }
+
+            const totalBefore = Object.values(prev).reduce((sum, qty) => sum + Number(qty || 0), 0);
+            const totalAfter = totalBefore - currentQty + newQty;
+            if (availableTickets > 0 && totalAfter > availableTickets) {
+                return prev;
+            }
 
             return { ...prev, [categoryName]: newQty };
         });
     };
 
     const calculateTotal = () => {
-        if (!event.categories) return 0;
-        return event.categories.reduce((total, cat) => {
+        if (!categoriesForSelection.length) return 0;
+        return categoriesForSelection.reduce((total, cat) => {
             const qty = ticketSelection[cat.name] || 0;
             const price = getNumericPrice(cat.price);
             return total + (price * qty);
@@ -147,18 +292,38 @@ const EventDetails = () => {
             return;
         }
 
+        if (hasDayWiseTicketing && !activeDayKey) {
+            toast.error('Please select an event date before booking tickets');
+            return;
+        }
+
         const selectedEntries = Object.entries(ticketSelection).filter(([, qty]) => Number(qty || 0) > 0);
         const primaryCategory = selectedEntries[0]?.[0] || 'General';
 
-        // Pass selection state to checkout (could use location state or query params)
-        // For query params, we might need a serialized format if complex
-        navigate(`/user/checkout/${event.id}?qty=${totalTickets}&category=${encodeURIComponent(primaryCategory)}`, {
+        const query = hasDayWiseTicketing && activeDayKey
+            ? `?qty=${totalTickets}&category=${encodeURIComponent(primaryCategory)}&day=${encodeURIComponent(activeDayKey)}`
+            : `?qty=${totalTickets}&category=${encodeURIComponent(primaryCategory)}`;
+
+        const checkoutEvent = {
+            ...event,
+            categories: categoriesForSelection,
+            date: hasDayWiseTicketing && activeDayKey ? formatTicketDayLabel(activeDayKey) : event.date,
+        };
+
+        navigate(`/user/checkout/${event.id}${query}`, {
             state: {
-                event,
+                event: checkoutEvent,
                 ticketSelection,
+                selectedTicketDay: hasDayWiseTicketing ? activeDayKey : null,
             },
         });
     };
+
+    const displayEventDateText = hasDayWiseTicketing && activeDayKey
+        ? formatTicketDayLabel(activeDayKey).toUpperCase()
+        : eventDateText;
+
+    if (!event) return null;
 
     return (
         <div className="min-h-screen bg-[#EBF4F6] flex flex-col font-sans text-[#0b2d49] pt-28">
@@ -222,7 +387,7 @@ const EventDetails = () => {
                                     <h3 className="text-2xl md:text-3xl font-serif-premium text-[#0b2d49] italic leading-tight">{venueName}</h3>
                                 </div>
                                 <div className="text-right shrink-0">
-                                    <h3 className="text-3xl font-serif-premium text-[#0b2d49] italic mb-2">{eventDateText}</h3>
+                                    <h3 className="text-3xl font-serif-premium text-[#0b2d49] italic mb-2">{displayEventDateText}</h3>
                                     <p className="text-sm text-[#09637E]/60 font-medium">{eventTimeText}</p>
                                 </div>
                             </div>
@@ -233,10 +398,18 @@ const EventDetails = () => {
                     <div className="lg:sticky lg:top-32 space-y-8 h-fit">
                         <TicketSelector
                             event={event}
+                            categories={categoriesForSelection}
                             ticketSelection={ticketSelection}
                             handleQuantityChange={handleQuantityChange}
                             availableTickets={availableTickets}
                             totalPrice={calculateTotal()}
+                            ticketDayWiseAllocations={dayWiseAllocations}
+                            selectedTicketDay={activeDayKey}
+                            onSelectTicketDay={(day) => {
+                                setSelectedTicketDay(day);
+                                setTicketSelection({});
+                            }}
+                            categoryAvailabilityByName={categoryAvailabilityByName}
                         />
 
                         <button

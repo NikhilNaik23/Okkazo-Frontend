@@ -54,7 +54,7 @@ const resolveAuthId = ({ user, accessToken }) => {
     return fromToken;
 };
 
-const ChatTab = ({ eventId, client }) => {
+const ChatTab = ({ eventId, client, teamMembers = [] }) => {
     const dispatch = useDispatch();
     const user = useSelector(selectUser);
     const accessToken = useSelector((state) => state.auth.accessToken) || localStorage.getItem('accessToken');
@@ -104,6 +104,25 @@ const ChatTab = ({ eventId, client }) => {
         });
     }, [planningVendorSelection]);
 
+    const teamContacts = useMemo(() => {
+        const list = Array.isArray(teamMembers) ? teamMembers : [];
+        return list
+            .map((member) => {
+                const authId = String(member?.authId || '').trim();
+                if (!authId) return null;
+                const assignedRole = String(member?.assignedRole || '').trim();
+                return {
+                    id: authId,
+                    name: member?.name || member?.fullName || 'Team Staff',
+                    type: 'team',
+                    role: assignedRole || 'Team Staff',
+                    online: false,
+                    lastSeen: '',
+                };
+            })
+            .filter(Boolean);
+    }, [teamMembers]);
+
     const contacts = useMemo(() => {
         const clientAuthId = client?.authId != null ? String(client.authId).trim() : '';
         const list = [];
@@ -126,8 +145,14 @@ const ChatTab = ({ eventId, client }) => {
             list.push(v);
         }
 
+        for (const t of teamContacts) {
+            if (!t?.id) continue;
+            if (list.some((c) => c.id === t.id)) continue;
+            list.push(t);
+        }
+
         return list;
-    }, [client, vendorContacts]);
+    }, [client, vendorContacts, teamContacts]);
 
     const [activeChannel, setActiveChannel] = useState(null);
     const [chatInput, setChatInput] = useState('');
@@ -1206,7 +1231,7 @@ const ChatTab = ({ eventId, client }) => {
                                     ) : (
                                         <ChevronRight size={14} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
                                     )}
-                                    <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider group-hover:text-gray-600 transition-colors">Internal Team</h4>
+                                    <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider group-hover:text-gray-600 transition-colors">Team Staff</h4>
                                 </div>
                                 <Users size={12} className="text-gray-300 group-hover:text-gray-500 transition-colors" />
                             </button>

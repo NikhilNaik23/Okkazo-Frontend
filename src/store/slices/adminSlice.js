@@ -80,15 +80,21 @@ export const fetchCommissionConfig = createAsyncThunk(
 
 export const updateCommissionConfig = createAsyncThunk(
     'admin/updateCommissionConfig',
-    async ({ rates }, { dispatch, rejectWithValue }) => {
+    async ({ rates, vendorHikeRate }, { dispatch, rejectWithValue }) => {
         try {
             const accessToken = localStorage.getItem('accessToken');
             const refreshToken = localStorage.getItem('refreshToken');
             if (!accessToken && !refreshToken) return rejectWithValue('No access token found');
 
+            const payload = {};
+            if (rates && typeof rates === 'object') payload.rates = rates;
+            if (vendorHikeRate !== undefined && vendorHikeRate !== null && vendorHikeRate !== '') {
+                payload.vendorHikeRate = Number(vendorHikeRate);
+            }
+
             const response = await fetchWithAuth(`${API_BASE_URL}/api/admin/commission`, {
                 method: 'PUT',
-                body: JSON.stringify({ rates }),
+                body: JSON.stringify(payload),
             }, { dispatch, refreshAction: refreshAccessToken });
 
             const data = await response.json().catch(() => ({}));

@@ -17,6 +17,7 @@ import {
   selectVendorEventRequests,
   selectVendorEventRequestsStatus,
 } from "../../../store/slices/vendorEventsSlice";
+import useNotificationFeed from "../../../hooks/useNotificationFeed";
 
 const VendorLayout = () => {
   const dispatch = useDispatch();
@@ -31,6 +32,11 @@ const VendorLayout = () => {
 
   const vendorRequests = useSelector(selectVendorEventRequests);
   const vendorRequestsStatus = useSelector(selectVendorEventRequestsStatus);
+  const { unreadCount: unreadNotifications } = useNotificationFeed({
+    enabled: true,
+    fetchItems: false,
+    fetchUnread: true,
+  });
 
   const sidebarMenus = vendorSidebarMenus;
   const isMessagesPage = location.pathname === '/vendor/messages' || location.pathname.includes('/vendor/event/');
@@ -121,7 +127,9 @@ const VendorLayout = () => {
           >
             <span className="text-xl relative">
               <BsBell />
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#d7a444] rounded-full border-2 border-white"></span>
+              {unreadNotifications > 0 && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#d7a444] rounded-full border-2 border-white"></span>
+              )}
             </span>
             Notifications
           </button>

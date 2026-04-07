@@ -35,6 +35,24 @@ const FALLBACK_IMAGES = [
 
 const normalizeField = (value) => String(value || "").trim().toLowerCase();
 
+const resolveBannerUrl = (value) => {
+    if (!value) return null;
+
+    if (typeof value === "string") {
+        const s = value.trim();
+        return s || null;
+    }
+
+    if (typeof value === "object") {
+        const candidates = [value.url, value.fileUrl, value.secure_url, value.src, value.image];
+        for (const item of candidates) {
+            if (typeof item === "string" && item.trim()) return item.trim();
+        }
+    }
+
+    return null;
+};
+
 const isKnownField = (value) => PREDEFINED_FIELDS.some((field) => normalizeField(field) === normalizeField(value));
 
 const formatDateBadge = (value) => {
@@ -84,6 +102,50 @@ const mapTicketCategories = (tickets) => {
     ];
 };
 
+const normalizeDayKey = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const day = raw.includes('T') ? raw.slice(0, 10) : raw;
+    return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : '';
+};
+
+const mapTicketDayWiseAllocations = (tickets) => {
+    const rows = Array.isArray(tickets?.dayWiseAllocations) ? tickets.dayWiseAllocations : [];
+    return rows
+        .map((row) => {
+            const day = normalizeDayKey(row?.day);
+            if (!day) return null;
+
+            const ticketCountRaw = Number(row?.ticketCount || 0);
+            const ticketCount = Number.isFinite(ticketCountRaw) && ticketCountRaw > 0 ? ticketCountRaw : 0;
+            const tierBreakdown = (Array.isArray(row?.tierBreakdown) ? row.tierBreakdown : [])
+                .map((tier) => {
+                    const name = String(tier?.name || tier?.tierName || '').trim();
+                    if (!name) return null;
+
+                    const countRaw = Number(tier?.available ?? tier?.ticketCount ?? tier?.quantity ?? 0);
+                    const noOfTickets = Number.isFinite(countRaw) && countRaw > 0 ? countRaw : 0;
+                    const priceRaw = Number(tier?.price || 0);
+                    const price = Number.isFinite(priceRaw) && priceRaw >= 0 ? priceRaw : 0;
+
+                    return {
+                        name,
+                        noOfTickets,
+                        price,
+                    };
+                })
+                .filter(Boolean);
+
+            return {
+                day,
+                ticketCount,
+                tierBreakdown,
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) => String(a.day).localeCompare(String(b.day)));
+};
+
 const formatTimeRange = (startAt, endAt) => {
     const start = startAt ? new Date(startAt) : null;
     const end = endAt ? new Date(endAt) : null;
@@ -99,6 +161,33 @@ const formatTimeRange = (startAt, endAt) => {
     }
 
     return "Time TBA";
+};
+
+const normalizePromotionLabel = (value) => {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    return text
+        .split(/\s+/)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join(" ");
+};
+
+const mapSelectedPromotions = (event) => {
+    const selected = Array.isArray(event?.selectedPromotions)
+        ? event.selectedPromotions
+        : (Array.isArray(event?.promotionType) ? event.promotionType : []);
+
+    const seen = new Set();
+    const normalized = [];
+    for (const promo of selected) {
+        const label = normalizePromotionLabel(promo);
+        if (!label) continue;
+        const key = label.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        normalized.push(label);
+    }
+    return normalized;
 };
 
 const toRad = (deg) => (deg * Math.PI) / 180;
@@ -163,16 +252,18 @@ const mapMarketplaceEventToCard = (event, index) => {
         location: locationName,
         eventLocation: locationName,
         price: formatPrice(event?.tickets),
-        image: event?.eventBanner?.url || FALLBACK_IMAGES[index % FALLBACK_IMAGES.length],
+        image: resolveBannerUrl(event?.eventBanner) || FALLBACK_IMAGES[index % FALLBACK_IMAGES.length],
         tag: field,
         field,
         description: event?.eventDescription || "A curated experience designed for the modern connoisseur.",
         categories: mapTicketCategories(event?.tickets),
+        ticketDayWiseAllocations: mapTicketDayWiseAllocations(event?.tickets),
         status: pickStatus(event),
         trendingScore: Number(event?.trendingScore || 0),
         ticketsSold: Number(event?.ticketsSold || 0),
         scheduleStartAt: startAt,
         scheduleEndAt: endAt,
+        selectedPromotions: mapSelectedPromotions(event),
         coords,
         raw: event,
     };

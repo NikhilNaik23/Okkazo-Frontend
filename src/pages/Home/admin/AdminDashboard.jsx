@@ -6,9 +6,17 @@ import {
   Calendar, 
   Users, 
   TrendingUp, 
-  ChevronDown,
   IndianRupee
 } from 'lucide-react';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { fetchWithAuth } from '../../../utils/apiHandler';
 import { refreshAccessToken } from '../../../store/slices/authSlice';
 
@@ -47,9 +55,16 @@ const DEFAULT_SUMMARY_CARDS = {
 const ANALYTICS_WINDOW_OPTIONS = [
   { value: 'last30', label: 'Last 30 Days' },
   { value: 'last90', label: 'Last 90 Days' },
-  { value: 'last180', label: 'Last 6 Months' },
-  { value: 'ytd', label: 'Year to Date' },
+  { value: 'last180', label: 'Last 180 Days' },
+  { value: 'ytd', label: 'YTD' },
 ];
+
+const getAnalyticsWindowLabel = (value) => {
+  const option = ANALYTICS_WINDOW_OPTIONS.find((item) => item.value === value);
+  return option?.label || 'Last 30 Days';
+};
+
+const isMonthlyAnalyticsWindow = (value) => ['last90', 'last180', 'ytd'].includes(value);
 
 const formatRupeeFromPaise = (value) => {
   const amount = (Number(value || 0) || 0) / 100;
@@ -80,6 +95,16 @@ const formatDisplayDate = (value) => {
     day: '2-digit',
     year: 'numeric',
   });
+};
+
+const formatCompactRupeeFromPaise = (value) => {
+  const amountInr = (Number(value || 0) || 0) / 100;
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(amountInr);
 };
 
 const normalizeStatus = (value) => String(value || '').trim().toUpperCase();
@@ -119,7 +144,8 @@ const AdminDashboard = () => {
 
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState('');
-  const [analyticsWindow, setAnalyticsWindow] = useState('last180');
+  const [analyticsWindow, setAnalyticsWindow] = useState('last30');
+  const [activeChartIndex, setActiveChartIndex] = useState(null);
   const [dashboardData, setDashboardData] = useState({
     summaryCards: DEFAULT_SUMMARY_CARDS,
     revenueOverview: DEFAULT_REVENUE_OVERVIEW,
@@ -173,7 +199,11 @@ const AdminDashboard = () => {
     };
 
     fetchDashboard();
-  }, [analyticsWindow, dispatch]);
+  }, [dispatch, analyticsWindow]);
+
+  useEffect(() => {
+    setActiveChartIndex(null);
+  }, [analyticsWindow]);
 
   const feeInputValue = feeInput ?? (platformFee != null ? String(platformFee) : '');
   const serviceInputValue = serviceInput ?? (serviceChargePercent != null ? String(serviceChargePercent) : '');
@@ -237,43 +267,11 @@ const AdminDashboard = () => {
       return DEFAULT_REVENUE_OVERVIEW;
     }
 
-    return rows.slice(-6).map((row, index) => ({
-      label: String(row?.label || `P${index + 1}`).toUpperCase(),
+    return rows.map((row, index) => ({
+      label: String(row?.label || `D${index + 1}`),
       currentRevenue: Number(row?.currentRevenue || 0),
     }));
   }, [dashboardData.revenueOverview]);
-
-  const chartMax = useMemo(() => (
-    Math.max(1, ...chartRows.map((row) => Math.abs(Number(row.currentRevenue || 0))))
-  ), [chartRows]);
-
-  const chartPoints = useMemo(() => {
-    const count = chartRows.length;
-    if (count === 0) {
-      return [];
-    }
-
-    return chartRows.map((row, index) => {
-      const x = count === 1 ? 50 : (index / (count - 1)) * 100;
-      const y = 90 - ((Math.abs(Number(row.currentRevenue || 0)) / chartMax) * 62);
-      return {
-        x: Number(x.toFixed(2)),
-        y: Number(y.toFixed(2)),
-      };
-    });
-  }, [chartMax, chartRows]);
-
-  const chartLinePath = useMemo(() => (
-    chartPoints.map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x},${point.y}`).join(' ')
-  ), [chartPoints]);
-
-  const chartAreaPath = useMemo(() => {
-    if (chartPoints.length === 0) return '';
-
-    const first = chartPoints[0];
-    const last = chartPoints[chartPoints.length - 1];
-    return `${chartLinePath} L${last.x},100 L${first.x},100 Z`;
-  }, [chartLinePath, chartPoints]);
 
   const upcomingEvents = useMemo(() => (
     Array.isArray(dashboardData.upcomingEvents) ? dashboardData.upcomingEvents : []
@@ -344,74 +342,92 @@ const AdminDashboard = () => {
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h3 className="text-lg font-bold text-[#0b2d49]">Revenue Analytics</h3>
-                <p className="text-sm text-[#5a5b44]">Monthly financial performance breakdown</p>
+                <p className="text-sm text-[#5a5b44]">{isMonthlyAnalyticsWindow(analyticsWindow) ? 'Monthly' : 'Daily'} financial performance for {getAnalyticsWindowLabel(analyticsWindow).toLowerCase()}</p>
               </div>
-              <div className="relative">
-                <select
-                  value={analyticsWindow}
-                  onChange={(event) => setAnalyticsWindow(event.target.value)}
-                  className="appearance-none pr-8 pl-3 py-1.5 bg-[#f8fafc] text-[#5a5b44] text-xs font-semibold rounded-lg border border-transparent hover:bg-[#e9eff1] focus:outline-none focus:ring-1 focus:ring-[#d7a444]"
-                >
-                  {ANALYTICS_WINDOW_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[#5a5b44]" />
-              </div>
+              <select
+                value={analyticsWindow}
+                onChange={(e) => setAnalyticsWindow(e.target.value)}
+                className="px-3 py-2 bg-[#f8fafc] border border-[#e9eff1] rounded-lg text-xs font-bold text-[#0b2d49] focus:border-[#d7a444] focus:ring-1 focus:ring-[#d7a444] focus:outline-none"
+              >
+                {ANALYTICS_WINDOW_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
             </div>
-            
-            {/* Revenue Curve */}
-            <div className="h-70 w-full relative flex items-end justify-between px-2 pt-10">
-               {/* Grid Lines */}
-               <div className="absolute inset-0 flex flex-col justify-between text-xs text-[#e9eff1] pointer-events-none pb-8 pl-0">
-                  <div className="border-b border-dashed border-[#e9eff1] w-full h-full"></div>
-                  <div className="border-b border-dashed border-[#e9eff1] w-full h-full"></div>
-                  <div className="border-b border-dashed border-[#e9eff1] w-full h-full"></div>
-                  <div className="border-b border-dashed border-[#e9eff1] w-full h-full"></div>
-               </div>
 
-               {/* SVG Curve */}
-               <svg className="absolute inset-0 w-full h-full overflow-visible z-10" preserveAspectRatio="none" viewBox="0 0 100 100">
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={chartRows}
+                  margin={{ top: 12, right: 12, left: 0, bottom: 8 }}
+                  onMouseMove={(state) => {
+                    if (state && Number.isInteger(state.activeTooltipIndex)) {
+                      setActiveChartIndex(state.activeTooltipIndex);
+                    }
+                  }}
+                  onMouseLeave={() => setActiveChartIndex(null)}
+                >
                   <defs>
-                    <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop offset="0%" stopColor="#d7a444" stopOpacity="0.2" />
-                      <stop offset="100%" stopColor="#d7a444" stopOpacity="0" />
+                    <linearGradient id="dashboardRevenueGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#d7a444" stopOpacity={0.24} />
+                      <stop offset="95%" stopColor="#d7a444" stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
-                  {chartAreaPath && (
-                    <path d={chartAreaPath} fill="url(#gradient)" />
-                  )}
-                  {chartLinePath && (
-                    <path
-                      d={chartLinePath}
-                      fill="none"
-                      stroke="#d7a444"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  )}
-                  {chartPoints.map((point, index) => (
-                    <circle
-                      key={`${point.x}-${point.y}-${index}`}
-                      cx={point.x}
-                      cy={point.y}
-                      r="2"
-                      fill="white"
-                      stroke="#d7a444"
-                      strokeWidth="1"
-                    />
-                  ))}
-               </svg>
 
-               {/* X Axis Labels */}
-               <div className="w-full flex justify-between text-xs font-bold text-[#708aa0] mt-4 absolute bottom-0 left-0 px-2">
-                 {chartRows.map((row, index) => (
-                   <span key={`${row.label}-${index}`}>{row.label}</span>
-                 ))}
-               </div>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e9eff1" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    stroke="#708aa0"
+                    tickLine={false}
+                    axisLine={false}
+                    interval="preserveStartEnd"
+                    minTickGap={24}
+                    tick={{ fontSize: 11, fontWeight: 700 }}
+                  />
+                  <YAxis
+                    stroke="#708aa0"
+                    tickLine={false}
+                    axisLine={false}
+                    width={80}
+                    tick={{ fontSize: 11, fontWeight: 700 }}
+                    tickFormatter={(value) => formatCompactRupeeFromPaise(value)}
+                  />
+                  <Tooltip
+                    cursor={{ stroke: '#d7a444', strokeDasharray: '3 3' }}
+                    contentStyle={{
+                      border: '1px solid #e9eff1',
+                      borderRadius: '12px',
+                      background: '#ffffff',
+                      boxShadow: '0 12px 24px rgba(11,45,73,0.10)',
+                    }}
+                    labelStyle={{ color: '#5a5b44', fontWeight: 700, fontSize: 12 }}
+                    formatter={(value) => [formatRupeeFromPaise(value), 'Revenue']}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="currentRevenue"
+                    stroke="#d7a444"
+                    strokeWidth={2.5}
+                    fill="url(#dashboardRevenueGradient)"
+                    activeDot={{ r: 6, stroke: '#d7a444', strokeWidth: 2, fill: '#ffffff' }}
+                    dot={(dotProps) => {
+                      const { cx, cy, index } = dotProps;
+                      if (typeof cx !== 'number' || typeof cy !== 'number') return null;
+                      const isActive = index === activeChartIndex;
+                      return (
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={isActive ? 4.5 : 2.5}
+                          fill="#ffffff"
+                          stroke="#d7a444"
+                          strokeWidth={isActive ? 2 : 1.25}
+                        />
+                      );
+                    }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
             </div>
           </div>
 

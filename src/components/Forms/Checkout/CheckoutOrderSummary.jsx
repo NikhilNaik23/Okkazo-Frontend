@@ -1,7 +1,7 @@
 import React from "react";
 import { BsGeoAlt, BsCalendarEvent, BsCheckCircleFill } from "react-icons/bs";
 
-const CheckoutOrderSummary = ({ event, quantity = 1, category = "General", ticketSelection = {} }) => {
+const CheckoutOrderSummary = ({ event, quantity = 1, category = "General", ticketSelection = {}, selectedTicketDay = "" }) => {
     if (!event) return null;
 
     // Helper to parse price reliably
@@ -19,6 +19,27 @@ const CheckoutOrderSummary = ({ event, quantity = 1, category = "General", ticke
     );
 
     const selectedEntries = Object.entries(ticketSelection || {}).filter(([, qty]) => Number(qty || 0) > 0);
+
+    const formatSelectedDay = (value) => {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        const day = raw.includes('T') ? raw.slice(0, 10) : raw;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return '';
+
+        const [yy, mm, dd] = day.split('-').map((v) => Number(v));
+        const dt = new Date(Date.UTC(yy, (mm || 1) - 1, dd || 1));
+        if (Number.isNaN(dt.getTime())) return '';
+
+        return dt.toLocaleDateString('en-IN', {
+            weekday: 'short',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            timeZone: 'Asia/Kolkata',
+        }).toUpperCase();
+    };
+
+    const selectedDayLabel = formatSelectedDay(selectedTicketDay);
 
     let ticketLines = [];
     if (selectedEntries.length > 0) {
@@ -86,6 +107,13 @@ const CheckoutOrderSummary = ({ event, quantity = 1, category = "General", ticke
             </div>
 
             <div className="p-10 pt-8">
+
+                {selectedDayLabel ? (
+                    <div className="mb-6">
+                        <p className="text-[10px] font-black text-[#09637E]/40 uppercase tracking-[0.2em] mb-2">Selected Date</p>
+                        <p className="text-sm font-black text-[#0b2d49]">{selectedDayLabel}</p>
+                    </div>
+                ) : null}
 
                 {/* Order Details */}
                 {/* Order Details */}

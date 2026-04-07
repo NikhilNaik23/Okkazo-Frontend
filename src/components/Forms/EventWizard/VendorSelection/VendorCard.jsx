@@ -1,8 +1,17 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { BsStarFill, BsCheck } from 'react-icons/bs';
+import { BsStarFill } from 'react-icons/bs';
 
-const VendorCard = ({ vendor, isSelected, onViewDetails }) => {
+const VendorCard = ({ vendor, isSelected, isUnavailable = false, unavailableReason = null, onViewDetails }) => {
+    const formatUnavailableReason = (reason) => {
+        const raw = String(reason || '').trim();
+        if (!raw) return 'Currently unavailable for selected date';
+        return raw
+            .toLowerCase()
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, (ch) => ch.toUpperCase());
+    };
+
     const formatDistance = (km) => {
         const n = Number(km);
         if (!Number.isFinite(n)) return null;
@@ -18,16 +27,17 @@ const VendorCard = ({ vendor, isSelected, onViewDetails }) => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className={`group relative flex flex-col bg-white rounded-[2.5rem] overflow-hidden transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_20px_60px_-15px_rgba(9,99,126,0.15)]
+            ${isUnavailable ? 'opacity-90 ring-1 ring-red-200/70' : ''}
             ${isSelected ? 'ring-2 ring-secondary shadow-lg shadow-secondary/10' : 'border border-gray-50'}`}
         >
             {/* Image Section */}
-            <div className="relative aspect-[4/3] m-3 mb-0 rounded-[2rem] overflow-hidden bg-gray-100">
+            <div className="relative aspect-4/3 m-3 mb-0 rounded-4xl overflow-hidden bg-gray-100">
                 <img
                     src={vendor.image}
                     className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                     alt={vendor.name}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-60" />
+                <div className="absolute inset-0 bg-linear-to-t from-black/40 to-transparent opacity-60" />
 
                 {/* Rating Badge */}
                 <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm">
@@ -35,11 +45,16 @@ const VendorCard = ({ vendor, isSelected, onViewDetails }) => {
                     <span className="text-[10px] font-bold text-primary">{vendor.rating}</span>
                 </div>
 
-                {/* Status Indicator (if selected) */}
-                {isSelected && (
-                    <div className="absolute inset-0 bg-secondary/20 flex items-center justify-center backdrop-blur-[2px]">
-                        <div className="bg-white text-secondary px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2">
-                            <BsCheck size={16} /> Selected
+                {isUnavailable && (
+                    <div className="absolute top-4 left-4 bg-red-50 text-red-700 border border-red-200 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm">
+                        Locked
+                    </div>
+                )}
+
+                {!isSelected && isUnavailable && (
+                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center backdrop-blur-[1px] px-4">
+                        <div className="bg-white/95 text-red-700 px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest text-center shadow-lg">
+                            {formatUnavailableReason(unavailableReason)}
                         </div>
                     </div>
                 )}
@@ -81,7 +96,7 @@ const VendorCard = ({ vendor, isSelected, onViewDetails }) => {
                     }}
                     className="w-full py-4 bg-surface hover:bg-primary hover:text-white text-primary text-[10px] font-black uppercase tracking-widest rounded-xl transition-all mt-auto"
                 >
-                    Explore
+                    {isUnavailable ? 'View (Locked)' : 'Explore'}
                 </button>
             </div>
         </motion.div>

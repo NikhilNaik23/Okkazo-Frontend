@@ -404,6 +404,36 @@ export const fetchPlanningQuoteLatest = createAsyncThunk(
     }
 );
 
+// ─── Planning: send latest quote email ────────────────────────────────────
+
+export const sendPlanningQuoteEmail = createAsyncThunk(
+    'planning/sendPlanningQuoteEmail',
+    async (eventId, { dispatch, rejectWithValue }) => {
+        try {
+            if (!eventId) return rejectWithValue('Event ID is required');
+
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(eventId))}/quote/send-email`,
+                { method: 'POST' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                const msg = data?.message || 'Failed to send quotation email';
+                return rejectWithValue(msg);
+            }
+
+            return {
+                eventId: String(eventId),
+                meta: data?.data || null,
+            };
+        } catch (error) {
+            return rejectWithValue(error.message || 'Failed to send quotation email');
+        }
+    }
+);
+
 // ─── Planning: fetch vendor selection by eventId ───────────────────────────
 
 export const fetchPlanningVendorSelectionByEventId = createAsyncThunk(
@@ -488,6 +518,9 @@ const planningSlice = createSlice({
         quoteLatestStatus: 'idle', // idle | loading | succeeded | failed
         quoteLatestByEventId: {},
         quoteLatestError: null,
+
+        quoteEmailStatus: 'idle', // idle | loading | succeeded | failed
+        quoteEmailError: null,
 
         error: null,
     },
@@ -614,6 +647,20 @@ const planningSlice = createSlice({
             .addCase(fetchPlanningQuoteLatest.rejected, (state, action) => {
                 state.quoteLatestStatus = 'failed';
                 state.quoteLatestError = action.payload || action.error.message;
+            })
+
+            // Quote email send
+            .addCase(sendPlanningQuoteEmail.pending, (state) => {
+                state.quoteEmailStatus = 'loading';
+                state.quoteEmailError = null;
+            })
+            .addCase(sendPlanningQuoteEmail.fulfilled, (state) => {
+                state.quoteEmailStatus = 'succeeded';
+                state.quoteEmailError = null;
+            })
+            .addCase(sendPlanningQuoteEmail.rejected, (state, action) => {
+                state.quoteEmailStatus = 'failed';
+                state.quoteEmailError = action.payload || action.error.message;
             });
     },
 });
@@ -630,5 +677,10 @@ export const selectPlanningQuoteLatestByEventId = (state, eventId) => {
     const key = String(eventId || '').trim();
     return key ? (state?.planning?.quoteLatestByEventId?.[key] ?? null) : null;
 };
+
+export const selectPlanningQuoteLatestStatus = (state) => state?.planning?.quoteLatestStatus || 'idle';
+export const selectPlanningQuoteLatestError = (state) => state?.planning?.quoteLatestError || null;
+export const selectPlanningQuoteEmailStatus = (state) => state?.planning?.quoteEmailStatus || 'idle';
+export const selectPlanningQuoteEmailError = (state) => state?.planning?.quoteEmailError || null;
 
 export default planningSlice.reducer;

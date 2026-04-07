@@ -66,6 +66,7 @@ const VendorEventDetailsTab = () => {
 
         const serviceNode = tempServices.find((s) => s.id === id);
         const currentPriceNum = Number(currentPrice);
+        const minBudgetNum = Number(serviceNode?.minBudget || 0);
         const maxBudgetNum = Number(serviceNode?.maxBudget);
 
         if (!Number.isFinite(currentPriceNum) || currentPriceNum <= 0) {
@@ -77,9 +78,26 @@ const VendorEventDetailsTab = () => {
             return;
         }
 
+        let priceHikeReason = '';
+        if (Number.isFinite(minBudgetNum) && minBudgetNum > 0 && currentPriceNum > minBudgetNum) {
+            const input = window.prompt('You increased the quote above the minimum. Please provide a reason for this price hike.', '');
+            if (input == null) {
+                toast.error('Lock cancelled. Price hike reason is required.');
+                return;
+            }
+
+            const trimmed = String(input || '').trim();
+            if (!trimmed) {
+                toast.error('Please provide a reason for price increase.');
+                return;
+            }
+
+            priceHikeReason = trimmed;
+        }
+
         try {
             setLockInProgress((prev) => ({ ...prev, [id]: true }));
-            const result = await handleLockServicePrice?.(id, currentPriceNum);
+            const result = await handleLockServicePrice?.(id, currentPriceNum, priceHikeReason);
 
             setLockedPrices((prev) => ({
                 ...prev,
@@ -121,6 +139,12 @@ const VendorEventDetailsTab = () => {
     }, [tempServices, lockedPrices]);
 
     const timeSlot = String(event?.time || 'TBD').split(' - ')[0] || 'TBD';
+    const normalizedStatus = String(event?.status || '').trim().toUpperCase().replace(/_/g, ' ');
+    const normalizedVendorSummaryStatus = String(event?.vendorSummaryStatus || '').trim().toUpperCase().replace(/_/g, ' ');
+    const fallbackPendingByPlanningStatus = normalizedStatus === 'PENDING' || normalizedStatus === 'PENDING APPROVAL';
+    const isPendingState = normalizedVendorSummaryStatus
+        ? normalizedVendorSummaryStatus === 'PENDING'
+        : fallbackPendingByPlanningStatus;
     const paxLabel = event?.isPublic ? 'Total Tickets' : 'Expected Pax';
     const paxUnit = event?.isPublic ? 'Tickets' : 'Guests';
     const paxValue = Number(event?.pax || 0) > 0 ? `${event.pax} ${paxUnit}` : 'TBD';
@@ -156,7 +180,7 @@ const VendorEventDetailsTab = () => {
                                 <span className="px-3 py-1 bg-white/10 border border-white/20 rounded-full backdrop-blur-md text-[10px] font-black text-white/90 uppercase tracking-[0.2em]">
                                     Event ID #E89{event.id}
                                 </span>
-                                {event.status === 'PENDING' && (
+                                {isPendingState && (
                                     <span className="px-3 py-1 bg-[#d7a444]/20 border border-[#d7a444]/30 rounded-full backdrop-blur-md text-[10px] font-black text-[#d7a444] uppercase tracking-widest flex items-center gap-1.5 shadow-[0_0_15px_rgba(215,164,68,0.3)]">
                                         <span className="w-1.5 h-1.5 rounded-full bg-[#d7a444] animate-pulse"></span>
                                         Pending Review
@@ -215,7 +239,7 @@ const VendorEventDetailsTab = () => {
                             <span className="px-4 py-2 bg-[#f8fafb] rounded-full text-xs font-black text-[#708aa0] border border-gray-100 shrink-0">
                                 {services.length} items
                             </span>
-                            {event?.status === 'PENDING' && (
+                            {isPendingState && (
                                 <span className={`px-4 py-2 rounded-full text-xs font-black border shrink-0 ${allPricesLocked ? 'bg-green-50 text-green-600 border-green-100' : 'bg-[#f8fafb] text-[#708aa0] border-gray-100'}`}>
                                     {allPricesLocked ? 'Ready to submit' : 'Lock all quotes'}
                                 </span>
@@ -251,6 +275,7 @@ const VendorEventDetailsTab = () => {
                                 : sliderMin;
                             const commissionPercent = Number(service?.commissionPercent || 0);
                             const commissionAmount = Number(service?.commissionAmount || 0);
+                            const priceHikeReason = String(service?.priceHikeReason || '').trim();
                             const totalLockedPrice = Number(service?.totalPrice || service?.price || 0);
                             const displayDescription =
                                 (fullService?.details?.description || fullService?.description || service.details || '').trim();
@@ -456,7 +481,7 @@ const VendorEventDetailsTab = () => {
                                         </div>
 
                                         {/* Quote + lock (stacked under details) */}
-                                        {event?.status === 'PENDING' ? (
+                                        {isPendingState ? (
                                             <div className="mt-auto pt-4 flex justify-end">
                                                 <div className="flex flex-col items-end gap-2">
                                                     <div className="grid grid-cols-3 gap-2 w-full">
@@ -500,6 +525,9 @@ const VendorEventDetailsTab = () => {
                                                                 <span>₹{sliderMin.toLocaleString()}</span>
                                                                 <span>₹{sliderMax.toLocaleString()}</span>
                                                             </div>
+                                                            <div className="mt-1 text-right text-[10px] font-bold text-[#708aa0]">
+                                                                Allowed max by hike rate: {Number(service?.vendorHikeRate || 1.25).toFixed(2)}x
+                                                            </div>
                                                         </div>
 
                                                         <button
@@ -527,6 +555,12 @@ const VendorEventDetailsTab = () => {
                                                     <span className="text-sm">₹{Number(service?.quotedPrice || 0).toLocaleString()}</span>
                                                     <span className="text-[#708aa0] text-[10px]">Agreed Price</span>
                                                     <span className="text-sm">₹{service.price?.toLocaleString()}</span>
+                                                    {priceHikeReason ? (
+                                                        <>
+                                                            <span className="text-[#708aa0] text-[10px] mt-1">Price Hike Reason</span>
+                                                            <span className="text-[11px] leading-snug normal-case tracking-normal">{priceHikeReason}</span>
+                                                        </>
+                                                    ) : null}
                                                 </div>
                                                 <div className="px-5 py-2.5 bg-[#f8fafb] border border-gray-100 rounded-xl text-xs font-black text-[#0b2d49] uppercase tracking-widest flex items-center gap-2">
                                                     <span className="text-[#708aa0]">/{unitLabel} x</span>
@@ -581,7 +615,7 @@ const VendorEventDetailsTab = () => {
                     </div>
 
                     <div className="mt-8">
-                        {event.status === 'PENDING' ? (
+                        {isPendingState ? (
                             <div className="flex flex-col gap-3">
                                 {allPricesLocked && (
                                     <div className="rounded-2xl border border-gray-100 bg-[#f8fafb] p-4">

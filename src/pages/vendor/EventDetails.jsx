@@ -143,6 +143,17 @@ const EventDetails = () => {
     }, [dispatch, id]);
 
     React.useEffect(() => {
+        if (!id) return;
+
+        const timer = setInterval(() => {
+            if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+            dispatch(fetchVendorEventRequestDetails({ eventId: id }));
+        }, 10000);
+
+        return () => clearInterval(timer);
+    }, [dispatch, id]);
+
+    React.useEffect(() => {
         const vendorItems = Array.isArray(selected?.vendorItems) ? selected.vendorItems : [];
         if (vendorItems.length === 0) return;
 
@@ -257,7 +268,7 @@ const EventDetails = () => {
         setShowRejectModal(true);
     };
 
-    const handleLockServicePrice = async (serviceRowId, quotePrice) => {
+    const handleLockServicePrice = async (serviceRowId, quotePrice, priceHikeReason = '') => {
         const target = tempServices.find((s) => s.id === serviceRowId);
         if (!target) {
             throw new Error('Service not found');
@@ -273,6 +284,7 @@ const EventDetails = () => {
                 eventId: id,
                 service,
                 price: Number(quotePrice),
+                priceHikeReason,
             })
         ).unwrap();
 
@@ -305,6 +317,7 @@ const EventDetails = () => {
                 totalPrice: lockedPrice,
                 commissionPercent,
                 commissionAmount,
+                priceHikeReason: String(result?.priceHikeReason || '').trim() || null,
                 isLocked: true,
             };
         };
@@ -349,6 +362,7 @@ const EventDetails = () => {
         id: id || 1,
         title: id === "2" ? "Bangalore Tech Summit 2026" : "The Royal Udaipur Wedding",
         status: id === "2" ? "CONFIRMED" : "PENDING",
+        vendorSummaryStatus: 'PENDING',
         date: "28 Oct, 2024",
         time: "06:00 PM - 11:30 PM",
         pax: 200,
@@ -559,11 +573,13 @@ const EventDetails = () => {
                 }]
                 : []);
 
-        const nextStatus = summaryStatus === 'ACCEPTED'
-            ? 'CONFIRMED'
-            : summaryStatus === 'REJECTED'
-                ? 'REJECTED'
-                : 'PENDING';
+        const planningStatus = String(planning?.status || '').trim();
+        const nextStatus = planningStatus
+            || (summaryStatus === 'ACCEPTED'
+                ? 'CONFIRMED'
+                : summaryStatus === 'REJECTED'
+                    ? 'REJECTED'
+                    : 'PENDING');
 
         const manager = selected.managerProfile || null;
 
@@ -626,12 +642,24 @@ const EventDetails = () => {
 
                 const status = (e?.status || e?.state || e?.paymentStatus || '').toString() || '—';
 
-                const amountRaw = e?.amount ?? e?.value ?? e?.total ?? e?.paidAmount ?? e?.receivedAmount ?? 0;
-                const amountNum = toNumber(amountRaw);
+                const hasExplicitSignedAmount = Object.prototype.hasOwnProperty.call(e || {}, 'signedAmount');
+                const signedAmountRaw = hasExplicitSignedAmount ? toNumber(e?.signedAmount) : null;
+                const amountInrRaw = toNumber(e?.amountInr ?? e?.amountReceived ?? e?.paidAmount);
+                const paiseRaw = Number(e?.payoutAmountPaise || 0);
+                const amountFromPaise = Number.isFinite(paiseRaw) && paiseRaw > 0
+                    ? Number((paiseRaw / 100).toFixed(2))
+                    : 0;
+                const fallbackAmountRaw = toNumber(e?.amount ?? e?.value ?? e?.total ?? e?.receivedAmount ?? 0);
+
+                const amountNum = hasExplicitSignedAmount
+                    ? Number(signedAmountRaw || 0)
+                    : (amountInrRaw || amountFromPaise || fallbackAmountRaw || 0);
 
                 const typeRaw = (e?.type || e?.direction || e?.txnType || '').toString().toLowerCase();
                 const isDebit = amountNum < 0 || typeRaw.includes('debit') || typeRaw.includes('fee') || typeRaw.includes('charge');
                 const signedAmount = isDebit ? -Math.abs(amountNum) : Math.abs(amountNum);
+                const payoutModeRaw = String(e?.payoutMode || e?.mode || '').trim().toUpperCase();
+                const payoutMode = payoutModeRaw === 'RAZORPAY' ? 'RAZORPAY' : (payoutModeRaw === 'DEMO' ? 'DEMO' : null);
 
                 return {
                     id: String(e?.id || e?._id || e?.transactionId || e?.txnId || idx + 1),
@@ -640,6 +668,9 @@ const EventDetails = () => {
                     status: String(status),
                     type: isDebit ? 'Debit' : 'Credit',
                     signedAmount,
+                    payoutMode,
+                    eventId: String(e?.eventId || selected?.eventId || id || '').trim() || null,
+                    eventTitle: String(e?.eventTitle || planning?.eventTitle || '').trim() || null,
                 };
             })
             .filter((x) => x && (x.description || x.signedAmount !== 0));
@@ -654,6 +685,11 @@ const EventDetails = () => {
                 return [key, row];
             })
         );
+
+        const hikeRateRaw = Number(selected?.pricingConfig?.vendorHikeRate);
+        const vendorHikeRate = Number.isFinite(hikeRateRaw) && hikeRateRaw >= 1
+            ? hikeRateRaw
+            : 1.25;
 
         const nextRequestedServices = vendorItems.map((v, idx) => {
             const serviceId = String(v?.serviceId || '').trim();
@@ -703,8 +739,8 @@ const EventDetails = () => {
                 : (Number.isFinite(previousCommissionPercent) && previousCommissionPercent >= 0 ? previousCommissionPercent : 0);
 
             let lockedPrice = 0;
-            if (quotedPrice > 0 && commissionAmount >= 0) {
-                lockedPrice = Number((quotedPrice + commissionAmount).toFixed(2));
+            if (quotedPrice > 0) {
+                lockedPrice = Number(quotedPrice.toFixed(2));
             } else if (Number.isFinite(previousLockedPrice) && previousLockedPrice > 0) {
                 lockedPrice = previousLockedPrice;
             } else if (min > 0 && min === max) {
@@ -713,15 +749,16 @@ const EventDetails = () => {
             }
 
             if ((!quotedPrice || quotedPrice <= 0) && lockedPrice > 0) {
-                if (commissionAmount > 0 && commissionAmount < lockedPrice) {
-                    quotedPrice = Math.max(0, lockedPrice - commissionAmount);
-                } else if (commissionPercent > 0) {
-                    quotedPrice = Number((lockedPrice / (1 + (commissionPercent / 100))).toFixed(2));
-                }
+                quotedPrice = lockedPrice;
             }
 
             if ((commissionAmount <= 0 || !Number.isFinite(commissionAmount)) && lockedPrice > 0 && quotedPrice > 0) {
-                commissionAmount = Math.max(0, lockedPrice - quotedPrice);
+                if (commissionPercent > 0) {
+                    commissionAmount = Number(((quotedPrice * commissionPercent) / 100).toFixed(2));
+                } else {
+                    // Legacy fallback for older additive records.
+                    commissionAmount = Math.max(0, lockedPrice - quotedPrice);
+                }
             }
 
             if ((commissionPercent <= 0 || !Number.isFinite(commissionPercent)) && quotedPrice > 0 && commissionAmount > 0) {
@@ -729,11 +766,11 @@ const EventDetails = () => {
             }
 
             const totalPrice = isLocked
-                ? (lockedPrice > 0 ? lockedPrice : (quotedPrice + commissionAmount))
+                ? (lockedPrice > 0 ? lockedPrice : quotedPrice)
                 : 0;
 
             const quoteCap = min > 0 && max > min
-                ? Number((Math.min(max, min * 1.25)).toFixed(2))
+                ? Number((Math.min(max, min * vendorHikeRate)).toFixed(2))
                 : max;
             const defaultQuotePrice = min > 0 ? min : Number(serviceDoc?.price || 0);
 
@@ -757,8 +794,10 @@ const EventDetails = () => {
                 totalPrice,
                 commissionPercent,
                 commissionAmount,
+                priceHikeReason: String(v?.priceHikeReason || '').trim() || null,
                 minBudget: min,
                 maxBudget: quoteCap > 0 ? quoteCap : max,
+                vendorHikeRate,
                 basePrice: Number(serviceDoc?.price || 0),
                 qty,
                 isLocked,
@@ -772,6 +811,7 @@ const EventDetails = () => {
                 id: selected.eventId || prev.id,
                 title: planning.eventTitle || prev.title,
                 status: nextStatus,
+                vendorSummaryStatus: String(summaryStatus || prev.vendorSummaryStatus || 'PENDING').trim().toUpperCase(),
                 date: isPublicEvent
                     ? (publicDateRangeLabel || prev.date)
                     : (formatEventDateLabel(planning.eventDate || planning.schedule?.startAt) || prev.date),
@@ -992,6 +1032,13 @@ const EventDetails = () => {
         handleAddTask
     };
 
+    const normalizedEventStatus = String(event?.status || '').trim().toUpperCase().replace(/_/g, ' ');
+    const normalizedVendorSummaryStatus = String(event?.vendorSummaryStatus || '').trim().toUpperCase().replace(/_/g, ' ');
+    const isPendingEventStatus = normalizedEventStatus === 'PENDING' || normalizedEventStatus === 'PENDING APPROVAL';
+    const isConfirmedEventStatus = normalizedEventStatus === 'CONFIRMED';
+    const isRejectedEventStatus = normalizedEventStatus === 'REJECTED';
+    const canShowPostAcceptTabs = isConfirmedEventStatus || normalizedVendorSummaryStatus === 'ACCEPTED';
+
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 min-w-0 overflow-x-hidden">
             {showRejectModal && (
@@ -1055,7 +1102,7 @@ const EventDetails = () => {
                         </div>
                     </button>
 
-                    {event.status === "CONFIRMED" && (
+                    {canShowPostAcceptTabs && (
                         <>
                             <div className="flex flex-1 items-center justify-start gap-1 px-1">
                                 {[
@@ -1098,9 +1145,9 @@ const EventDetails = () => {
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
-                    <span className={`px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase ${event.status === 'PENDING'
+                    <span className={`px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase ${isPendingEventStatus
                         ? 'bg-[#f3ddb1] text-[#d7a444]'
-                        : event.status === 'REJECTED'
+                        : isRejectedEventStatus
                             ? 'bg-red-50 text-red-600'
                             : 'bg-green-50 text-green-600'
                         }`}>

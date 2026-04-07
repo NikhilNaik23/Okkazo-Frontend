@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import { 
   BsArrowLeft, 
   BsDownload, 
@@ -10,18 +11,108 @@ import {
   BsArrowDownLeft,
   BsCalendar4Week
 } from "react-icons/bs";
+import { toast } from "react-hot-toast";
+import { fetchWithAuth } from "../../utils/apiHandler";
+import { refreshAccessToken } from "../../store/slices/authSlice";
+
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
+const safeJson = async (response) => {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+};
+
+const toAmountInr = (value) => {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const formatInr = (value) => `₹${Math.round(Number(value || 0)).toLocaleString('en-IN')}`;
 
 const Ledger = () => {
   const navigate = useNavigate();
-  const [filter, setFilter] = useState("All");
+  const dispatch = useDispatch();
 
-  const transactions = [
-    { id: "TX-4521", date: "Oct 24, 2023", client: "Sarah Smith", event: "Wedding Gala", amount: "₹45,000", status: "Completed", type: "Credit" },
-    { id: "TX-4522", date: "Oct 22, 2023", client: "Tech Corp", event: "Annual Meeting", amount: "₹1,20,000", status: "Pending", type: "Credit" },
-    { id: "TX-4523", date: "Oct 20, 2023", client: "System", event: "Platform Fee", amount: "-₹2,500", status: "Completed", type: "Debit" },
-    { id: "TX-4524", date: "Oct 18, 2023", client: "John Doe", event: "Birthday Party", amount: "₹35,000", status: "Completed", type: "Credit" },
-    { id: "TX-4525", date: "Oct 15, 2023", client: "Global AV", event: "Equipment Rent", amount: "-₹15,000", status: "Completed", type: "Debit" },
-  ];
+  const [filter, setFilter] = useState("All Transactions");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [rows, setRows] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [summary, setSummary] = useState({
+    totalReceived: 0,
+    pendingClearance: 0,
+    failedAmount: 0,
+    successfulPayoutCount: 0,
+  });
+
+  const loadLedger = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetchWithAuth(
+        `${API_BASE_URL}/api/events/vendor/requests/ledger`,
+        { method: 'GET' },
+        { dispatch, refreshAction: refreshAccessToken }
+      );
+
+      const data = await safeJson(response);
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.message || 'Failed to load ledger');
+      }
+
+      const nextRows = Array.isArray(data?.data?.rows) ? data.data.rows : [];
+      setRows(nextRows);
+
+      const successfulRows = nextRows.filter((row) => String(row?.status || '').trim().toUpperCase() === 'SUCCESS');
+      const pendingRows = nextRows.filter((row) => String(row?.status || '').trim().toUpperCase() === 'INITIATED');
+      const failedRows = nextRows.filter((row) => String(row?.status || '').trim().toUpperCase() === 'FAILED');
+
+      setSummary({
+        totalReceived: successfulRows.reduce((sum, row) => sum + toAmountInr(row?.amountInr), 0),
+        pendingClearance: pendingRows.reduce((sum, row) => sum + toAmountInr(row?.amountInr), 0),
+        failedAmount: failedRows.reduce((sum, row) => sum + toAmountInr(row?.amountInr), 0),
+        successfulPayoutCount: successfulRows.length,
+      });
+    } catch (error) {
+      toast.error(error?.message || 'Failed to load ledger');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [dispatch]);
+
+  useEffect(() => {
+    loadLedger();
+  }, [loadLedger]);
+
+  const filteredRows = useMemo(() => {
+    const query = String(searchTerm || '').trim().toLowerCase();
+
+    return rows
+      .filter((row) => {
+        const status = String(row?.status || '').trim().toUpperCase();
+        if (filter === 'Received' && status !== 'SUCCESS') return false;
+        if (filter === 'Processing' && status !== 'INITIATED') return false;
+        if (filter === 'Failed' && status !== 'FAILED') return false;
+        if (filter === 'Demo Only' && String(row?.payoutMode || '').trim().toUpperCase() !== 'DEMO') return false;
+        if (filter === 'Razorpay Only' && String(row?.payoutMode || '').trim().toUpperCase() !== 'RAZORPAY') return false;
+        return true;
+      })
+      .filter((row) => {
+        if (!query) return true;
+        const haystack = [
+          row?.payoutId,
+          row?.eventId,
+          row?.eventTitle,
+          row?.service,
+          row?.status,
+          row?.payoutMode,
+        ]
+          .map((value) => String(value || '').toLowerCase())
+          .join(' ');
+        return haystack.includes(query);
+      });
+  }, [filter, rows, searchTerm]);
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
@@ -53,27 +144,27 @@ const Ledger = () => {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-[#708aa0]/5">
-          <p className="text-sm font-bold text-[#708aa0] mb-2 uppercase tracking-widest leading-none">Net Revenue</p>
-          <h3 className="text-3xl font-black tracking-tight">₹37,58,240</h3>
+          <p className="text-sm font-bold text-[#708aa0] mb-2 uppercase tracking-widest leading-none">Amount Received</p>
+          <h3 className="text-3xl font-black tracking-tight">{formatInr(summary.totalReceived)}</h3>
           <div className="mt-4 flex items-center gap-2 text-xs font-bold text-emerald-500">
             <span className="p-1 bg-emerald-50 rounded-lg"><BsArrowUpRight /></span>
-            +12.5% from last month
+            {summary.successfulPayoutCount} successful payouts
           </div>
         </div>
         <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-[#708aa0]/5">
           <p className="text-sm font-bold text-[#708aa0] mb-2 uppercase tracking-widest leading-none">Pending Clearance</p>
-          <h3 className="text-3xl font-black tracking-tight">₹1,24,000</h3>
+          <h3 className="text-3xl font-black tracking-tight">{formatInr(summary.pendingClearance)}</h3>
           <div className="mt-4 flex items-center gap-2 text-xs font-bold text-amber-500">
             <span className="p-1 bg-amber-50 rounded-lg"><BsCalendar4Week /></span>
-            Clearing in next 3 days
+            Awaiting settlement completion
           </div>
         </div>
         <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-[#708aa0]/5">
-          <p className="text-sm font-bold text-[#708aa0] mb-2 uppercase tracking-widest leading-none">Total Outflow</p>
-          <h3 className="text-3xl font-black tracking-tight">₹45,210</h3>
+          <p className="text-sm font-bold text-[#708aa0] mb-2 uppercase tracking-widest leading-none">Failed Transfers</p>
+          <h3 className="text-3xl font-black tracking-tight">{formatInr(summary.failedAmount)}</h3>
           <div className="mt-4 flex items-center gap-2 text-xs font-bold text-rose-500">
             <span className="p-1 bg-rose-50 rounded-lg"><BsArrowDownLeft /></span>
-            Platform & Service fees
+            Retry failed payout entries
           </div>
         </div>
       </div>
@@ -85,7 +176,9 @@ const Ledger = () => {
             <BsSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-[#708aa0]" />
             <input 
               type="text" 
-              placeholder="Search by ID, client or event..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search by payout ID, event or mode..."
               className="w-full pl-12 pr-4 py-3 bg-[#e9eff1]/50 border-none rounded-2xl text-sm focus:ring-2 focus:ring-[#d7a444] transition-all"
             />
           </div>
@@ -96,10 +189,13 @@ const Ledger = () => {
               className="bg-[#e9eff1]/50 border-none rounded-xl px-4 py-3 text-sm font-bold text-[#0b2d49] focus:ring-0 cursor-pointer min-w-[140px]"
             >
               <option>All Transactions</option>
-              <option>Credits</option>
-              <option>Debits</option>
+              <option>Received</option>
+              <option>Processing</option>
+              <option>Failed</option>
+              <option>Demo Only</option>
+              <option>Razorpay Only</option>
             </select>
-            <button className="p-3 bg-white border border-[#708aa0]/10 rounded-xl text-[#0b2d49] hover:bg-[#e9eff1] transition-all">
+            <button onClick={loadLedger} className="p-3 bg-white border border-[#708aa0]/10 rounded-xl text-[#0b2d49] hover:bg-[#e9eff1] transition-all">
               <BsFilter size={20} />
             </button>
           </div>
@@ -113,49 +209,69 @@ const Ledger = () => {
                 <th className="px-8 py-6">Date</th>
                 <th className="px-8 py-6">Description</th>
                 <th className="px-8 py-6">Status</th>
+                <th className="px-8 py-6">Mode</th>
                 <th className="px-8 py-6 text-right">Amount</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#708aa0]/5">
-              {transactions.map((txn) => (
+              {isLoading && (
+                <tr>
+                  <td colSpan={6} className="px-8 py-8 text-sm font-bold text-[#708aa0]">Loading ledger...</td>
+                </tr>
+              )}
+
+              {!isLoading && filteredRows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-8 py-8 text-sm font-bold text-[#708aa0]">No payout ledger rows found.</td>
+                </tr>
+              )}
+
+              {!isLoading && filteredRows.map((txn) => {
+                const status = String(txn?.status || '').trim().toUpperCase();
+                const statusTone = status === 'SUCCESS'
+                  ? 'bg-emerald-50 text-emerald-600'
+                  : (status === 'INITIATED' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600');
+
+                return (
                 <tr key={txn.id} className="group hover:bg-[#e9eff1]/30 transition-all cursor-pointer">
                   <td className="px-8 py-6">
                     <span className="font-black text-sm text-[#0b2d49]">{txn.id}</span>
                   </td>
                   <td className="px-8 py-6">
-                    <span className="text-sm font-bold text-[#5a5b44]">{txn.date}</span>
+                    <span className="text-sm font-bold text-[#5a5b44]">{txn.dateLabel || '—'}</span>
                   </td>
                   <td className="px-8 py-6">
                     <div>
-                      <p className="font-black text-sm text-[#0b2d49]">{txn.event}</p>
-                      <p className="text-xs text-[#708aa0] font-bold">{txn.client}</p>
+                      <p className="font-black text-sm text-[#0b2d49]">{txn.eventTitle || `Event ${txn.eventId || '—'}`}</p>
+                      <p className="text-xs text-[#708aa0] font-bold">{txn.service || 'Service'} • {txn.eventId || 'N/A'}</p>
                     </div>
                   </td>
                   <td className="px-8 py-6">
-                    <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
-                      txn.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
-                    }`}>
-                      {txn.status}
+                    <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${statusTone}`}>
+                      {status || 'UNKNOWN'}
+                    </span>
+                  </td>
+                  <td className="px-8 py-6">
+                    <span className="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-600">
+                      {String(txn?.payoutMode || '—').toUpperCase()}
                     </span>
                   </td>
                   <td className="px-8 py-6 text-right">
-                    <span className={`font-black text-sm ${
-                      txn.type === 'Credit' ? 'text-emerald-500' : 'text-rose-500'
-                    }`}>
-                      {txn.amount}
+                    <span className={`font-black text-sm ${status === 'FAILED' ? 'text-rose-500' : 'text-emerald-500'}`}>
+                      {formatInr(txn.amountInr)}
                     </span>
                   </td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table>
         </div>
 
         <div className="p-8 border-t border-[#708aa0]/5 flex items-center justify-between">
-          <span className="text-xs font-bold text-[#708aa0]">Showing 5 of 124 transactions</span>
+          <span className="text-xs font-bold text-[#708aa0]">Showing {filteredRows.length} ledger entries</span>
           <div className="flex items-center gap-2">
             <button className="px-4 py-2 border border-[#708aa0]/10 rounded-xl text-sm font-bold disabled:opacity-50" disabled>Previous</button>
-            <button className="px-4 py-2 bg-[#0b2d49] text-white rounded-xl text-sm font-bold shadow-lg shadow-[#0b2d49]/10 hover:bg-[#d7a444] transition-all">Next</button>
+            <button className="px-4 py-2 bg-[#0b2d49] text-white rounded-xl text-sm font-bold shadow-lg shadow-[#0b2d49]/10 hover:bg-[#d7a444] transition-all" disabled>Next</button>
           </div>
         </div>
       </div>

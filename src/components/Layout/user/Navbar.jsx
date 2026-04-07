@@ -1,5 +1,5 @@
 import React, { useState, useRef, useLayoutEffect, useEffect } from "react";
-import { useSelector, useDispatch } from "react-redux";
+import { useSelector } from "react-redux";
 import { selectUser } from "../../../store/slices/authSlice";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { BsBell, BsPersonCircle, BsSearch, BsBookmarkHeart } from "react-icons/bs";
@@ -8,6 +8,7 @@ import { RiCloseLargeFill } from "react-icons/ri";
 import { motion, AnimatePresence } from "framer-motion";
 import SavedSidebar from "./SavedSidebar";
 import NotificationSidebar from "./NotificationSidebar";
+import useNotificationFeed from "../../../hooks/useNotificationFeed";
 
 const navLinks = [
   { name: "Dashboard", path: "/user/dashboard" },
@@ -27,6 +28,11 @@ const Navbar = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const user = useSelector(selectUser);
+  const { unreadCount: unreadNotifications } = useNotificationFeed({
+    enabled: true,
+    fetchItems: false,
+    fetchUnread: true,
+  });
 
   const isActive = (path) => location.pathname === path;
   const isDashboard = ["/user/dashboard", "/user/my-events", "/user/notifications"].includes(location.pathname);
@@ -197,7 +203,9 @@ const Navbar = () => {
                         className={`relative p-2 rounded-xl transition-colors ${isDashboard ? "text-white/60 hover:text-white hover:bg-white/10" : "text-[#09637E]/40 hover:text-[#09637E] hover:bg-black/5"}`}
                       >
                         <BsBell size={18} />
-                        <span className="absolute top-1 right-2 w-1.5 h-1.5 bg-sky-400 rounded-full ring-2 ring-white/50"></span>
+                        {unreadNotifications > 0 && (
+                          <span className="absolute top-1 right-2 w-1.5 h-1.5 bg-sky-400 rounded-full ring-2 ring-white/50"></span>
+                        )}
                       </button>
 
                       <div className={`h-6 w-[1px] ${isDashboard ? "bg-white/10" : "bg-[#09637E]/10"}`} />

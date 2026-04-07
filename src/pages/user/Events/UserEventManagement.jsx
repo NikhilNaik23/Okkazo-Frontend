@@ -10,7 +10,7 @@ import {
 } from '../../../store/slices/planningSlice';
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { BsArrowLeft, BsChatDots, BsCheckCircleFill, BsClock, BsSend, BsFileEarmarkZip, BsDownload, BsCircle, BsTicketPerforated, BsPaperclip, BsThreeDotsVertical } from "react-icons/bs";
+import { BsArrowLeft, BsChatDots, BsCheckCircleFill, BsClock, BsSend, BsFileEarmarkZip, BsDownload, BsCircle, BsTicketPerforated, BsPaperclip, BsThreeDotsVertical, BsStar, BsStarFill } from "react-icons/bs";
 import { myOrganizedEvents } from "../../../data/myEventsData";
 import { toast, Toaster } from "react-hot-toast";
 import { useDispatch, useSelector } from "react-redux";
@@ -94,6 +94,32 @@ const formatTicketDayLabel = (dayValue) => {
     });
 };
 
+const normalizePromotionLabel = (value) => {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    return text
+        .split(/\s+/)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join(' ');
+};
+
+const normalizeGeneratedRevenuePayout = (rawPayout) => {
+    if (!rawPayout || typeof rawPayout !== 'object') return null;
+
+    const statusRaw = String(rawPayout?.status || '').trim().toUpperCase();
+    const modeRaw = String(rawPayout?.mode || '').trim().toUpperCase();
+    const amountPaiseRaw = Number(rawPayout?.amountPaise || 0);
+
+    return {
+        status: ['PENDING', 'SUCCESS', 'FAILED'].includes(statusRaw) ? statusRaw : null,
+        mode: modeRaw === 'RAZORPAY' ? 'RAZORPAY' : (modeRaw === 'DEMO' ? 'DEMO' : null),
+        amountPaise: Number.isFinite(amountPaiseRaw) && amountPaiseRaw > 0 ? Math.round(amountPaiseRaw) : 0,
+        currency: String(rawPayout?.currency || 'INR').trim().toUpperCase() || 'INR',
+        paidAt: rawPayout?.paidAt || null,
+        transactionRef: rawPayout?.transactionRef || null,
+    };
+};
+
 const toManagerBadge = (name) => {
     const text = String(name || '').trim();
     if (!text) return 'M';
@@ -130,6 +156,31 @@ const resolveAuthId = ({ user, accessToken }) => {
     return fromToken;
 };
 
+const PLANNING_SERVICE_OPTIONS = [
+    'Venue',
+    'Catering & Drinks',
+    'Photography',
+    'Videography',
+    'Decor & Styling',
+    'Entertainment & Artists',
+    'Makeup & Grooming',
+    'Invitations & Printing',
+    'Sound & Lighting',
+    'Equipment Rental',
+    'Security & Safety',
+    'Transportation',
+    'Live Streaming & Media',
+    'Cake & Desserts',
+    'Other',
+];
+
+const toServiceKey = (value) => {
+    const raw = String(value || '').trim().toLowerCase();
+    if (!raw) return '';
+    if (raw === 'catering and drinks' || raw === 'catering') return 'catering & drinks';
+    return raw;
+};
+
 const UserEventManagement = () => {
     const { eventId } = useParams();
     const navigate = useNavigate();
@@ -139,7 +190,7 @@ const UserEventManagement = () => {
     const currentUserId = resolveAuthId({ user, accessToken }) || String(user?.id || user?._id || '').trim();
     const [event, setEvent] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState("overview"); // "overview" (Command Center) or "chat" (Manager Sync)
+    const [activeTab, setActiveTab] = useState("overview"); // "overview" (Command Center), "billing" (Bills & Payment), "chat" (Manager Sync)
     const [chatMessage, setChatMessage] = useState("");
     const [messages, setMessages] = useState([]);
     const [conversationId, setConversationId] = useState(null);
@@ -173,6 +224,14 @@ const UserEventManagement = () => {
     const [lockedAltByService, setLockedAltByService] = useState({});
     const [lockedAltServiceIdByService, setLockedAltServiceIdByService] = useState({});
     const [lockedAltMessageIdByService, setLockedAltMessageIdByService] = useState({});
+    const [serviceDraft, setServiceDraft] = useState([]);
+    const [pendingServiceToAdd, setPendingServiceToAdd] = useState('');
+    const [serviceChangeReason, setServiceChangeReason] = useState('');
+    const [serviceChangeSubmitting, setServiceChangeSubmitting] = useState(false);
+    const [expandedServicePickerKey, setExpandedServicePickerKey] = useState(null);
+    const [serviceAlternativesByKey, setServiceAlternativesByKey] = useState({});
+    const [servicePickerSelectKey, setServicePickerSelectKey] = useState(null);
+    const [servicePanelLockByService, setServicePanelLockByService] = useState({});
 
     const lastAltSyncRef = useRef({});
 
@@ -182,7 +241,6 @@ const UserEventManagement = () => {
         const latestByService = {};
         const list = Array.isArray(messages) ? messages : [];
 
-        const normalizeServiceKey = (value) => String(value || '').trim().toLowerCase();
         const toTs = (m) => {
             const raw = m?.createdAt;
             if (raw == null) return null;
@@ -200,7 +258,7 @@ const UserEventManagement = () => {
             if (!rich || rich.kind !== 'vendorAlternatives') continue;
 
             const payload = rich.payload && typeof rich.payload === 'object' ? rich.payload : null;
-            const serviceKey = normalizeServiceKey(payload?.serviceLabel || payload?.service || payload?.serviceCategory);
+            const serviceKey = toServiceKey(payload?.serviceLabel || payload?.service || payload?.serviceCategory);
             if (!serviceKey) continue;
 
             const ts = toTs(m);
@@ -222,12 +280,17 @@ const UserEventManagement = () => {
         return out;
     }, [messages]);
 
-    const selectVendorForService = async ({ serviceLabel, vendorAuthId, serviceId, price, sourceMessageId }) => {
-        if (!eventId) return;
+    const selectVendorForService = async ({ serviceLabel, vendorAuthId, serviceId, price, sourceMessageId = null, selectionScope = 'chat' }) => {
+        if (!planningEventId) return;
 
         try {
             const normalizedServiceId = serviceId != null && String(serviceId).trim() ? String(serviceId).trim() : null;
-            setSelectingAltKey(`${serviceLabel}:${vendorAuthId}:${normalizedServiceId || ''}`);
+            const selectionKey = `${serviceLabel}:${vendorAuthId}:${normalizedServiceId || ''}`;
+            if (selectionScope === 'service-panel') {
+                setServicePickerSelectKey(selectionKey);
+            } else {
+                setSelectingAltKey(selectionKey);
+            }
 
             const servicePrice = computeMoneyRangeFromBase({
                 basePrice: price,
@@ -237,7 +300,7 @@ const UserEventManagement = () => {
             });
 
             const res = await fetchWithAuth(
-                `${EVENTS_API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(eventId))}/vendors`,
+                `${EVENTS_API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(planningEventId))}/vendors`,
                 {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
@@ -259,24 +322,107 @@ const UserEventManagement = () => {
                 throw new Error(json?.message || 'Failed to select vendor');
             }
 
-            dispatch(fetchPlanningVendorSelectionByEventId(String(eventId)));
-            setLockedAltByService((prev) => ({
-                ...prev,
-                [String(serviceLabel || '').trim().toLowerCase()]: String(vendorAuthId || '').trim(),
-            }));
-            setLockedAltServiceIdByService((prev) => ({
-                ...prev,
-                [String(serviceLabel || '').trim().toLowerCase()]: normalizedServiceId,
-            }));
-            setLockedAltMessageIdByService((prev) => ({
-                ...prev,
-                [String(serviceLabel || '').trim().toLowerCase()]: sourceMessageId != null ? String(sourceMessageId).trim() : null,
-            }));
+            dispatch(fetchPlanningVendorSelectionByEventId(String(planningEventId)));
+            if (selectionScope === 'chat') {
+                const serviceKey = toServiceKey(serviceLabel);
+                setLockedAltByService((prev) => ({
+                    ...prev,
+                    [serviceKey]: String(vendorAuthId || '').trim(),
+                }));
+                setLockedAltServiceIdByService((prev) => ({
+                    ...prev,
+                    [serviceKey]: normalizedServiceId,
+                }));
+                setLockedAltMessageIdByService((prev) => ({
+                    ...prev,
+                    [serviceKey]: sourceMessageId != null ? String(sourceMessageId).trim() : null,
+                }));
+            } else {
+                const serviceKey = toServiceKey(serviceLabel);
+                setServicePanelLockByService((prev) => ({
+                    ...prev,
+                    [serviceKey]: {
+                        vendorAuthId: String(vendorAuthId || '').trim() || null,
+                        serviceId: normalizedServiceId,
+                    },
+                }));
+            }
             toast.success('Vendor selected');
         } catch (e) {
             toast.error(e?.message || 'Failed to select vendor');
         } finally {
-            setSelectingAltKey(null);
+            if (selectionScope === 'service-panel') {
+                setServicePickerSelectKey(null);
+            } else {
+                setSelectingAltKey(null);
+            }
+        }
+    };
+
+    const fetchServiceAlternatives = async (serviceLabel) => {
+        const service = String(serviceLabel || '').trim();
+        const serviceKey = toServiceKey(service);
+        if (!planningEventId || !serviceKey) return;
+
+        setServiceAlternativesByKey((prev) => ({
+            ...prev,
+            [serviceKey]: {
+                status: 'loading',
+                error: null,
+                service,
+                alternatives: [],
+                vendorProfiles: [],
+            },
+        }));
+
+        try {
+            const res = await fetchWithAuth(
+                `${EVENTS_API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(planningEventId))}/alternatives?service=${encodeURIComponent(service)}&limit=50`,
+                { method: 'GET' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const json = await res.json().catch(() => null);
+            if (!res.ok || !json?.success) {
+                throw new Error(json?.message || 'Failed to load alternatives');
+            }
+
+            const payload = json?.data || {};
+            setServiceAlternativesByKey((prev) => ({
+                ...prev,
+                [serviceKey]: {
+                    status: 'succeeded',
+                    error: null,
+                    service,
+                    alternatives: Array.isArray(payload?.alternatives) ? payload.alternatives : [],
+                    vendorProfiles: Array.isArray(payload?.vendorProfiles) ? payload.vendorProfiles : [],
+                },
+            }));
+        } catch (error) {
+            setServiceAlternativesByKey((prev) => ({
+                ...prev,
+                [serviceKey]: {
+                    status: 'failed',
+                    error: error?.message || 'Failed to load alternatives',
+                    service,
+                    alternatives: [],
+                    vendorProfiles: [],
+                },
+            }));
+        }
+    };
+
+    const toggleServiceVendorPicker = (serviceLabel) => {
+        const key = toServiceKey(serviceLabel);
+        if (!key) return;
+
+        const nextOpen = expandedServicePickerKey === key ? null : key;
+        setExpandedServicePickerKey(nextOpen);
+        if (!nextOpen) return;
+
+        const current = serviceAlternativesByKey[key];
+        if (!current || current.status === 'failed') {
+            fetchServiceAlternatives(serviceLabel);
         }
     };
 
@@ -291,15 +437,14 @@ const UserEventManagement = () => {
         const radiusKm = Number.isFinite(radiusKmRaw) && radiusKmRaw > 0 ? radiusKmRaw : null;
         if (!serviceLabel || options.length === 0) return null;
 
-        const normalizeService = (s) => String(s || '').trim().toLowerCase();
         const normalizeServiceId = (id) => {
             const s = id != null ? String(id).trim() : '';
             return s || null;
         };
-        const serviceKey = normalizeService(serviceLabel);
+        const serviceKey = toServiceKey(serviceLabel);
         const statusForService = (() => {
             const list = Array.isArray(planningVendorSelection?.vendors) ? planningVendorSelection.vendors : [];
-            const match = list.find((v) => normalizeService(v?.service) === serviceKey);
+            const match = list.find((v) => toServiceKey(v?.service) === serviceKey);
             return String(match?.status || '').trim().toUpperCase();
         })();
         const isRejected = Boolean(statusForService) && statusForService.includes('REJECT');
@@ -311,7 +456,7 @@ const UserEventManagement = () => {
         const lockedVendorAuthIdLocal = (isRejected || !isLocalLockValid) ? null : (lockedAltByService?.[serviceKey] || null);
         const lockedVendorAuthIdFromStore = (() => {
             const list = Array.isArray(planningVendorSelection?.vendors) ? planningVendorSelection.vendors : [];
-            const match = list.find((v) => normalizeService(v?.service) === serviceKey);
+            const match = list.find((v) => toServiceKey(v?.service) === serviceKey);
             const status = String(match?.status || '').trim().toUpperCase();
             if (status && status.includes('REJECT')) return null;
             if (match?.alternativeNeeded === true) return null;
@@ -322,7 +467,7 @@ const UserEventManagement = () => {
 
         const lockedServiceIdFromStore = (() => {
             const list = Array.isArray(planningVendorSelection?.vendors) ? planningVendorSelection.vendors : [];
-            const match = list.find((v) => normalizeService(v?.service) === serviceKey);
+            const match = list.find((v) => toServiceKey(v?.service) === serviceKey);
             const status = String(match?.status || '').trim().toUpperCase();
             if (status && status.includes('REJECT')) return null;
             if (match?.alternativeNeeded === true) return null;
@@ -606,16 +751,32 @@ const UserEventManagement = () => {
                             status: toDisplayStatus(p?.status || 'PENDING APPROVAL'),
                             listingType: String(p?.category || '').toLowerCase() === 'public' ? 'Public' : 'Private',
                             depositPaid: Boolean(p?.depositPaid || p?.depositPaidAt || p?.depositPaidAmountPaise),
+                            depositPaidAmountPaise: Number(p?.depositPaidAmountPaise || 0),
+                            depositPaidCurrency: p?.depositPaidCurrency || 'INR',
+                            depositPaidAt: p?.depositPaidAt || null,
                             vendorConfirmationPaid: Boolean(p?.vendorConfirmationPaid),
+                            vendorConfirmationPaidAmountPaise: Number(p?.vendorConfirmationPaidAmountPaise || 0),
+                            remainingPaymentPaid: Boolean(p?.remainingPaymentPaid),
+                            remainingPaymentPaidAmountPaise: Number(p?.remainingPaymentPaidAmountPaise || 0),
                             assignedManagerId: p?.assignedManagerId || null,
                             managerProfile: p?.managerProfile || null,
                             guestCount: typeof p?.guestCount === 'number' ? p.guestCount : null,
                             ticketTiers: Array.isArray(p?.tickets?.tiers) ? p.tickets.tiers : [],
                             ticketDayWiseAllocations: Array.isArray(p?.tickets?.dayWiseAllocations) ? p.tickets.dayWiseAllocations : [],
                             eventDescription: typeof p?.eventDescription === 'string' ? p.eventDescription : null,
+                            ticketSalesStats: p?.ticketSalesStats && typeof p.ticketSalesStats === 'object'
+                                ? p.ticketSalesStats
+                                : null,
+                            generatedRevenuePayout: normalizeGeneratedRevenuePayout(p?.generatedRevenuePayout),
+                            selectedPromotions: (Array.isArray(p?.promotionType) ? p.promotionType : [])
+                                .map(normalizePromotionLabel)
+                                .filter(Boolean),
                             selectedServices,
                             selectedVendors,
                             vendorSelectionVendors: [],
+                            feedback: p?.feedback && typeof p.feedback === 'object'
+                                ? p.feedback
+                                : { platform: null, vendors: [] },
                         };
 
                         if (!cancelled) setEvent(mapped);
@@ -642,8 +803,14 @@ const UserEventManagement = () => {
                             ticketTiers: Array.isArray(pr?.tickets?.tiers) ? pr.tickets.tiers : [],
                             ticketDayWiseAllocations: Array.isArray(pr?.tickets?.dayWiseAllocations) ? pr.tickets.dayWiseAllocations : [],
                             eventDescription: typeof pr?.eventDescription === 'string' ? pr.eventDescription : null,
+                            ticketSalesStats: pr?.ticketSalesStats && typeof pr.ticketSalesStats === 'object'
+                                ? pr.ticketSalesStats
+                                : null,
+                            generatedRevenuePayout: normalizeGeneratedRevenuePayout(pr?.generatedRevenuePayout),
+                            selectedPromotions: [],
                             selectedServices: [],
                             selectedVendors: [],
+                            feedback: { platform: null, vendors: [] },
                         };
 
                         if (!cancelled) setEvent(mapped);
@@ -731,20 +898,35 @@ const UserEventManagement = () => {
     const isLive = normalizedStatus === 'LIVE';
     const isRejected = normalizedStatus === 'REJECTED';
     const isCompleted = normalizedStatus === 'COMPLETED';
+    const isConfirmedStatus = normalizedStatus === 'CONFIRMED';
+    const isVendorPaymentPending = normalizedStatus === 'VENDOR PAYMENT PENDING';
+    const isUserCompletedStatus = isCompleted || isVendorPaymentPending;
     const isApproved = normalizedStatus === 'APPROVED';
+    const isPrivatePlanningEvent =
+        String(event?.kind || '').toUpperCase() === 'PLANNING'
+        && String(event?.listingType || '').toLowerCase() === 'private';
     const vendorConfirmationPaid = Boolean(event?.vendorConfirmationPaid);
     const depositPaid = Boolean(event?.depositPaid);
+    const remainingPaymentPaid = Boolean(event?.remainingPaymentPaid);
 
     const quoteLatest = useSelector((state) => selectPlanningQuoteLatestByEventId(state, planningEventId));
 
     const [confirmFlowActive, setConfirmFlowActive] = useState(false);
     const [confirmFlowError, setConfirmFlowError] = useState(null);
+    const [remainingFlowActive, setRemainingFlowActive] = useState(false);
+    const [remainingFlowError, setRemainingFlowError] = useState(null);
+    const [platformRating, setPlatformRating] = useState(0);
+    const [platformReview, setPlatformReview] = useState('');
+    const [vendorFeedbackDraft, setVendorFeedbackDraft] = useState([]);
+    const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
 
     useEffect(() => {
         if (!planningEventId) return;
-        if (!isApproved || vendorConfirmationPaid) return;
+        const needsVendorConfirmationQuote = isApproved && !vendorConfirmationPaid;
+        const needsRemainingPaymentQuote = isPrivatePlanningEvent && isCompleted && !remainingPaymentPaid;
+        if (!needsVendorConfirmationQuote && !needsRemainingPaymentQuote) return;
         dispatch(fetchPlanningQuoteLatest(planningEventId));
-    }, [dispatch, planningEventId, isApproved, vendorConfirmationPaid]);
+    }, [dispatch, planningEventId, isApproved, vendorConfirmationPaid, isPrivatePlanningEvent, isCompleted, remainingPaymentPaid]);
 
     useEffect(() => {
         const list = Array.isArray(planningVendorSelection?.vendors) ? planningVendorSelection.vendors : [];
@@ -824,6 +1006,55 @@ const UserEventManagement = () => {
             };
         });
     }, [planningVendorSelection]);
+
+    useEffect(() => {
+        const selectedServices = Array.isArray(planningVendorSelection?.selectedServices)
+            ? planningVendorSelection.selectedServices.map((s) => toServiceKey(s)).filter(Boolean)
+            : [];
+        const rows = Array.isArray(planningVendorSelection?.vendors) ? planningVendorSelection.vendors : [];
+
+        setServicePanelLockByService((prev) => {
+            const next = {};
+            const selectedSet = new Set(selectedServices);
+
+            rows.forEach((row) => {
+                const serviceKey = toServiceKey(row?.service);
+                if (!serviceKey || (selectedSet.size > 0 && !selectedSet.has(serviceKey))) return;
+
+                const vendorAuthId = String(row?.vendorAuthId || '').trim() || null;
+                if (!vendorAuthId) return;
+
+                const backendServiceIdRaw = row?.serviceId != null ? String(row.serviceId).trim() : '';
+                const backendServiceId = backendServiceIdRaw || null;
+                const prevLock = prev?.[serviceKey] || null;
+                const keptServiceId = (!backendServiceId && prevLock?.vendorAuthId === vendorAuthId)
+                    ? (prevLock?.serviceId || null)
+                    : null;
+
+                next[serviceKey] = {
+                    vendorAuthId,
+                    serviceId: backendServiceId || keptServiceId,
+                };
+            });
+
+            return next;
+        });
+    }, [planningVendorSelection]);
+
+    useEffect(() => {
+        const source = Array.isArray(event?.selectedServices)
+            ? event.selectedServices.map((s) => String(s || '').trim()).filter(Boolean)
+            : [];
+
+        setServiceDraft((prev) => {
+            const prevList = Array.isArray(prev)
+                ? prev.map((s) => String(s || '').trim()).filter(Boolean)
+                : [];
+
+            const same = prevList.length === source.length && prevList.every((v, i) => v === source[i]);
+            return same ? prev : source;
+        });
+    }, [event?.id, event?.selectedServices]);
 
     useEffect(() => {
         if (activeTab !== 'chat') return;
@@ -1113,6 +1344,20 @@ const UserEventManagement = () => {
             ? planningVendorSelection.vendorProfiles
             : [];
 
+        const selectedFromEvent = Array.isArray(event?.selectedServices)
+            ? event.selectedServices.map((s) => String(s || '').trim()).filter(Boolean)
+            : [];
+        const selectedFromDraft = Array.isArray(serviceDraft)
+            ? serviceDraft.map((s) => String(s || '').trim()).filter(Boolean)
+            : [];
+        const requestedServices = selectedFromDraft.length > 0 ? selectedFromDraft : selectedFromEvent;
+
+        const isDraftDifferent = selectedFromEvent.length === requestedServices.length
+            ? !selectedFromEvent.every((v, i) => v === requestedServices[i])
+            : true;
+
+        const requestedServiceKeySet = new Set(requestedServices.map((s) => toServiceKey(s)).filter(Boolean));
+
         const profileByAuthId = new Map();
         for (const profile of vendorProfiles) {
             const keys = [profile?.authId, profile?.vendorAuthId, profile?.userAuthId]
@@ -1126,18 +1371,18 @@ const UserEventManagement = () => {
             }
         }
 
-        const toKey = (vendorAuthId, service) => {
-            const vendorKey = String(vendorAuthId || '').trim().toLowerCase();
-            const serviceKey = String(service || '').trim().toLowerCase();
-            if (!vendorKey || !serviceKey) return null;
-            return `${vendorKey}::${serviceKey}`;
-        };
-
-        const selectionMetaByKey = new Map();
+        const selectionByService = new Map();
         for (const row of selectionVendors) {
+            const serviceKey = toServiceKey(row?.service);
+            if (!serviceKey) continue;
+            if (!selectionByService.has(serviceKey)) selectionByService.set(serviceKey, row);
+        }
+
+        const lineItemsFromSelection = requestedServices.map((serviceName, idx) => {
+            const serviceKey = toServiceKey(serviceName);
+            const row = selectionByService.get(serviceKey) || null;
             const vendorAuthId = String(row?.vendorAuthId || '').trim();
-            const key = toKey(vendorAuthId, row?.service);
-            if (!key) continue;
+            const profile = vendorAuthId ? profileByAuthId.get(vendorAuthId) : null;
 
             const quantityNumber = Number(row?.pricingQuantity);
             const hasQuantityNumber = Number.isFinite(quantityNumber) && quantityNumber > 0;
@@ -1146,41 +1391,69 @@ const UserEventManagement = () => {
                 ? `${quantityNumber}${quantityUnit ? ` ${quantityUnit}` : ''}`
                 : (quantityUnit || '—');
 
-            const profile = profileByAuthId.get(vendorAuthId) || null;
             const businessName = String(
                 profile?.businessName ||
                 profile?.name ||
                 row?.businessName ||
                 ''
-            ).trim();
-            const serviceName = String(row?.serviceName || row?.service || '').trim();
+            ).trim() || 'Vendor';
 
-            selectionMetaByKey.set(key, {
-                businessName: businessName || 'Vendor',
-                serviceName: serviceName || 'Service',
-                quantity,
-            });
-        }
-
-        const lineItems = (Array.isArray(quoteLatest?.items) ? quoteLatest.items : []).map((item, idx) => {
-            const vendorAuthId = String(item?.vendorAuthId || '').trim();
-            const key = toKey(vendorAuthId, item?.service);
-            const meta = key ? selectionMetaByKey.get(key) : null;
-
-            const amountPaise = Number(
-                item?.clientTotal?.minPaise ??
-                item?.clientTotal?.maxPaise ??
-                0
-            );
+            const quotedInr = Number(row?.vendorQuotedPrice || 0);
+            const isLocked = Boolean(row?.priceLocked) && Number.isFinite(quotedInr) && quotedInr > 0;
+            const fallbackMinInr = Number(row?.servicePrice?.min || 0);
+            const amountPaise = isLocked
+                ? Math.max(0, Math.round(quotedInr * 100))
+                : (Number.isFinite(fallbackMinInr) && fallbackMinInr > 0 ? Math.round(fallbackMinInr * 100) : 0);
 
             return {
-                id: `${vendorAuthId || 'vendor'}:${String(item?.service || 'service')}:${idx}`,
-                businessName: meta?.businessName || 'Vendor',
-                serviceName: meta?.serviceName || String(item?.service || 'Service').trim() || 'Service',
-                quantity: meta?.quantity || '—',
-                amountPaise: Number.isFinite(amountPaise) ? amountPaise : 0,
+                id: `${serviceKey || 'service'}:${vendorAuthId || 'vendor'}:${idx}`,
+                businessName,
+                serviceName: String(row?.serviceName || row?.service || serviceName || 'Service').trim() || 'Service',
+                quantity,
+                amountPaise,
             };
         });
+
+        const lineItemsFromSnapshot = (Array.isArray(quoteLatest?.items) ? quoteLatest.items : [])
+            .filter((item) => {
+                if (requestedServiceKeySet.size === 0) return true;
+                const itemKey = toServiceKey(item?.service);
+                return requestedServiceKeySet.has(itemKey);
+            })
+            .map((item, idx) => {
+                const itemServiceKey = toServiceKey(item?.service);
+                const row = selectionByService.get(itemServiceKey) || null;
+                const vendorAuthId = String(item?.vendorAuthId || row?.vendorAuthId || '').trim();
+                const profile = vendorAuthId ? profileByAuthId.get(vendorAuthId) : null;
+
+                const quantityNumber = Number(row?.pricingQuantity);
+                const hasQuantityNumber = Number.isFinite(quantityNumber) && quantityNumber > 0;
+                const quantityUnit = String(row?.pricingQuantityUnit || row?.pricingUnit || '').trim();
+                const quantity = hasQuantityNumber
+                    ? `${quantityNumber}${quantityUnit ? ` ${quantityUnit}` : ''}`
+                    : (quantityUnit || '—');
+
+                const quotedInr = Number(row?.vendorQuotedPrice || 0);
+                const isLocked = Boolean(row?.priceLocked) && Number.isFinite(quotedInr) && quotedInr > 0;
+                const fallbackAmountPaise = Number(
+                    item?.clientTotal?.minPaise ??
+                    item?.clientTotal?.maxPaise ??
+                    item?.vendorTotal?.minPaise ??
+                    item?.vendorTotal?.maxPaise ??
+                    0
+                );
+                const amountPaise = isLocked
+                    ? Math.max(0, Math.round(quotedInr * 100))
+                    : (Number.isFinite(fallbackAmountPaise) && fallbackAmountPaise > 0 ? fallbackAmountPaise : 0);
+
+                return {
+                    id: `${vendorAuthId || 'vendor'}:${String(item?.service || 'service')}:${idx}`,
+                    businessName: String(profile?.businessName || profile?.name || row?.businessName || '').trim() || 'Vendor',
+                    serviceName: String(row?.serviceName || item?.service || 'Service').trim() || 'Service',
+                    quantity,
+                    amountPaise,
+                };
+            });
 
         const promotions = (Array.isArray(quoteLatest?.promotions) ? quoteLatest.promotions : []).map((promotion, idx) => ({
             id: `${String(promotion?.value || 'promotion')}:${idx}`,
@@ -1188,32 +1461,98 @@ const UserEventManagement = () => {
             feePaise: Number(promotion?.feePaise || 0),
         }));
 
-        const grandTotalPaise = Number(
+        const promotionsTotalPaise = promotions.reduce((sum, promo) => {
+            const fee = Number(promo?.feePaise || 0);
+            return sum + (Number.isFinite(fee) && fee > 0 ? fee : 0);
+        }, 0);
+
+        const lineItems = isDraftDifferent
+            ? lineItemsFromSelection
+            : (lineItemsFromSnapshot.length > 0 ? lineItemsFromSnapshot : lineItemsFromSelection);
+        const lineItemsTotalPaise = lineItems.reduce((sum, row) => {
+            const amount = Number(row?.amountPaise || 0);
+            return sum + (Number.isFinite(amount) && amount > 0 ? amount : 0);
+        }, 0);
+
+        const fallbackGrandTotalPaise = Number(
             quoteLatest?.clientGrandTotal?.minPaise ??
             quoteLatest?.clientGrandTotal?.maxPaise ??
             0
         );
 
+        const grandTotalPaise = lineItemsTotalPaise > 0
+            ? Math.max(0, lineItemsTotalPaise) + Math.max(0, promotionsTotalPaise)
+            : fallbackGrandTotalPaise;
+
         return {
             lineItems,
             promotions,
             grandTotalPaise: Number.isFinite(grandTotalPaise) ? grandTotalPaise : 0,
+            isDraftDifferent,
         };
-    }, [quoteLatest, planningVendorSelection]);
-
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-surface flex items-center justify-center pt-28">
-                <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-            </div>
-        );
-    }
-
-    if (!event) return null;
+    }, [quoteLatest, planningVendorSelection, serviceDraft, event?.selectedServices]);
 
     const isPromote = String(event?.kind || '').toUpperCase() === 'PROMOTE';
     const isPublicListing = isPromote || String(event?.listingType || '').toLowerCase() === 'public';
     const isPrivateListing = !isPromote && String(event?.listingType || '').toLowerCase() === 'private';
+
+    useEffect(() => {
+        if (!isPublicListing) return;
+
+        const resolvedEventId = String(event?.id || eventId || '').trim();
+        const eventKind = String(event?.kind || '').trim().toUpperCase();
+        if (!resolvedEventId || !eventKind) return;
+
+        let cancelled = false;
+
+        const refreshPublicPayoutState = async () => {
+            try {
+                if (eventKind === 'PLANNING') {
+                    const result = await dispatch(fetchPlanningByEventId(resolvedEventId));
+                    if (result.meta?.requestStatus === 'fulfilled' && result.payload && !cancelled) {
+                        const p = result.payload;
+                        setEvent((prev) => prev ? {
+                            ...prev,
+                            status: String(p?.status || prev.status || ''),
+                            ticketSalesStats: p?.ticketSalesStats && typeof p.ticketSalesStats === 'object'
+                                ? p.ticketSalesStats
+                                : prev.ticketSalesStats,
+                            generatedRevenuePayout: normalizeGeneratedRevenuePayout(p?.generatedRevenuePayout),
+                        } : prev);
+                    }
+                    return;
+                }
+
+                if (eventKind === 'PROMOTE') {
+                    const result = await dispatch(fetchPromoteByEventId(resolvedEventId));
+                    if (result.meta?.requestStatus === 'fulfilled' && result.payload && !cancelled) {
+                        const pr = result.payload;
+                        setEvent((prev) => prev ? {
+                            ...prev,
+                            status: String(pr?.adminDecision?.status || pr?.eventStatus || prev.status || ''),
+                            ticketSalesStats: pr?.ticketSalesStats && typeof pr.ticketSalesStats === 'object'
+                                ? pr.ticketSalesStats
+                                : prev.ticketSalesStats,
+                            generatedRevenuePayout: normalizeGeneratedRevenuePayout(pr?.generatedRevenuePayout),
+                        } : prev);
+                    }
+                }
+            } catch {
+                // Silent polling refresh for live payout state.
+            }
+        };
+
+        refreshPublicPayoutState();
+        const intervalId = setInterval(refreshPublicPayoutState, 20000);
+        return () => {
+            cancelled = true;
+            clearInterval(intervalId);
+        };
+    }, [dispatch, event?.id, event?.kind, eventId, isPublicListing]);
+
+    const selectedPublicPromotions = (!isPromote && isPublicListing)
+        ? (Array.isArray(event?.selectedPromotions) ? event.selectedPromotions : [])
+        : [];
     const resolveBannerUrl = (value) => {
         if (!value) return null;
         if (typeof value === 'string') {
@@ -1234,11 +1573,124 @@ const UserEventManagement = () => {
     const eventBannerSrc = publicBannerUrl || "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1200&q=80";
 
     const selectedServices = Array.isArray(event?.selectedServices) ? event.selectedServices : [];
+    const selectedServicesDraft = Array.isArray(serviceDraft) && serviceDraft.length > 0
+        ? serviceDraft
+        : selectedServices;
+    const selectedServicesDraftKeySet = new Set(
+        selectedServicesDraft.map((s) => toServiceKey(s)).filter(Boolean)
+    );
+    const selectableServiceOptions = PLANNING_SERVICE_OPTIONS.filter(
+        (serviceName) => !selectedServicesDraftKeySet.has(toServiceKey(serviceName))
+    );
     const selectedVendors = Array.isArray(event?.selectedVendors) ? event.selectedVendors : [];
-    const vendorByService = new Map(selectedVendors.map((v) => [String(v?.service || '').trim(), v]));
+    const vendorByService = new Map(
+        selectedVendors
+            .map((v) => [toServiceKey(v?.service), v])
+            .filter(([key]) => Boolean(key))
+    );
 
     const vendorSelectionVendors = Array.isArray(event?.vendorSelectionVendors) ? event.vendorSelectionVendors : [];
-    const vendorSelectionByService = new Map(vendorSelectionVendors.map((v) => [String(v?.service || '').trim(), v]));
+    const vendorSelectionByService = new Map(
+        vendorSelectionVendors
+            .map((v) => [toServiceKey(v?.service), v])
+            .filter(([key]) => Boolean(key))
+    );
+    const vendorProfiles = Array.isArray(planningVendorSelection?.vendorProfiles)
+        ? planningVendorSelection.vendorProfiles
+        : [];
+    const vendorProfileByAuthId = new Map(
+        vendorProfiles
+            .map((p) => [String(p?.authId || '').trim().toLowerCase(), p])
+            .filter(([authId]) => Boolean(authId))
+    );
+
+    const optedVendorsForFeedback = React.useMemo(() => {
+        const rows = Array.isArray(selectedVendors) ? selectedVendors : [];
+        const vendorRows = Array.isArray(vendorSelectionVendors) ? vendorSelectionVendors : [];
+        const profileMap = new Map(
+            (Array.isArray(vendorProfiles) ? vendorProfiles : [])
+                .map((p) => [String(p?.authId || '').trim().toLowerCase(), p])
+                .filter(([authId]) => Boolean(authId))
+        );
+        const vendorRowByService = new Map(
+            vendorRows
+                .map((row) => [toServiceKey(row?.service), row])
+                .filter(([key]) => Boolean(key))
+        );
+
+        const seen = new Set();
+        const result = [];
+
+        for (const row of rows) {
+            const service = String(row?.service || '').trim();
+            const vendorAuthId = String(row?.vendorAuthId || '').trim();
+            if (!service || !vendorAuthId) continue;
+
+            const key = `${vendorAuthId.toLowerCase()}::${service.toLowerCase()}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            const profile = profileMap.get(vendorAuthId.toLowerCase()) || null;
+            const vendorRow = vendorRowByService.get(toServiceKey(service)) || null;
+            const businessName = String(
+                profile?.businessName
+                || vendorRow?.businessName
+                || vendorRow?.vendorName
+                || `${vendorAuthId.slice(0, 8)}...`
+            ).trim();
+
+            result.push({
+                vendorAuthId,
+                service,
+                businessName,
+            });
+        }
+
+        return result;
+    }, [selectedVendors, vendorSelectionVendors, vendorProfiles]);
+
+    useEffect(() => {
+        if (!event || String(event?.kind || '').toUpperCase() !== 'PLANNING') return;
+
+        const savedPlatform = event?.feedback?.platform && typeof event.feedback.platform === 'object'
+            ? event.feedback.platform
+            : null;
+        const savedVendorFeedback = Array.isArray(event?.feedback?.vendors)
+            ? event.feedback.vendors
+            : [];
+        const savedVendorFeedbackByKey = new Map(
+            savedVendorFeedback.map((row) => {
+                const vendorAuthId = String(row?.vendorAuthId || '').trim();
+                const service = String(row?.service || '').trim();
+                const key = `${vendorAuthId.toLowerCase()}::${service.toLowerCase()}`;
+                return [key, row];
+            })
+        );
+
+        setPlatformRating(Number(savedPlatform?.rating || 0));
+        setPlatformReview(String(savedPlatform?.review || ''));
+        setVendorFeedbackDraft(
+            optedVendorsForFeedback.map((vendor) => {
+                const key = `${vendor.vendorAuthId.toLowerCase()}::${vendor.service.toLowerCase()}`;
+                const existing = savedVendorFeedbackByKey.get(key);
+                return {
+                    ...vendor,
+                    rating: Number(existing?.rating || 0),
+                    review: String(existing?.review || ''),
+                };
+            })
+        );
+    }, [event?.id, event?.feedback, event?.kind, optedVendorsForFeedback]);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-surface flex items-center justify-center pt-28">
+                <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            </div>
+        );
+    }
+
+    if (!event) return null;
 
     const normalizedTicketTiers = (Array.isArray(event?.ticketTiers) ? event.ticketTiers : []).map((tier, idx) => ({
         name: normalizeTicketTierName(tier, idx),
@@ -1280,12 +1732,80 @@ const UserEventManagement = () => {
             }]
             : []);
 
-    const toVendorStatus = (raw) => {
+    const toSafeCount = (value) => {
+        const n = Number(value || 0);
+        return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    };
+
+    const fallbackTotalTickets = ticketRows.reduce((sum, row) => {
+        const count = Number(row?.totalTickets || 0);
+        return sum + (Number.isFinite(count) && count > 0 ? count : 0);
+    }, 0);
+
+    const ticketStats = (isPublicListing && event?.ticketSalesStats && typeof event.ticketSalesStats === 'object')
+        ? event.ticketSalesStats
+        : null;
+
+    const totalTicketsForKpi = Math.max(
+        toSafeCount(ticketStats?.totalTickets),
+        toSafeCount(fallbackTotalTickets)
+    );
+    const ticketsSoldForKpi = Math.min(
+        totalTicketsForKpi > 0 ? totalTicketsForKpi : Number.POSITIVE_INFINITY,
+        toSafeCount(ticketStats?.ticketsSold)
+    );
+    const ticketsRemainingForKpi = totalTicketsForKpi > 0
+        ? Math.max(0, totalTicketsForKpi - ticketsSoldForKpi)
+        : toSafeCount(ticketStats?.ticketsRemaining);
+
+    const conversionPercentRaw = Number(ticketStats?.conversionRatePercent || 0);
+    const conversionPercent = Number.isFinite(conversionPercentRaw) && conversionPercentRaw > 0
+        ? conversionPercentRaw
+        : (totalTicketsForKpi > 0 ? Number(((ticketsSoldForKpi / totalTicketsForKpi) * 100).toFixed(2)) : 0);
+    const conversionProgress = Math.max(0, Math.min(100, conversionPercent));
+
+    const grossRevenueInr = Number(ticketStats?.grossRevenueInr || 0);
+    const platformFeeInr = Number(ticketStats?.platformFeeInr || 0);
+    const totalFeesInrRaw = Number(ticketStats?.totalFeesInr);
+    const totalFeesInr = Number.isFinite(totalFeesInrRaw)
+        ? totalFeesInrRaw
+        : (Number.isFinite(platformFeeInr) ? platformFeeInr : 0);
+    const netPnlInr = Number.isFinite(Number(ticketStats?.netPnlInr))
+        ? Number(ticketStats?.netPnlInr)
+        : Math.max(0, (Number.isFinite(grossRevenueInr) ? grossRevenueInr : 0) - (Number.isFinite(platformFeeInr) ? platformFeeInr : 0));
+
+    const generatedRevenuePayout = event?.generatedRevenuePayout && typeof event.generatedRevenuePayout === 'object'
+        ? event.generatedRevenuePayout
+        : null;
+    const generatedRevenuePayoutStatus = String(generatedRevenuePayout?.status || '').trim().toUpperCase();
+    const generatedRevenuePayoutMode = String(generatedRevenuePayout?.mode || '').trim().toUpperCase();
+    const generatedRevenuePayoutAmountInr = Number(generatedRevenuePayout?.amountPaise || 0) / 100;
+    const generatedRevenuePayoutPaidAtLabel = generatedRevenuePayout?.paidAt
+        ? new Date(generatedRevenuePayout.paidAt).toLocaleString('en-IN', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+            timeZone: 'Asia/Kolkata',
+        })
+        : null;
+    const generatedRevenuePayoutTone = generatedRevenuePayoutStatus === 'SUCCESS'
+        ? 'text-emerald-600'
+        : (generatedRevenuePayoutStatus === 'FAILED' ? 'text-rose-600' : 'text-primary');
+
+    const formatInrWithSign = (amount) => {
+        const n = Number(amount || 0);
+        if (!Number.isFinite(n)) return '₹0';
+        if (n > 0) return `+₹${formatInr(n)}`;
+        if (n < 0) return `-₹${formatInr(Math.abs(n))}`;
+        return '₹0';
+    };
+
+    const toVendorStatus = (raw, hasSelectedVendor = false) => {
         const s = String(raw || '').trim().toUpperCase();
         if (s === 'ACCEPTED') return { key: 'accepted', label: 'accepted', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
         if (s === 'REJECTED') return { key: 'reject', label: 'reject', badge: 'bg-rose-50 text-rose-700 border-rose-200' };
-        // Backend uses YET_TO_SELECT; UI requirement says yet_to_accept.
-        return { key: 'yet_to_accept', label: 'yet_to_accept', badge: 'bg-amber-50 text-amber-700 border-amber-200' };
+        if (hasSelectedVendor) return { key: 'yet_to_accept', label: 'yet_to_accept', badge: 'bg-amber-50 text-amber-700 border-amber-200' };
+        // For pending/unselected frontend state, show action-oriented copy.
+        return { key: 'select_vendor', label: 'select_vendor', badge: 'bg-amber-50 text-amber-700 border-amber-200' };
     };
 
     const toInr = (paise) => {
@@ -1393,21 +1913,383 @@ const UserEventManagement = () => {
         });
     };
 
+    const handlePayRemainingAmount = async () => {
+        if (!planningEventId) return;
+        setRemainingFlowError(null);
+        setRemainingFlowActive(true);
+        dispatch(clearPlanningError());
+
+        await dispatch(fetchPlanningQuoteLatest(planningEventId));
+
+        const orderResult = await dispatch(createOrder({
+            eventId: planningEventId,
+            orderType: 'PLANNING EVENT REMAINING FEE',
+        }));
+
+        if (createOrder.rejected.match(orderResult)) {
+            setRemainingFlowError(orderResult.payload || 'Failed to create payment order');
+            setRemainingFlowActive(false);
+            return;
+        }
+
+        const { razorpayOrderId: rzpOrderId, amount, currency, keyId: rzpKeyId } = orderResult.payload;
+
+        const sdkLoaded = await loadRazorpayScript();
+        if (!sdkLoaded) {
+            setRemainingFlowError('Failed to load payment gateway. Check your internet connection.');
+            setRemainingFlowActive(false);
+            return;
+        }
+
+        await new Promise((resolve) => {
+            const options = {
+                key: rzpKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
+                amount,
+                currency: currency || 'INR',
+                name: 'Okkazo',
+                description: `Remaining Payment - ${event?.title || 'Event'}`,
+                order_id: rzpOrderId,
+                modal: {
+                    ondismiss: () => {
+                        setRemainingFlowError('Payment was cancelled. You can try again.');
+                        setRemainingFlowActive(false);
+                        resolve();
+                    },
+                },
+                handler: async (response) => {
+                    const verifyResult = await dispatch(
+                        verifyPayment({
+                            razorpayOrderId: response.razorpay_order_id,
+                            razorpayPaymentId: response.razorpay_payment_id,
+                            razorpaySignature: response.razorpay_signature,
+                            eventId: planningEventId,
+                        })
+                    );
+
+                    if (verifyPayment.rejected.match(verifyResult)) {
+                        setRemainingFlowError(verifyResult.payload || 'Payment verification failed. Contact support.');
+                        setRemainingFlowActive(false);
+                        resolve();
+                        return;
+                    }
+
+                    setEvent((prev) => (
+                        prev
+                            ? {
+                                ...prev,
+                                status: 'COMPLETED',
+                                remainingPaymentPaid: true,
+                                remainingPaymentPaidAmountPaise: Number(amount || 0),
+                                feedback: prev.feedback || { platform: null, vendors: [] },
+                            }
+                            : prev
+                    ));
+
+                    setRemainingFlowActive(false);
+                    resolve();
+                },
+            };
+
+            try {
+                const rzp = new window.Razorpay(options);
+                rzp.open();
+            } catch (e) {
+                setRemainingFlowError(e?.message || 'Failed to open payment gateway. Please try again.');
+                setRemainingFlowActive(false);
+                resolve();
+            }
+        });
+    };
+
     const displayStatus = isPendingApproval
         ? 'Pending Approval'
         : isLive
             ? 'Live'
             : isRejected
                 ? 'Rejected'
-                : isCompleted
+                : isUserCompletedStatus
                     ? 'Completed'
                 : (event?.status || '');
+
+    const vendorConfirmationPercent = 25;
+    const depositPaidAmountPaise = Math.max(0, Number(event?.depositPaidAmountPaise || 0));
+    const vendorConfirmationBasePaise = Math.max(0, quoteDisplay.grandTotalPaise - depositPaidAmountPaise);
+    const vendorConfirmationDuePaise = Math.max(0, Math.round((vendorConfirmationBasePaise * vendorConfirmationPercent) / 100));
+    const vendorConfirmationPaidAmountPaise = Math.max(0, Number(event?.vendorConfirmationPaidAmountPaise || 0));
+    const remainingPaymentPaidAmountPaise = Math.max(0, Number(event?.remainingPaymentPaidAmountPaise || 0));
+    const remainingDuePaise = Math.max(0, quoteDisplay.grandTotalPaise - depositPaidAmountPaise - vendorConfirmationPaidAmountPaise);
+    const paidMilestonesTotalPaise = depositPaidAmountPaise + vendorConfirmationPaidAmountPaise + remainingPaymentPaidAmountPaise;
+    const outstandingDuePaise = Math.max(0, quoteDisplay.grandTotalPaise - paidMilestonesTotalPaise);
+
+    const stickyStages = new Set(['CONFIRMED', 'VENDOR PAYMENT PENDING', 'COMPLETED', 'CLOSED']);
+    const showFeedbackPrompt = !isPromote && isPrivateListing && isUserCompletedStatus && remainingPaymentPaid;
+    const canShowBillingDetails = isConfirmedStatus || isUserCompletedStatus;
+    const hasExistingFeedback = Boolean(
+        Number(event?.feedback?.platform?.rating || 0) > 0
+        || (Array.isArray(event?.feedback?.vendors) && event.feedback.vendors.length > 0)
+    );
+    const canDirectServiceEdit = !isPromote && !vendorConfirmationPaid && (isApproved || isPendingApproval);
+    const canSubmitServiceChangeRequest = !isPromote && (vendorConfirmationPaid || stickyStages.has(normalizedStatus));
+    const isServiceEditingLockedStage = normalizedStatus === 'CONFIRMED';
+    const canEditServicesUI = !isServiceEditingLockedStage && (canDirectServiceEdit || canSubmitServiceChangeRequest);
+    const serviceDraftChanged = selectedServicesDraft.length === selectedServices.length
+        ? !selectedServicesDraft.every((v, i) => v === selectedServices[i])
+        : true;
+    const removedDraftServices = selectedServices.filter((serviceName) => !selectedServicesDraft.includes(serviceName));
+    const addedDraftServices = selectedServicesDraft.filter((serviceName) => !selectedServices.includes(serviceName));
+
+    const handleAddServiceToDraft = () => {
+        const next = String(pendingServiceToAdd || '').trim();
+        if (!next) return;
+
+        setServiceDraft((prev) => {
+            const list = Array.isArray(prev) && prev.length > 0 ? prev : selectedServices;
+            if (list.includes(next)) return list;
+            return [...list, next];
+        });
+        setPendingServiceToAdd('');
+    };
+
+    const handleRemoveServiceFromDraft = (serviceName) => {
+        const target = String(serviceName || '').trim();
+        if (!target) return;
+
+        setServiceDraft((prev) => {
+            const list = Array.isArray(prev) && prev.length > 0 ? prev : selectedServices;
+            const next = list.filter((item) => String(item || '').trim() !== target);
+            return next.length > 0 ? next : list;
+        });
+    };
+
+    const handleSubmitServiceChanges = async () => {
+        if (!planningEventId || !serviceDraftChanged) return;
+        if (isServiceEditingLockedStage) {
+            toast.error('Service edits are locked after event confirmation.');
+            return;
+        }
+
+        try {
+            setServiceChangeSubmitting(true);
+
+            if (canDirectServiceEdit) {
+                const response = await fetchWithAuth(
+                    `${EVENTS_API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(planningEventId))}/services`,
+                    {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ selectedServices: selectedServicesDraft }),
+                    },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+
+                const data = await response.json().catch(() => null);
+                if (!response.ok || !data?.success) {
+                    throw new Error(data?.message || 'Failed to update selected services');
+                }
+
+                const nextStatus = String(data?.data?.policy?.nextPlanningStatus || '').trim();
+                const statusReset = Boolean(data?.data?.policy?.planningStatusReset);
+                toast.success(statusReset
+                    ? `Services updated. Event moved to ${nextStatus || 'PENDING APPROVAL'} for re-approval.`
+                    : 'Services updated successfully.');
+            } else if (canSubmitServiceChangeRequest) {
+                const reason = String(serviceChangeReason || '').trim();
+                if (!reason) {
+                    throw new Error('Please add a reason for this change request.');
+                }
+
+                const response = await fetchWithAuth(
+                    `${EVENTS_API_BASE_URL}/api/events/vendor-selection/${encodeURIComponent(String(planningEventId))}/change-request`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            selectedServices: selectedServicesDraft,
+                            reason,
+                        }),
+                    },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+
+                const data = await response.json().catch(() => null);
+                if (!response.ok || !data?.success) {
+                    throw new Error(data?.message || 'Failed to submit change request');
+                }
+
+                const deltaPaise = Number(data?.data?.preview?.priceDelta?.deltaPaise || 0);
+                const deltaLabel = deltaPaise === 0
+                    ? 'no bill change'
+                    : (deltaPaise > 0
+                        ? `+${formatMoneyFromPaise(deltaPaise)}`
+                        : `-${formatMoneyFromPaise(Math.abs(deltaPaise))}`);
+
+                toast.success(`Change request submitted (${deltaLabel}).`);
+                setServiceChangeReason('');
+            } else {
+                throw new Error('Service edits are not allowed in the current stage.');
+            }
+
+            const planningResult = await dispatch(fetchPlanningByEventId(String(planningEventId)));
+            if (planningResult.meta?.requestStatus === 'fulfilled' && planningResult.payload) {
+                const payload = planningResult.payload;
+                const refreshedServices = Array.isArray(payload?.selectedServices)
+                    ? payload.selectedServices
+                    : selectedServicesDraft;
+                const refreshedStatus = String(payload?.status || '').trim().toUpperCase().replace(/_/g, ' ');
+
+                setEvent((prev) => {
+                    if (!prev) return prev;
+                    return {
+                        ...prev,
+                        status: payload?.status || prev.status,
+                        selectedServices: refreshedServices,
+                        vendorConfirmationPaid: Boolean(payload?.vendorConfirmationPaid),
+                        vendorConfirmationPaidAmountPaise: Number(payload?.vendorConfirmationPaidAmountPaise || 0),
+                        remainingPaymentPaid: Boolean(payload?.remainingPaymentPaid),
+                        remainingPaymentPaidAmountPaise: Number(payload?.remainingPaymentPaidAmountPaise || 0),
+                        feedback: payload?.feedback && typeof payload.feedback === 'object'
+                            ? payload.feedback
+                            : prev.feedback,
+                    };
+                });
+
+                setServiceDraft(refreshedServices);
+
+                if (refreshedStatus === 'APPROVED') {
+                    dispatch(fetchPlanningQuoteLatest(String(planningEventId)));
+                }
+            }
+
+            dispatch(fetchPlanningVendorSelectionByEventId(String(planningEventId)));
+        } catch (error) {
+            toast.error(error?.message || 'Failed to update service choices');
+        } finally {
+            setServiceChangeSubmitting(false);
+        }
+    };
+
+    const updateVendorFeedbackField = ({ vendorAuthId, service, field, value }) => {
+        if (hasExistingFeedback) return;
+
+        const key = `${String(vendorAuthId || '').trim().toLowerCase()}::${String(service || '').trim().toLowerCase()}`;
+        if (!key) return;
+
+        setVendorFeedbackDraft((prev) => (Array.isArray(prev) ? prev : []).map((row) => {
+            const rowKey = `${String(row?.vendorAuthId || '').trim().toLowerCase()}::${String(row?.service || '').trim().toLowerCase()}`;
+            if (rowKey !== key) return row;
+            return {
+                ...row,
+                [field]: value,
+            };
+        }));
+    };
+
+    const handleSubmitFeedback = async () => {
+        if (!planningEventId) return;
+        if (hasExistingFeedback) {
+            toast.error('Feedback already submitted. Updates are disabled.');
+            return;
+        }
+
+        const platformStars = Math.round(Number(platformRating || 0));
+        if (!Number.isFinite(platformStars) || platformStars < 1 || platformStars > 5) {
+            toast.error('Please provide a platform rating between 1 and 5 stars.');
+            return;
+        }
+
+        const trimmedPlatformReview = String(platformReview || '').trim();
+        if (!trimmedPlatformReview) {
+            toast.error('Please provide platform review details.');
+            return;
+        }
+
+        if (optedVendorsForFeedback.length === 0) {
+            toast.error('Vendor feedback details are required before submission.');
+            return;
+        }
+
+        const vendorRows = Array.isArray(vendorFeedbackDraft) ? vendorFeedbackDraft : [];
+        if (vendorRows.length !== optedVendorsForFeedback.length) {
+            toast.error('Please provide feedback for all opted vendors.');
+            return;
+        }
+
+        const missingVendorRatings = vendorRows
+            .filter((row) => {
+                const rating = Math.round(Number(row?.rating || 0));
+                return !Number.isFinite(rating) || rating < 1 || rating > 5;
+            });
+
+        const missingVendorReviews = vendorRows
+            .filter((row) => !String(row?.review || '').trim());
+
+        if (optedVendorsForFeedback.length > 0 && missingVendorRatings.length > 0) {
+            toast.error('Please rate all opted vendors before submitting feedback.');
+            return;
+        }
+
+        if (missingVendorReviews.length > 0) {
+            toast.error('Please add review details for all opted vendors.');
+            return;
+        }
+
+        try {
+            setFeedbackSubmitting(true);
+
+            const payload = {
+                platformFeedback: {
+                    rating: platformStars,
+                    review: trimmedPlatformReview,
+                },
+                vendorFeedback: vendorRows
+                    .map((row) => ({
+                        vendorAuthId: String(row?.vendorAuthId || '').trim(),
+                        service: String(row?.service || '').trim(),
+                        rating: Math.round(Number(row?.rating || 0)),
+                        review: String(row?.review || '').trim(),
+                    })),
+            };
+
+            const response = await fetchWithAuth(
+                `${EVENTS_API_BASE_URL}/api/events/planning/${encodeURIComponent(String(planningEventId))}/feedback`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await response.json().catch(() => null);
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.message || 'Failed to submit feedback');
+            }
+
+            setEvent((prev) => {
+                if (!prev) return prev;
+                const next = data?.data || {};
+                return {
+                    ...prev,
+                    status: next?.status || prev.status,
+                    feedback: next?.feedback && typeof next.feedback === 'object'
+                        ? next.feedback
+                        : prev.feedback,
+                };
+            });
+
+            toast.success('Thank you! Your feedback has been submitted.');
+        } catch (error) {
+            toast.error(error?.message || 'Unable to submit feedback right now.');
+        } finally {
+            setFeedbackSubmitting(false);
+        }
+    };
 
     const steps = [
         {
             id: 1,
             label: 'Application Received',
-            status: hasManagerAssigned || isLive || isRejected || isCompleted ? 'completed' : 'current',
+            status: hasManagerAssigned || isLive || isRejected || isUserCompletedStatus ? 'completed' : 'current',
         },
         {
             id: 2,
@@ -1418,15 +2300,21 @@ const UserEventManagement = () => {
             id: 3,
             label: 'Application in Review',
             status: hasManagerAssigned
-                ? (isPendingApproval ? 'current' : (isLive || isRejected || isCompleted) ? 'completed' : 'current')
+                ? (isPendingApproval ? 'current' : (isLive || isRejected || isUserCompletedStatus) ? 'completed' : 'current')
                 : 'pending',
         },
         {
             id: 4,
-            label: isRejected ? 'Rejected' : isCompleted ? 'Completed' : 'Success / Live',
-            status: (isLive || isRejected || isCompleted) ? 'completed' : 'pending',
+            label: isRejected ? 'Rejected' : isUserCompletedStatus ? 'Completed' : 'Success / Live',
+            status: (isLive || isRejected || isUserCompletedStatus) ? 'completed' : 'pending',
         },
     ];
+
+    const roadmapProgressWidth = (isLive || isRejected || isUserCompletedStatus)
+        ? '100%'
+        : hasManagerAssigned
+            ? '66%'
+            : '33%';
 
     const StepIcon = ({ status }) => {
         if (status === 'completed') return <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center"><BsCheckCircleFill /></div>;
@@ -1463,6 +2351,12 @@ const UserEventManagement = () => {
                             Command Center
                         </button>
                         <button
+                            onClick={() => setActiveTab("billing")}
+                            className={`px-6 py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'billing' ? 'bg-surface text-primary shadow-sm' : 'text-primary/40 hover:text-primary'}`}
+                        >
+                            Bills & Payment
+                        </button>
+                        <button
                             onClick={() => setActiveTab("chat")}
                             className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'chat' ? 'bg-surface text-primary shadow-sm' : 'text-primary/40 hover:text-primary'}`}
                         >
@@ -1496,7 +2390,9 @@ const UserEventManagement = () => {
                                                 : 'bg-primary text-white hover:opacity-95'
                                         }`}
                                     >
-                                        {confirmFlowActive ? 'Processing…' : 'Pay Vendor Confirmation (25%)'}
+                                        {confirmFlowActive
+                                            ? 'Processing…'
+                                            : `Pay Vendor Confirmation (${formatMoneyFromPaise(vendorConfirmationDuePaise)})`}
                                     </button>
                                 </div>
 
@@ -1512,8 +2408,7 @@ const UserEventManagement = () => {
                                     </div>
                                 )}
 
-                                {quoteLatest && (
-                                    <div className="mt-8 space-y-4">
+                                <div className="mt-8 space-y-4">
                                         <div className="bg-surface rounded-3xl border border-primary/5 overflow-hidden">
                                             <div className="overflow-x-auto">
                                                 <div className="min-w-[720px]">
@@ -1559,21 +2454,317 @@ const UserEventManagement = () => {
                                         )}
 
                                         <div className="bg-white rounded-3xl p-6 border border-primary/5">
-                                            <div className="flex items-center justify-between gap-6">
+                                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
                                                 <div>
                                                     <p className="text-[10px] font-black uppercase tracking-widest text-primary/40 mb-2">Total Amount</p>
                                                     <p className="text-3xl font-black text-[#0b2d49]">{formatMoneyFromPaise(quoteDisplay.grandTotalPaise)}</p>
+                                                </div>
+                                                <div className="md:text-right">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-primary/40">Deposit Fee Paid</p>
+                                                    <p className="text-sm font-black text-[#0b2d49]">{formatMoneyFromPaise(depositPaidAmountPaise)}</p>
+                                                    <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-primary/40">Vendor Confirmation Due ({vendorConfirmationPercent}%)</p>
+                                                    <p className="text-sm font-black text-primary">{formatMoneyFromPaise(vendorConfirmationDuePaise)}</p>
                                                 </div>
                                                 <div className="text-right">
                                                     <p className="text-[10px] font-black uppercase tracking-widest text-primary/40">Demand Tier</p>
                                                     <p className="text-xs font-black text-primary">{String(quoteLatest?.demandTier || 'NORMAL').replace(/_/g, ' ')}</p>
                                                     <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-primary/40">Locked Version</p>
-                                                    <p className="text-xs font-black text-primary">v{quoteLatest?.version || 1}</p>
+                                                    <p className="text-xs font-black text-primary">{quoteLatest?.version ? `v${quoteLatest.version}` : 'draft'}</p>
                                                 </div>
                                             </div>
                                         </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {!isPromote && isPrivateListing && isUserCompletedStatus && !remainingPaymentPaid && (
+                            <div className="bg-white rounded-4xl p-10 shadow-sm border border-primary/5">
+                                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+                                    <div>
+                                        <h2 className="text-xl font-serif-premium text-[#0b2d49] mb-1">Final Settlement</h2>
+                                        <p className="text-xs text-primary/60">
+                                            Event is marked as <span className="font-bold">COMPLETED</span>. Pay the remaining amount to finish vendor settlement for this event.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={handlePayRemainingAmount}
+                                        disabled={remainingFlowActive || remainingDuePaise <= 0}
+                                        className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                                            (remainingFlowActive || remainingDuePaise <= 0)
+                                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                : 'bg-primary text-white hover:opacity-95'
+                                        }`}
+                                    >
+                                        {remainingFlowActive
+                                            ? 'Processing…'
+                                            : `Pay Remaining (${formatMoneyFromPaise(remainingDuePaise)})`}
+                                    </button>
+                                </div>
+
+                                {remainingFlowError && (
+                                    <div className="mt-6 text-[11px] font-bold text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+                                        {remainingFlowError}
                                     </div>
                                 )}
+
+                                <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-surface rounded-2xl p-4 border border-primary/10">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-1">Total Amount</p>
+                                        <p className="text-lg font-black text-[#0b2d49]">{formatMoneyFromPaise(quoteDisplay.grandTotalPaise)}</p>
+                                    </div>
+                                    <div className="bg-surface rounded-2xl p-4 border border-primary/10">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-1">Already Paid</p>
+                                        <p className="text-lg font-black text-[#0b2d49]">
+                                            {formatMoneyFromPaise(paidMilestonesTotalPaise)}
+                                        </p>
+                                    </div>
+                                    <div className="bg-surface rounded-2xl p-4 border border-primary/10">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-1">Remaining Due</p>
+                                        <p className="text-lg font-black text-primary">{formatMoneyFromPaise(remainingDuePaise)}</p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                    <div className="bg-surface rounded-2xl border border-primary/10 overflow-hidden">
+                                        <div className="px-4 py-3 bg-white border-b border-primary/10 text-[10px] font-black uppercase tracking-widest text-primary/45">
+                                            Price Breakdown
+                                        </div>
+                                        {quoteDisplay.lineItems.length > 0 ? (
+                                            <div className="divide-y divide-primary/10">
+                                                {quoteDisplay.lineItems.map((item) => (
+                                                    <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3 text-xs">
+                                                        <div className="min-w-0">
+                                                            <p className="font-bold text-[#0b2d49] truncate">{item.serviceName}</p>
+                                                            <p className="text-primary/60 truncate">{item.businessName}</p>
+                                                        </div>
+                                                        <p className="font-black text-[#0b2d49] shrink-0">{formatMoneyFromPaise(item.amountPaise)}</p>
+                                                    </div>
+                                                ))}
+                                                {quoteDisplay.promotions.map((promotion) => (
+                                                    <div key={promotion.id} className="flex items-center justify-between gap-3 px-4 py-3 text-xs">
+                                                        <p className="font-bold text-[#0b2d49]">Promotion: {promotion.name}</p>
+                                                        <p className="font-black text-[#0b2d49]">{formatMoneyFromPaise(promotion.feePaise)}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="px-4 py-4 text-xs text-primary/60">Price details are being prepared.</div>
+                                        )}
+                                    </div>
+
+                                    <div className="bg-surface rounded-2xl border border-primary/10 overflow-hidden">
+                                        <div className="px-4 py-3 bg-white border-b border-primary/10 text-[10px] font-black uppercase tracking-widest text-primary/45">
+                                            Paid So Far
+                                        </div>
+                                        <div className="divide-y divide-primary/10 text-xs">
+                                            <div className="flex items-center justify-between px-4 py-3">
+                                                <p className="font-bold text-[#0b2d49]">Deposit Fee</p>
+                                                <p className="font-black text-[#0b2d49]">{formatMoneyFromPaise(depositPaidAmountPaise)}</p>
+                                            </div>
+                                            <div className="flex items-center justify-between px-4 py-3">
+                                                <p className="font-bold text-[#0b2d49]">Vendor Confirmation</p>
+                                                <p className="font-black text-[#0b2d49]">{formatMoneyFromPaise(vendorConfirmationPaidAmountPaise)}</p>
+                                            </div>
+                                            <div className="flex items-center justify-between px-4 py-3">
+                                                <p className="font-bold text-[#0b2d49]">Remaining Payment</p>
+                                                <p className="font-black text-[#0b2d49]">{formatMoneyFromPaise(remainingPaymentPaidAmountPaise)}</p>
+                                            </div>
+                                            <div className="flex items-center justify-between px-4 py-3 bg-white/70">
+                                                <p className="font-black text-[#0b2d49]">Total Paid</p>
+                                                <p className="font-black text-primary">{formatMoneyFromPaise(paidMilestonesTotalPaise)}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {!isPromote && isPrivateListing && isUserCompletedStatus && remainingPaymentPaid && (
+                            <div className="bg-white rounded-4xl p-10 shadow-sm border border-primary/5">
+                                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+                                    <div>
+                                        <h2 className="text-xl font-serif-premium text-[#0b2d49] mb-1">Final Settlement Summary</h2>
+                                        <p className="text-xs text-primary/60">
+                                            All payments are completed. Review your final price breakdown below.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-surface rounded-2xl p-4 border border-primary/10">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-1">Total Amount</p>
+                                        <p className="text-lg font-black text-[#0b2d49]">{formatMoneyFromPaise(quoteDisplay.grandTotalPaise)}</p>
+                                    </div>
+                                    <div className="bg-surface rounded-2xl p-4 border border-primary/10">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-1">Total Paid</p>
+                                        <p className="text-lg font-black text-[#0b2d49]">{formatMoneyFromPaise(paidMilestonesTotalPaise)}</p>
+                                    </div>
+                                    <div className="bg-surface rounded-2xl p-4 border border-primary/10">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-1">Outstanding Due</p>
+                                        <p className="text-lg font-black text-primary">{formatMoneyFromPaise(outstandingDuePaise)}</p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                    <div className="bg-surface rounded-2xl border border-primary/10 overflow-hidden">
+                                        <div className="px-4 py-3 bg-white border-b border-primary/10 text-[10px] font-black uppercase tracking-widest text-primary/45">
+                                            Price Breakdown
+                                        </div>
+                                        {quoteDisplay.lineItems.length > 0 ? (
+                                            <div className="divide-y divide-primary/10">
+                                                {quoteDisplay.lineItems.map((item) => (
+                                                    <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3 text-xs">
+                                                        <div className="min-w-0">
+                                                            <p className="font-bold text-[#0b2d49] truncate">{item.serviceName}</p>
+                                                            <p className="text-primary/60 truncate">{item.businessName}</p>
+                                                        </div>
+                                                        <p className="font-black text-[#0b2d49] shrink-0">{formatMoneyFromPaise(item.amountPaise)}</p>
+                                                    </div>
+                                                ))}
+                                                {quoteDisplay.promotions.map((promotion) => (
+                                                    <div key={promotion.id} className="flex items-center justify-between gap-3 px-4 py-3 text-xs">
+                                                        <p className="font-bold text-[#0b2d49]">Promotion: {promotion.name}</p>
+                                                        <p className="font-black text-[#0b2d49]">{formatMoneyFromPaise(promotion.feePaise)}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="px-4 py-4 text-xs text-primary/60">Price details are being prepared.</div>
+                                        )}
+                                    </div>
+
+                                    <div className="bg-surface rounded-2xl border border-primary/10 overflow-hidden">
+                                        <div className="px-4 py-3 bg-white border-b border-primary/10 text-[10px] font-black uppercase tracking-widest text-primary/45">
+                                            Paid Breakdown
+                                        </div>
+                                        <div className="divide-y divide-primary/10 text-xs">
+                                            <div className="flex items-center justify-between px-4 py-3">
+                                                <p className="font-bold text-[#0b2d49]">Deposit Fee</p>
+                                                <p className="font-black text-[#0b2d49]">{formatMoneyFromPaise(depositPaidAmountPaise)}</p>
+                                            </div>
+                                            <div className="flex items-center justify-between px-4 py-3">
+                                                <p className="font-bold text-[#0b2d49]">Vendor Confirmation</p>
+                                                <p className="font-black text-[#0b2d49]">{formatMoneyFromPaise(vendorConfirmationPaidAmountPaise)}</p>
+                                            </div>
+                                            <div className="flex items-center justify-between px-4 py-3">
+                                                <p className="font-bold text-[#0b2d49]">Remaining Payment</p>
+                                                <p className="font-black text-[#0b2d49]">{formatMoneyFromPaise(remainingPaymentPaidAmountPaise)}</p>
+                                            </div>
+                                            <div className="flex items-center justify-between px-4 py-3 bg-white/70">
+                                                <p className="font-black text-[#0b2d49]">Total Paid</p>
+                                                <p className="font-black text-primary">{formatMoneyFromPaise(paidMilestonesTotalPaise)}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {showFeedbackPrompt && (
+                            <div className="bg-white rounded-4xl p-8 shadow-sm border border-primary/5 space-y-6">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-2">Post Event Feedback</p>
+                                    <h3 className="text-xl font-serif-premium text-[#0b2d49]">Rate Your Experience</h3>
+                                    <p className="text-xs text-primary/60 mt-1">
+                                        Share your feedback for Okkazo and the vendors you opted for. Your ratings help us improve every event.
+                                    </p>
+                                </div>
+
+                                <div className="rounded-2xl border border-primary/10 bg-surface p-4">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-3">Platform Rating</p>
+                                    <div className="flex items-center gap-1 mb-3">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                            <button
+                                                key={`platform-star-${star}`}
+                                                type="button"
+                                                onClick={() => setPlatformRating(star)}
+                                                disabled={hasExistingFeedback}
+                                                className="text-lg transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                                            >
+                                                {platformRating >= star
+                                                    ? <BsStarFill className="text-amber-400" />
+                                                    : <BsStar className="text-primary/25" />}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <textarea
+                                        value={platformReview}
+                                        onChange={(e) => setPlatformReview(e.target.value)}
+                                        rows={2}
+                                        placeholder="Tell us about your experience with Okkazo"
+                                        disabled={hasExistingFeedback}
+                                        className="w-full rounded-xl border border-primary/15 bg-white px-3 py-2 text-xs font-medium text-primary"
+                                    />
+                                </div>
+
+                                {optedVendorsForFeedback.length > 0 ? (
+                                    <div className="space-y-3">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/45">Vendor Ratings</p>
+                                        {vendorFeedbackDraft.map((row, idx) => (
+                                            <div key={`${row.vendorAuthId}:${row.service}:${idx}`} className="rounded-2xl border border-primary/10 bg-surface p-4">
+                                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                                                    <div>
+                                                        <p className="text-xs font-bold text-[#0b2d49]">{row.businessName}</p>
+                                                        <p className="text-[10px] font-bold uppercase tracking-widest text-primary/50">{row.service}</p>
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        {[1, 2, 3, 4, 5].map((star) => (
+                                                            <button
+                                                                key={`${row.vendorAuthId}:${row.service}:star-${star}`}
+                                                                type="button"
+                                                                onClick={() => updateVendorFeedbackField({
+                                                                    vendorAuthId: row.vendorAuthId,
+                                                                    service: row.service,
+                                                                    field: 'rating',
+                                                                    value: star,
+                                                                })}
+                                                                disabled={hasExistingFeedback}
+                                                                className="text-lg transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                                                            >
+                                                                {Number(row.rating || 0) >= star
+                                                                    ? <BsStarFill className="text-amber-400" />
+                                                                    : <BsStar className="text-primary/25" />}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <textarea
+                                                    value={row.review || ''}
+                                                    onChange={(e) => updateVendorFeedbackField({
+                                                        vendorAuthId: row.vendorAuthId,
+                                                        service: row.service,
+                                                        field: 'review',
+                                                        value: e.target.value,
+                                                    })}
+                                                    rows={2}
+                                                    placeholder="Write a short review for this vendor"
+                                                    disabled={hasExistingFeedback}
+                                                    className="w-full rounded-xl border border-primary/15 bg-white px-3 py-2 text-xs font-medium text-primary"
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="rounded-2xl border border-primary/10 bg-surface p-4 text-xs text-primary/60">
+                                        Vendor list is not available yet, but you can still submit platform feedback.
+                                    </div>
+                                )}
+
+                                <div className="flex items-center justify-between gap-4">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-primary/45">
+                                        {hasExistingFeedback ? 'Feedback submitted successfully.' : 'All feedback details are mandatory.'}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={handleSubmitFeedback}
+                                        disabled={feedbackSubmitting || hasExistingFeedback}
+                                        className="px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-primary text-white hover:opacity-95 disabled:opacity-60"
+                                    >
+                                        {feedbackSubmitting
+                                            ? 'Submitting...'
+                                            : (hasExistingFeedback ? 'Feedback Submitted' : 'Submit Feedback')}
+                                    </button>
+                                </div>
                             </div>
                         )}
 
@@ -1594,7 +2785,7 @@ const UserEventManagement = () => {
                             <div className="relative z-10">
                                 {/* Connecting Line */}
                                 <div className="absolute top-4 left-0 right-0 h-0.5 bg-gray-100 -z-10" />
-                                <div className="absolute top-4 left-0 h-0.5 bg-primary/20 transition-all duration-1000" style={{ width: isPendingApproval ? '33%' : '66%' }} />
+                                <div className="absolute top-4 left-0 h-0.5 bg-primary/20 transition-all duration-1000" style={{ width: roadmapProgressWidth }} />
 
                                 <div className="grid grid-cols-4 gap-4">
                                     {steps.map((step) => (
@@ -1655,6 +2846,22 @@ const UserEventManagement = () => {
                                             )}
                                             <div className="text-[10px] font-bold text-gray-400">ID: #{event.id}</div>
                                         </div>
+
+                                        {selectedPublicPromotions.length > 0 && (
+                                            <div className="mt-6 pt-6 border-t border-gray-100">
+                                                <h4 className="font-bold text-primary uppercase tracking-widest text-[10px] mb-3">Selected Promotions</h4>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {selectedPublicPromotions.map((promotion) => (
+                                                        <span
+                                                            key={promotion}
+                                                            className="px-3 py-1 bg-[#d7a444]/20 text-[#0b2d49] text-[10px] font-black rounded-lg uppercase tracking-wide border border-[#d7a444]/40"
+                                                        >
+                                                            {promotion}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -1775,6 +2982,68 @@ const UserEventManagement = () => {
                                     </button>
                                 </div>
 
+                                {isPublicListing && ticketStats && (
+                                    <>
+                                        <div className="bg-white rounded-4xl p-6 shadow-sm border border-primary/5">
+                                            <div className="flex items-start justify-between gap-4 mb-4">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-primary/45">Ticket Sales</p>
+                                                <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-widest">
+                                                    {conversionProgress.toFixed(0)}% Conversion
+                                                </span>
+                                            </div>
+
+                                            <div className="flex items-end justify-between mb-3">
+                                                <p className="text-4xl font-serif-premium text-[#0b2d49]">
+                                                    {ticketsSoldForKpi}
+                                                    <span className="text-base text-primary/40"> / {totalTicketsForKpi}</span>
+                                                </p>
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-primary/45">{ticketsRemainingForKpi} to go</p>
+                                            </div>
+
+                                            <div className="w-full h-2 rounded-full bg-surface overflow-hidden">
+                                                <div
+                                                    className="h-full bg-primary rounded-full transition-all"
+                                                    style={{ width: `${conversionProgress}%` }}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                            <div className="bg-white rounded-4xl p-6 shadow-sm border border-primary/5">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-2">Revenue</p>
+                                                <p className="text-3xl font-serif-premium text-[#0b2d49]">₹{formatInr(grossRevenueInr)}</p>
+                                                <p className="mt-2 text-[10px] font-bold text-primary/45">Gross Income</p>
+                                            </div>
+
+                                            <div className="bg-white rounded-4xl p-6 shadow-sm border border-primary/5">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-2">Net P&L</p>
+                                                <p className={`text-3xl font-serif-premium ${netPnlInr >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                    {formatInrWithSign(netPnlInr)}
+                                                </p>
+                                                <p className="mt-2 text-[10px] font-bold text-primary/45">After ₹{formatInr(totalFeesInr)} fees</p>
+                                            </div>
+
+                                            <div className="bg-white rounded-4xl p-6 shadow-sm border border-primary/5">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-2">Revenue Received</p>
+                                                <p className={`text-3xl font-serif-premium ${generatedRevenuePayoutTone}`}>
+                                                    {generatedRevenuePayoutStatus === 'SUCCESS' && generatedRevenuePayoutAmountInr > 0
+                                                        ? `₹${formatInr(generatedRevenuePayoutAmountInr)}`
+                                                        : '—'}
+                                                </p>
+                                                <p className="mt-2 text-[10px] font-bold text-primary/45">
+                                                    {generatedRevenuePayoutStatus === 'SUCCESS'
+                                                        ? `${generatedRevenuePayoutMode || 'DEMO'}${generatedRevenuePayoutPaidAtLabel ? ` • ${generatedRevenuePayoutPaidAtLabel}` : ''}`
+                                                        : (generatedRevenuePayoutStatus === 'FAILED'
+                                                            ? 'Payout failed. Contact support.'
+                                                            : (generatedRevenuePayoutStatus === 'PENDING'
+                                                                ? 'Manager will release this payout soon.'
+                                                                : 'Not released yet'))}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
                                 {isPromote ? (
                                     <div className="bg-white rounded-4xl p-8 shadow-sm border border-primary/5">
                                         <h3 className="text-sm font-serif-premium text-primary mb-6">Promotion Assets</h3>
@@ -1807,19 +3076,120 @@ const UserEventManagement = () => {
                                     </div>
                                 ) : (
                                     <div className="bg-white rounded-4xl p-8 shadow-sm border border-primary/5">
-                                        <h3 className="text-sm font-serif-premium text-primary mb-6">Services & Vendors</h3>
+                                        <div className="flex items-start justify-between gap-4 mb-6">
+                                            <h3 className="text-sm font-serif-premium text-primary">Services & Vendors</h3>
+                                            {canEditServicesUI && (
+                                                <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-surface text-primary border-primary/10">
+                                                    {canDirectServiceEdit ? 'Editable' : 'Change Request Mode'}
+                                                </span>
+                                            )}
+                                        </div>
 
-                                        {selectedServices.length === 0 ? (
+                                        {canEditServicesUI && (
+                                            <div className="mb-6 rounded-2xl border border-primary/10 bg-surface p-4 space-y-3">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-primary/50">
+                                                    {canDirectServiceEdit
+                                                        ? 'Add or remove services. Bill preview updates instantly.'
+                                                        : 'Direct edits are locked. Submit a managed change request.'}
+                                                </p>
+                                                <div className="flex flex-col sm:flex-row gap-2">
+                                                    <select
+                                                        value={pendingServiceToAdd}
+                                                        onChange={(e) => setPendingServiceToAdd(e.target.value)}
+                                                        disabled={serviceChangeSubmitting || selectableServiceOptions.length === 0}
+                                                        className="flex-1 rounded-xl border border-primary/15 bg-white px-3 py-2 text-xs font-bold text-primary"
+                                                    >
+                                                        <option value="">Select service to add</option>
+                                                        {selectableServiceOptions.map((option) => (
+                                                            <option key={option} value={option}>{option}</option>
+                                                        ))}
+                                                    </select>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleAddServiceToDraft}
+                                                        disabled={!pendingServiceToAdd || serviceChangeSubmitting || selectableServiceOptions.length === 0}
+                                                        className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-primary text-white hover:opacity-95 disabled:opacity-60"
+                                                    >
+                                                        Add Service
+                                                    </button>
+                                                </div>
+
+                                                {canSubmitServiceChangeRequest && serviceDraftChanged && (
+                                                    <textarea
+                                                        value={serviceChangeReason}
+                                                        onChange={(e) => setServiceChangeReason(e.target.value)}
+                                                        placeholder="Tell us why this post-confirmation change is needed"
+                                                        rows={2}
+                                                        className="w-full rounded-xl border border-primary/15 bg-white px-3 py-2 text-xs font-medium text-primary"
+                                                    />
+                                                )}
+
+                                                {serviceDraftChanged && (
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleSubmitServiceChanges}
+                                                            disabled={serviceChangeSubmitting}
+                                                            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-primary text-white hover:opacity-95 disabled:opacity-60"
+                                                        >
+                                                            {serviceChangeSubmitting
+                                                                ? 'Submitting…'
+                                                                : (canDirectServiceEdit ? 'Save Service Changes' : 'Submit Change Request')}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setServiceDraft(selectedServices)}
+                                                            disabled={serviceChangeSubmitting}
+                                                            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-primary/20 text-primary bg-white hover:bg-surface disabled:opacity-60"
+                                                        >
+                                                            Revert Draft
+                                                        </button>
+                                                        {(addedDraftServices.length > 0 || removedDraftServices.length > 0) && (
+                                                            <p className="text-[10px] font-bold text-primary/60">
+                                                                Added: {addedDraftServices.length} • Removed: {removedDraftServices.length}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {selectedServicesDraft.length === 0 ? (
                                             <div className="bg-surface rounded-xl p-6 text-sm text-[#0b2d49]/70">
                                                 No services selected yet.
                                             </div>
                                         ) : (
                                             <div className="space-y-3">
-                                                {selectedServices.map((serviceName, i) => {
+                                                {selectedServicesDraft.map((serviceName, i) => {
                                                     const key = String(serviceName || '').trim();
-                                                    const vendor = vendorByService.get(key);
-                                                    const vendorSel = vendorSelectionByService.get(key);
-                                                    const optedServiceName = String(vendorSel?.service || vendor?.service || key || '').trim() || 'Service';
+                                                    const serviceKey = toServiceKey(key);
+                                                    const vendor = vendorByService.get(serviceKey);
+                                                    const vendorSel = vendorSelectionByService.get(serviceKey);
+                                                    const vendorAuthId = String(vendorSel?.vendorAuthId || vendor?.vendorAuthId || '').trim() || null;
+                                                    const vendorProfile = vendorAuthId
+                                                        ? vendorProfileByAuthId.get(String(vendorAuthId).toLowerCase())
+                                                        : null;
+                                                    const selectedServiceId = (() => {
+                                                        const raw = vendorSel?.serviceId || vendor?.serviceId || null;
+                                                        const s = raw != null ? String(raw).trim() : '';
+                                                        return s || null;
+                                                    })();
+                                                    const isVenueService = serviceKey === 'venue';
+                                                    const optedServiceName = String(
+                                                        vendorSel?.serviceName
+                                                        || vendorSel?.name
+                                                        || vendorSel?.service
+                                                        || vendor?.serviceName
+                                                        || key
+                                                        || ''
+                                                    ).trim() || 'Service';
+                                                    const optedLocation = String(
+                                                        vendorSel?.serviceLocation
+                                                        || vendorSel?.location
+                                                        || vendorProfile?.location?.name
+                                                        || vendorProfile?.place
+                                                        || ''
+                                                    ).trim();
                                                     const servicePriceMinRaw = Number(vendorSel?.servicePrice?.min ?? vendor?.servicePrice?.min ?? 0);
                                                     const servicePriceMaxRaw = Number(vendorSel?.servicePrice?.max ?? vendor?.servicePrice?.max ?? 0);
                                                     const servicePriceMin = Number.isFinite(servicePriceMinRaw) && servicePriceMinRaw > 0
@@ -1829,27 +3199,217 @@ const UserEventManagement = () => {
                                                         ? servicePriceMaxRaw
                                                         : (servicePriceMin > 0 ? Math.ceil(servicePriceMin * 1.5) : 0);
                                                     const hasQuotedPrice = servicePriceMin > 0 || servicePriceMax > 0;
-                                                    const vendorStatusRaw = vendorSel?.status || (vendor?.vendorAuthId ? 'ACCEPTED' : 'YET_TO_SELECT');
-                                                    const vendorStatus = toVendorStatus(vendorStatusRaw);
-                                                    const vendorAuthId = vendorSel?.vendorAuthId || vendor?.vendorAuthId || null;
+                                                    const hasSelectedVendor = Boolean(vendorAuthId);
+                                                    const vendorStatusRaw = vendorSel?.status || 'YET_TO_SELECT';
+                                                    const vendorStatus = toVendorStatus(vendorStatusRaw, hasSelectedVendor);
+                                                    const vendorDisplayName = vendorAuthId
+                                                        ? (vendorProfile?.businessName || `${String(vendorAuthId).slice(0, 10)}…`)
+                                                        : 'Not selected';
+                                                    const persistedInSelection = selectedServices.some((s) => toServiceKey(s) === serviceKey);
+                                                    const canOpenPicker = Boolean(planningEventId) && persistedInSelection;
+                                                    const pickerState = serviceAlternativesByKey?.[serviceKey] || null;
+                                                    const pickerOpen = expandedServicePickerKey === serviceKey;
+                                                    const pickerTitle = isVenueService
+                                                        ? (hasSelectedVendor ? 'Change Service' : 'View Services')
+                                                        : (hasSelectedVendor ? 'Change Vendor' : 'View Vendors');
+                                                    const pickerHelp = !persistedInSelection
+                                                        ? 'Save service changes first to select vendor options.'
+                                                        : null;
+
+                                                    const getLocationLabel = (value) => {
+                                                        if (!value) return '';
+                                                        if (typeof value === 'string') return value;
+                                                        if (typeof value === 'object' && typeof value?.name === 'string') return value.name;
+                                                        return '';
+                                                    };
 
                                                     return (
-                                                        <div key={`${key}-${i}`} className="flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-primary/20 hover:bg-surface/50 transition-all">
-                                                            <div>
-                                                                <p className="text-xs font-bold text-[#0b2d49]">{key || 'Service'}</p>
-                                                                <p className="text-[9px] font-bold text-primary/55 uppercase tracking-widest">
-                                                                    Opted: {optedServiceName}
-                                                                </p>
-                                                                <p className="text-[9px] font-bold text-secondary uppercase tracking-widest">
-                                                                    Price: {hasQuotedPrice ? `₹${formatInr(servicePriceMin)} - ₹${formatInr(servicePriceMax)}` : 'Not quoted yet'}
-                                                                </p>
-                                                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
-                                                                    Vendor: {vendorAuthId ? String(vendorAuthId).slice(0, 10) + '…' : 'Not selected'}
-                                                                </p>
+                                                        <div key={`${key}-${i}`} className="p-4 rounded-2xl border border-gray-100 hover:border-primary/20 hover:bg-surface/50 transition-all">
+                                                            <div className="flex items-center justify-between gap-3">
+                                                                <div>
+                                                                    <p className="text-xs font-bold text-[#0b2d49]">{key || 'Service'}</p>
+                                                                    <p className="text-[9px] font-bold text-primary/55 uppercase tracking-widest">
+                                                                        Opted: {optedServiceName}
+                                                                    </p>
+                                                                    {isVenueService && optedLocation && (
+                                                                        <p className="text-[9px] font-bold text-primary/45 uppercase tracking-widest">
+                                                                            Location: {optedLocation}
+                                                                        </p>
+                                                                    )}
+                                                                    <p className="text-[9px] font-bold text-secondary uppercase tracking-widest">
+                                                                        Price: {hasQuotedPrice ? `₹${formatInr(servicePriceMin)} - ₹${formatInr(servicePriceMax)}` : 'Not quoted yet'}
+                                                                    </p>
+                                                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                                                                        Vendor: {vendorDisplayName}
+                                                                    </p>
+                                                                </div>
+                                                                <div className="flex items-center gap-2 flex-wrap justify-end">
+                                                                    {vendorStatus.key !== 'accepted' && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => toggleServiceVendorPicker(key)}
+                                                                            disabled={!canOpenPicker || serviceChangeSubmitting}
+                                                                            className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border border-primary/20 bg-white text-primary hover:bg-surface disabled:opacity-60"
+                                                                        >
+                                                                            {pickerOpen ? 'Hide Options' : pickerTitle}
+                                                                        </button>
+                                                                    )}
+                                                                    {canEditServicesUI && selectedServicesDraft.length > 1 && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleRemoveServiceFromDraft(key)}
+                                                                            disabled={serviceChangeSubmitting}
+                                                                            className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 disabled:opacity-60"
+                                                                        >
+                                                                            Remove
+                                                                        </button>
+                                                                    )}
+                                                                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${vendorStatus.badge}`}>
+                                                                        {vendorStatus.label}
+                                                                    </span>
+                                                                </div>
                                                             </div>
-                                                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${vendorStatus.badge}`}>
-                                                                {vendorStatus.label}
-                                                            </span>
+
+                                                            {pickerHelp && (
+                                                                <p className="mt-2 text-[10px] font-bold text-primary/50">{pickerHelp}</p>
+                                                            )}
+
+                                                            {vendorStatus.key !== 'accepted' && pickerOpen && canOpenPicker && (
+                                                                <div className="mt-3 rounded-2xl border border-primary/10 bg-white p-3 space-y-3">
+                                                                    {pickerState?.status === 'loading' && (
+                                                                        <p className="text-xs font-medium text-primary/70">Loading options...</p>
+                                                                    )}
+
+                                                                    {pickerState?.status === 'failed' && (
+                                                                        <div className="space-y-2">
+                                                                            <p className="text-xs font-bold text-rose-600">{pickerState?.error || 'Failed to load options'}</p>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => fetchServiceAlternatives(key)}
+                                                                                className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border border-primary/20 bg-white text-primary hover:bg-surface"
+                                                                            >
+                                                                                Retry
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {(!pickerState || pickerState?.status === 'succeeded') && (
+                                                                        <>
+                                                                            {Array.isArray(pickerState?.alternatives) && pickerState.alternatives.length > 0 ? (
+                                                                                <div className="space-y-2">
+                                                                                    {pickerState.alternatives.map((alt, altIndex) => {
+                                                                                        const optionVendorAuthId = String(alt?.vendorAuthId || '').trim();
+                                                                                        const optionServiceId = alt?.serviceId != null ? String(alt.serviceId).trim() : null;
+                                                                                        const optionVendorProfile = optionVendorAuthId
+                                                                                            ? vendorProfileByAuthId.get(optionVendorAuthId.toLowerCase())
+                                                                                            : null;
+
+                                                                                        const vendorTitle = isVenueService
+                                                                                            ? String(alt?.name || 'Venue Service').trim()
+                                                                                            : String(alt?.businessName || optionVendorProfile?.businessName || 'Vendor').trim();
+                                                                                        const vendorSubtitle = isVenueService
+                                                                                            ? String(alt?.businessName || optionVendorProfile?.businessName || '').trim()
+                                                                                            : '';
+                                                                                        const optionLocation = getLocationLabel(alt?.location)
+                                                                                            || String(optionVendorProfile?.location?.name || optionVendorProfile?.place || '').trim();
+
+                                                                                        const optionRows = !isVenueService && Array.isArray(alt?.services) && alt.services.length > 0
+                                                                                            ? alt.services.map((svc, svcIndex) => ({
+                                                                                                id: (() => {
+                                                                                                    const rawId = svc?.serviceId ?? svc?.id ?? svc?._id ?? null;
+                                                                                                    const id = rawId != null ? String(rawId).trim() : '';
+                                                                                                    return id || null;
+                                                                                                })(),
+                                                                                                title: String(svc?.tier || svc?.name || `Option ${svcIndex + 1}`).trim(),
+                                                                                                caption: svc?.name && svc?.tier ? String(svc.name).trim() : '',
+                                                                                                price: Number(svc?.price || 0),
+                                                                                            }))
+                                                                                            : [{
+                                                                                                id: optionServiceId,
+                                                                                                title: String(alt?.tier || alt?.name || 'Select Vendor').trim(),
+                                                                                                caption: '',
+                                                                                                price: Number(alt?.price || 0),
+                                                                                            }];
+
+                                                                                        return (
+                                                                                            <div key={`${serviceKey}:${optionVendorAuthId || 'none'}:${optionServiceId || altIndex}`} className="rounded-xl border border-primary/10 p-3 bg-surface/30">
+                                                                                                <div className="flex items-start justify-between gap-3">
+                                                                                                    <div>
+                                                                                                        <p className="text-xs font-bold text-[#0b2d49]">{vendorTitle || 'Vendor'}</p>
+                                                                                                        {vendorAuthId && vendorAuthId === optionVendorAuthId && !selectedServiceId && !isVenueService && (
+                                                                                                            <p className="text-[9px] font-bold text-primary/55 uppercase tracking-widest">Selected Vendor</p>
+                                                                                                        )}
+                                                                                                        {vendorSubtitle && (
+                                                                                                            <p className="text-[9px] font-bold text-primary/50 uppercase tracking-widest">{vendorSubtitle}</p>
+                                                                                                        )}
+                                                                                                        {optionLocation && (
+                                                                                                            <p className="text-[9px] font-bold text-primary/45 uppercase tracking-widest">{optionLocation}</p>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                </div>
+
+                                                                                                <div className="mt-2 space-y-1.5">
+                                                                                                    {optionRows.map((row, rowIndex) => {
+                                                                                                        const rowServiceId = row?.id ? String(row.id).trim() : null;
+                                                                                                        const selectionKey = `${key}:${optionVendorAuthId}:${rowServiceId || ''}`;
+                                                                                                        const isSelecting = servicePickerSelectKey === selectionKey;
+                                                                                                        const backendSelected = Boolean(vendorAuthId)
+                                                                                                            && vendorAuthId === optionVendorAuthId
+                                                                                                            && Boolean(selectedServiceId)
+                                                                                                            && Boolean(rowServiceId)
+                                                                                                            && selectedServiceId === rowServiceId;
+                                                                                                        const localLock = servicePanelLockByService?.[serviceKey] || null;
+                                                                                                        const localSelected = Boolean(localLock?.vendorAuthId)
+                                                                                                            && localLock.vendorAuthId === optionVendorAuthId
+                                                                                                            && Boolean(localLock?.serviceId)
+                                                                                                            && Boolean(rowServiceId)
+                                                                                                            && localLock.serviceId === rowServiceId;
+                                                                                                        const isSelected = backendSelected || localSelected;
+
+                                                                                                        return (
+                                                                                                            <div key={`${selectionKey}:${rowIndex}`} className="flex items-center justify-between gap-3 rounded-lg border border-white bg-white px-3 py-2">
+                                                                                                                <div>
+                                                                                                                    <p className="text-[11px] font-bold text-primary">{row?.title || 'Service Option'}</p>
+                                                                                                                    {row?.caption && (
+                                                                                                                        <p className="text-[9px] font-bold text-primary/50 uppercase tracking-widest">{row.caption}</p>
+                                                                                                                    )}
+                                                                                                                    <p className="text-[10px] font-bold text-secondary uppercase tracking-widest">
+                                                                                                                        {formatMoneyRangeFromBasePrice(row?.price, {
+                                                                                                                            serviceLabel: key,
+                                                                                                                            guestCount: pricingDemand?.attendeeCount,
+                                                                                                                            dayCount: pricingDemand?.dayCount,
+                                                                                                                        })}
+                                                                                                                    </p>
+                                                                                                                </div>
+                                                                                                                <button
+                                                                                                                    type="button"
+                                                                                                                    onClick={() => selectVendorForService({
+                                                                                                                        serviceLabel: key,
+                                                                                                                        vendorAuthId: optionVendorAuthId,
+                                                                                                                        serviceId: rowServiceId,
+                                                                                                                        price: row?.price,
+                                                                                                                        selectionScope: 'service-panel',
+                                                                                                                    })}
+                                                                                                                    disabled={!optionVendorAuthId || isSelecting || isSelected}
+                                                                                                                    className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest bg-primary text-white hover:opacity-95 disabled:opacity-60"
+                                                                                                                >
+                                                                                                                    {isSelecting ? 'Locking…' : (isSelected ? 'Locked' : 'Select')}
+                                                                                                                </button>
+                                                                                                            </div>
+                                                                                                        );
+                                                                                                    })}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        );
+                                                                                    })}
+                                                                                </div>
+                                                                            ) : (
+                                                                                <p className="text-xs font-medium text-primary/70">No options found for this date and service.</p>
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     );
                                                 })}
@@ -1859,6 +3419,135 @@ const UserEventManagement = () => {
                                 )}
                             </div>
                         </div>
+                    </div>
+                )}
+
+                {activeTab === "billing" && (
+                    <div className="space-y-8 animate-fade-in-up">
+                        {!canShowBillingDetails ? (
+                            <div className="bg-white rounded-4xl p-10 shadow-sm border border-primary/5">
+                                <h2 className="text-xl font-serif-premium text-[#0b2d49] mb-2">Bills & Payment</h2>
+                                <p className="text-xs text-primary/60">
+                                    Billing details are available once this event reaches <span className="font-bold">CONFIRMED</span> status.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="bg-white rounded-4xl p-10 shadow-sm border border-primary/5">
+                                <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-2">Billing Overview</p>
+                                        <h2 className="text-xl font-serif-premium text-[#0b2d49] mb-1">
+                                            {isUserCompletedStatus
+                                                ? (remainingPaymentPaid ? 'Final Settlement Summary' : 'Final Settlement')
+                                                : 'Payment Snapshot'}
+                                        </h2>
+                                        <p className="text-xs text-primary/60">
+                                            {isUserCompletedStatus
+                                                ? (remainingPaymentPaid
+                                                    ? 'All captured payments and final dues for this event.'
+                                                    : 'Event is completed. Pay remaining dues to finish vendor settlement.')
+                                                : 'Event is confirmed. Track paid milestones and outstanding amount for this event.'}
+                                        </p>
+                                    </div>
+
+                                    {isUserCompletedStatus && !remainingPaymentPaid && (
+                                        <button
+                                            onClick={handlePayRemainingAmount}
+                                            disabled={remainingFlowActive || remainingDuePaise <= 0}
+                                            className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${
+                                                (remainingFlowActive || remainingDuePaise <= 0)
+                                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                    : 'bg-primary text-white hover:opacity-95'
+                                            }`}
+                                        >
+                                            {remainingFlowActive
+                                                ? 'Processing…'
+                                                : `Pay Remaining (${formatMoneyFromPaise(remainingDuePaise)})`}
+                                        </button>
+                                    )}
+                                </div>
+
+                                {isUserCompletedStatus && !remainingPaymentPaid && remainingFlowError && (
+                                    <div className="mt-6 text-[11px] font-bold text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+                                        {remainingFlowError}
+                                    </div>
+                                )}
+
+                                <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-surface rounded-2xl p-4 border border-primary/10">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-1">Total Amount</p>
+                                        <p className="text-lg font-black text-[#0b2d49]">{formatMoneyFromPaise(quoteDisplay.grandTotalPaise)}</p>
+                                    </div>
+                                    <div className="bg-surface rounded-2xl p-4 border border-primary/10">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-1">Total Paid</p>
+                                        <p className="text-lg font-black text-[#0b2d49]">{formatMoneyFromPaise(paidMilestonesTotalPaise)}</p>
+                                    </div>
+                                    <div className="bg-surface rounded-2xl p-4 border border-primary/10">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary/45 mb-1">Outstanding Due</p>
+                                        <p className="text-lg font-black text-primary">{formatMoneyFromPaise(outstandingDuePaise)}</p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                    <div className="bg-surface rounded-2xl border border-primary/10 overflow-hidden">
+                                        <div className="px-4 py-3 bg-white border-b border-primary/10 text-[10px] font-black uppercase tracking-widest text-primary/45">
+                                            Price Breakdown
+                                        </div>
+                                        {quoteDisplay.lineItems.length > 0 ? (
+                                            <div className="divide-y divide-primary/10">
+                                                {quoteDisplay.lineItems.map((item) => (
+                                                    <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3 text-xs">
+                                                        <div className="min-w-0">
+                                                            <p className="font-bold text-[#0b2d49] truncate">{item.serviceName}</p>
+                                                            <p className="text-primary/60 truncate">{item.businessName}</p>
+                                                        </div>
+                                                        <p className="font-black text-[#0b2d49] shrink-0">{formatMoneyFromPaise(item.amountPaise)}</p>
+                                                    </div>
+                                                ))}
+                                                {quoteDisplay.promotions.map((promotion) => (
+                                                    <div key={promotion.id} className="flex items-center justify-between gap-3 px-4 py-3 text-xs">
+                                                        <p className="font-bold text-[#0b2d49]">Promotion: {promotion.name}</p>
+                                                        <p className="font-black text-[#0b2d49]">{formatMoneyFromPaise(promotion.feePaise)}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="px-4 py-4 text-xs text-primary/60">Price details are being prepared.</div>
+                                        )}
+                                    </div>
+
+                                    <div className="bg-surface rounded-2xl border border-primary/10 overflow-hidden">
+                                        <div className="px-4 py-3 bg-white border-b border-primary/10 text-[10px] font-black uppercase tracking-widest text-primary/45">
+                                            Paid Breakdown
+                                        </div>
+                                        <div className="divide-y divide-primary/10 text-xs">
+                                            <div className="flex items-center justify-between px-4 py-3">
+                                                <p className="font-bold text-[#0b2d49]">Deposit Fee</p>
+                                                <p className="font-black text-[#0b2d49]">{formatMoneyFromPaise(depositPaidAmountPaise)}</p>
+                                            </div>
+                                            <div className="flex items-center justify-between px-4 py-3">
+                                                <p className="font-bold text-[#0b2d49]">Vendor Confirmation</p>
+                                                <p className="font-black text-[#0b2d49]">{formatMoneyFromPaise(vendorConfirmationPaidAmountPaise)}</p>
+                                            </div>
+                                            <div className="flex items-center justify-between px-4 py-3">
+                                                <p className="font-bold text-[#0b2d49]">Remaining Payment</p>
+                                                <p className="font-black text-[#0b2d49]">{formatMoneyFromPaise(remainingPaymentPaidAmountPaise)}</p>
+                                            </div>
+                                            <div className="flex items-center justify-between px-4 py-3 bg-white/70">
+                                                <p className="font-black text-[#0b2d49]">Total Paid</p>
+                                                <p className="font-black text-primary">{formatMoneyFromPaise(paidMilestonesTotalPaise)}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {isConfirmedStatus && (
+                                    <div className="mt-6 text-[11px] font-bold text-primary bg-surface border border-primary/10 rounded-xl px-4 py-3">
+                                        Remaining payment is shown now and will be payable once this event reaches completed status.
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -2034,6 +3723,6 @@ const UserEventManagement = () => {
             </main>
         </div>
     );
-};
+    };
 
 export default UserEventManagement;

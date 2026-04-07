@@ -37,15 +37,30 @@ export const StaffUnreadProvider = ({ children }) => {
 
   const [activeConversationAuthId, setActiveConversationAuthId] = useState('');
   const [unreadByAuthId, setUnreadByAuthId] = useState({});
+  const [groupKeyByAuthId, setGroupKeyByAuthId] = useState({});
 
   const refreshUnreadCounts = useMemo(() => async () => {
     if (!accessToken || !currentUserId) {
       setUnreadByAuthId({});
+      setGroupKeyByAuthId({});
       return;
     }
 
     try {
       const groups = await fetchStaffChatContacts({ dispatch, refreshAction: refreshAccessToken });
+      const authToGroup = {};
+      for (const group of (Array.isArray(groups) ? groups : [])) {
+        const key = String(group?.key || '').trim();
+        if (!key) continue;
+
+        for (const contact of (Array.isArray(group?.contacts) ? group.contacts : [])) {
+          const authId = String(contact?.authId || '').trim();
+          if (!authId || authToGroup[authId]) continue;
+          authToGroup[authId] = key;
+        }
+      }
+      setGroupKeyByAuthId(authToGroup);
+
       const contactAuthIds = Array.from(
         new Set(
           (Array.isArray(groups) ? groups : [])
@@ -60,7 +75,7 @@ export const StaffUnreadProvider = ({ children }) => {
         return;
       }
 
-      const entries = await Promise.all(
+      const settled = await Promise.allSettled(
         contactAuthIds.map(async (authId) => {
           if (authId === activeConversationAuthId) return [authId, 0];
 
@@ -93,6 +108,11 @@ export const StaffUnreadProvider = ({ children }) => {
         })
       );
 
+      const entries = settled.map((result, idx) => {
+        if (result.status === 'fulfilled') return result.value;
+        return [contactAuthIds[idx], 0];
+      });
+
       setUnreadByAuthId(Object.fromEntries(entries));
     } catch {
       // Keep previous unread counts on transient network failures.
@@ -124,11 +144,12 @@ export const StaffUnreadProvider = ({ children }) => {
 
     return {
       unreadByAuthId,
+      groupKeyByAuthId,
       totalUnreadCount,
       setActiveConversationAuthId,
       refreshUnreadCounts,
     };
-  }, [refreshUnreadCounts, unreadByAuthId]);
+  }, [groupKeyByAuthId, refreshUnreadCounts, unreadByAuthId]);
 
   return <StaffUnreadContext.Provider value={value}>{children}</StaffUnreadContext.Provider>;
 };

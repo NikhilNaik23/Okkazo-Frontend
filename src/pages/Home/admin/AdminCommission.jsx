@@ -70,6 +70,12 @@ const isValidMultiplier = (value) => {
   return Number.isFinite(n) && n > 0;
 };
 
+const isValidVendorHikeRate = (value) => {
+  if (value === "") return false;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 1 && n <= 10;
+};
+
 const toMultiplierMap = (config) => {
   const source = config?.demandPricingMultipliers || config || {};
 
@@ -116,19 +122,26 @@ const AdminCommission = () => {
 
   const [initialRates, setInitialRates] = useState(() => toRateMap(null));
   const [rates, setRates] = useState(() => toRateMap(null));
+  const [initialVendorHikeRate, setInitialVendorHikeRate] = useState("1.25");
+  const [vendorHikeRate, setVendorHikeRate] = useState("1.25");
   const [initialDemandMultipliers, setInitialDemandMultipliers] = useState(DEFAULT_DEMAND_MULTIPLIERS);
   const [demandMultipliers, setDemandMultipliers] = useState(DEFAULT_DEMAND_MULTIPLIERS);
 
   const hasChanges = useMemo(() => {
+    if (String(vendorHikeRate ?? "") !== String(initialVendorHikeRate ?? "")) return true;
     for (const c of SERVICE_CATEGORIES) {
       if (String(rates[c] ?? "") !== String(initialRates[c] ?? "")) return true;
     }
     return false;
-  }, [rates, initialRates]);
+  }, [rates, initialRates, vendorHikeRate, initialVendorHikeRate]);
 
   const invalidCategories = useMemo(() => {
     return SERVICE_CATEGORIES.filter((c) => !isValidPercent(rates[c]));
   }, [rates]);
+
+  const vendorHikeRateValid = useMemo(() => {
+    return isValidVendorHikeRate(vendorHikeRate);
+  }, [vendorHikeRate]);
 
   const demandValidation = useMemo(() => {
     const normalMinValid = isValidMultiplier(demandMultipliers?.normal?.min);
@@ -163,7 +176,7 @@ const AdminCommission = () => {
   const loadError = commissionError;
 
   const canSaveCommission =
-    hasChanges && invalidCategories.length === 0 && !isLoading && !commissionUpdating;
+    hasChanges && invalidCategories.length === 0 && vendorHikeRateValid && !isLoading && !commissionUpdating;
   const canSaveDemand =
     demandHasChanges && demandValidation.allValid && !isLoading && !demandPricingUpdating;
   const canSaveAny = canSaveCommission || canSaveDemand;
@@ -185,8 +198,11 @@ const AdminCommission = () => {
   useEffect(() => {
     if (!commissionConfig) return;
     const mapped = toRateMap(commissionConfig?.rates ?? commissionConfig);
+    const mappedVendorHikeRate = String(commissionConfig?.vendorHikeRate ?? 1.25);
     setInitialRates(mapped);
     setRates(mapped);
+    setInitialVendorHikeRate(mappedVendorHikeRate);
+    setVendorHikeRate(mappedVendorHikeRate);
   }, [commissionConfig]);
 
   useEffect(() => {
@@ -200,6 +216,7 @@ const AdminCommission = () => {
     setSaveError("");
     setSaveSuccess("");
     setRates(initialRates);
+    setVendorHikeRate(initialVendorHikeRate);
   };
 
   const onResetDemand = () => {
@@ -218,19 +235,32 @@ const AdminCommission = () => {
         return;
       }
 
+      if (!vendorHikeRateValid) {
+        setSaveError("Vendor hike rate must be between 1.00 and 10.00.");
+        return;
+      }
+
       const payloadRates = Object.fromEntries(
         SERVICE_CATEGORIES.map((c) => [c, Number(rates[c])])
       );
 
-      const result = await dispatch(updateCommissionConfig({ rates: payloadRates }));
+      const result = await dispatch(
+        updateCommissionConfig({
+          rates: payloadRates,
+          vendorHikeRate: Number(vendorHikeRate),
+        })
+      );
       if (updateCommissionConfig.rejected.match(result)) {
         setSaveError(result.payload || "Failed to save commission rates");
         return;
       }
 
       const mapped = toRateMap(result.payload?.rates ?? payloadRates);
+      const mappedVendorHikeRate = String(result.payload?.vendorHikeRate ?? vendorHikeRate);
       setInitialRates(mapped);
       setRates(mapped);
+      setInitialVendorHikeRate(mappedVendorHikeRate);
+      setVendorHikeRate(mappedVendorHikeRate);
       setSaveSuccess("Commission rates updated.");
     } catch (e) {
       setSaveError(e?.message || "Failed to save commission rates");
@@ -319,7 +349,7 @@ const AdminCommission = () => {
       <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
         <div className="max-w-4xl">
           <p className="text-[#64748b] text-sm font-medium">
-            Set the commission percentage for each service category. Values must be between 0 and 100.
+            Set the commission percentage for each service category and vendor hike policy. Values must be between 0 and 100.
           </p>
         </div>
 
@@ -383,6 +413,42 @@ const AdminCommission = () => {
           </div>
 
           <div className="overflow-x-auto">
+            <div className="px-6 py-5 border-b border-[#f0f2f5] bg-[#fcfdfe]">
+              <div className="max-w-sm">
+                <label className="text-[11px] font-semibold text-[#64748b] block mb-1">
+                  Vendor Price Hike Rate (x)
+                </label>
+                <div
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border shadow-sm bg-white transition-all ${
+                    vendorHikeRateValid
+                      ? "border-[#f0f2f5] focus-within:ring-2 focus-within:ring-[#28a785]/20 focus-within:border-[#28a785]/30"
+                      : "border-red-200 focus-within:ring-2 focus-within:ring-red-200"
+                  }`}
+                >
+                  <input
+                    inputMode="decimal"
+                    value={vendorHikeRate}
+                    onChange={(e) => {
+                      const next = normalizeMultiplierInput(e.target.value);
+                      setVendorHikeRate(next);
+                    }}
+                    className="w-full bg-transparent text-sm font-semibold text-[#1a1c1e] outline-none placeholder:text-[#cbd5e1]"
+                    placeholder="e.g. 1.25"
+                    aria-label="Vendor hike rate"
+                    disabled={isLoading}
+                  />
+                  <span className="text-xs font-bold text-[#94a3b8]">x</span>
+                </div>
+                {!vendorHikeRateValid && (
+                  <div className="mt-1 text-[11px] font-semibold text-red-600">
+                    Enter a value from 1.00 to 10.00
+                  </div>
+                )}
+                <div className="mt-1 text-[11px] font-medium text-[#94a3b8]">
+                  Vendors can lock up to min budget × this rate.
+                </div>
+              </div>
+            </div>
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-[#fcfdfe] border-b border-[#f1f5f9]">
@@ -443,8 +509,8 @@ const AdminCommission = () => {
 
           <div className="px-6 py-5 border-t border-[#f0f2f5] bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="text-xs font-semibold text-[#94a3b8]">
-              {invalidCategories.length > 0
-                ? "Fix invalid commission values to save."
+              {invalidCategories.length > 0 || !vendorHikeRateValid
+                ? "Fix invalid commission/hike values to save."
                 : hasChanges
                   ? "Unsaved changes."
                   : "All changes saved."}

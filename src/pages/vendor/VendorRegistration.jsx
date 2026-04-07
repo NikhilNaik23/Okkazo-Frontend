@@ -26,6 +26,7 @@ import {
     selectServiceCategories,
     selectServiceCategoriesLoading
 } from "../../store/slices/authSlice";
+import { isDisposableEmail } from "../../utils/emailValidation";
 
 // Components
 import Modal from "../../components/Global/Modal";
@@ -280,6 +281,11 @@ const VendorRegistration = () => {
         e.preventDefault();
         if (!isFormValid()) {
             toast.error("Please fill in all required fields.");
+            return;
+        }
+
+        if (isDisposableEmail(formData.email)) {
+            toast.error('Temporary/disposable emails are not allowed. Please use a valid business email.');
             return;
         }
 

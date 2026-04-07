@@ -1,16 +1,15 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BsXLg, BsCheck2All } from 'react-icons/bs';
 import { Link } from 'react-router-dom';
-import { vendorNotificationsData } from '../../../data/vendorNotificationsData';
+import useNotificationFeed from '../../../hooks/useNotificationFeed';
 
 const VendorNotificationSidebar = ({ isOpen, onClose }) => {
-    // For now using the same mock data, but in real app this would be vendor specific
-    const [notifications, setNotifications] = useState(vendorNotificationsData);
+    const { grouped, markAllRead } = useNotificationFeed({ enabled: isOpen });
+    const notifications = grouped;
 
-    const handleMarkAllRead = () => {
-        const updatedNew = notifications.new.map(n => ({ ...n, unread: false }));
-        setNotifications({ ...notifications, new: updatedNew });
+    const handleMarkAllRead = async () => {
+        await markAllRead();
     };
 
     return (

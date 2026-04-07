@@ -5,6 +5,7 @@ import { BsArrowLeft, BsFileEarmarkPdf, BsDownload, BsCheckCircleFill, BsPersonC
 import { useDispatch, useSelector } from 'react-redux';
 import { io as createSocket } from 'socket.io-client';
 import { refreshAccessToken, selectUser } from '../../../store/slices/authSlice';
+import { fetchWithAuth } from '../../../utils/apiHandler';
 import {
     ensureEventConversation,
     ensureEventDmConversation,
@@ -16,6 +17,20 @@ import {
 import { CHAT_SOCKET_URL } from '../../../utils/chatConfig';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
+const buildApiUrl = (path) => {
+    const normalizedPath = String(path || '').startsWith('/') ? String(path) : `/${String(path || '')}`;
+    const base = String(API_BASE_URL || '').trim().replace(/\/$/, '');
+    return base ? `${base}${normalizedPath}` : normalizedPath;
+};
+
+const safeJson = async (response) => {
+    try {
+        return await response.json();
+    } catch {
+        return {};
+    }
+};
 
 const toManagerBadge = (name) => {
     const text = String(name || '').trim();
@@ -29,6 +44,23 @@ const toManagerBadge = (name) => {
     const number = text.match(/(\d+)/);
 
     return number ? `${firstLetter}${number[1]}` : firstLetter;
+};
+
+const normalizeGeneratedRevenuePayout = (rawPayout) => {
+    if (!rawPayout || typeof rawPayout !== 'object') return null;
+
+    const statusRaw = String(rawPayout?.status || '').trim().toUpperCase();
+    const modeRaw = String(rawPayout?.mode || '').trim().toUpperCase();
+    const amountPaiseRaw = Number(rawPayout?.amountPaise || 0);
+
+    return {
+        status: ['PENDING', 'SUCCESS', 'FAILED'].includes(statusRaw) ? statusRaw : null,
+        mode: modeRaw === 'RAZORPAY' ? 'RAZORPAY' : (modeRaw === 'DEMO' ? 'DEMO' : null),
+        amountPaise: Number.isFinite(amountPaiseRaw) && amountPaiseRaw > 0 ? Math.round(amountPaiseRaw) : 0,
+        currency: String(rawPayout?.currency || 'INR').trim().toUpperCase() || 'INR',
+        paidAt: rawPayout?.paidAt || null,
+        transactionRef: rawPayout?.transactionRef || null,
+    };
 };
 
 const EventCommandCenter = () => {
@@ -48,6 +80,9 @@ const EventCommandCenter = () => {
     const socketRef = useRef(null);
     const [socketConnected, setSocketConnected] = useState(false);
     const [socketJoined, setSocketJoined] = useState(false);
+    const [isLoadingCampaign, setIsLoadingCampaign] = useState(true);
+    const [campaignLoadError, setCampaignLoadError] = useState('');
+    const [reloadTick, setReloadTick] = useState(0);
 
     const decodeJwtPayload = (token) => {
         try {
@@ -160,16 +195,17 @@ const EventCommandCenter = () => {
         let cancelled = false;
 
         const load = async () => {
-            const accessToken = localStorage.getItem('accessToken');
-            if (!accessToken) {
-                toast.error('Please log in to view promote event details');
+            setIsLoadingCampaign(true);
+            setCampaignLoadError('');
+            setCampaign(null);
+
+            if (!String(id || '').trim()) {
+                if (!cancelled) {
+                    setCampaignLoadError('Invalid promote event id.');
+                    setIsLoadingCampaign(false);
+                }
                 return;
             }
-
-            const headers = {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${accessToken}`,
-            };
 
             const resolveByRouteId = (arr) => {
                 return (arr || []).find((item) => {
@@ -185,11 +221,14 @@ const EventCommandCenter = () => {
 
             let pr = null;
             try {
-                const listRes = await fetch(`${API_BASE_URL}/api/events/promote/me`, {
+                const listRes = await fetchWithAuth(
+                    buildApiUrl('/api/events/promote/me'),
+                    {
                     method: 'GET',
-                    headers,
-                });
-                const listJson = await listRes.json().catch(() => ({}));
+                    },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+                const listJson = await safeJson(listRes);
                 const promoteList = Array.isArray(listJson?.promotes)
                     ? listJson.promotes
                     : Array.isArray(listJson?.data?.promotes)
@@ -200,27 +239,90 @@ const EventCommandCenter = () => {
                 // Keep fallback below.
             }
 
-            if (!pr) {
-                const singleRes = await fetch(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}`, {
-                    method: 'GET',
-                    headers,
-                });
-                const singleJson = await singleRes.json().catch(() => ({}));
-                if (!singleRes.ok || !singleJson?.success) {
-                    toast.error(singleJson?.message || 'Failed to load promote event');
-                    return;
+            const resolvedEventId = String(pr?.eventId || id || '').trim();
+            if (!resolvedEventId) {
+                if (!cancelled) {
+                    setCampaignLoadError('Invalid promote event id.');
+                    setIsLoadingCampaign(false);
                 }
-                pr = singleJson?.data || null;
+                return;
+            }
+
+            const singleRes = await fetchWithAuth(
+                buildApiUrl(`/api/events/promote/${encodeURIComponent(resolvedEventId)}`),
+                {
+                    method: 'GET',
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+            const singleJson = await safeJson(singleRes);
+            if (singleRes.ok && singleJson?.success && singleJson?.data) {
+                pr = singleJson.data;
+            } else if (!pr) {
+                if (!cancelled) {
+                    setCampaignLoadError(singleJson?.message || 'Failed to load promote event.');
+                    setIsLoadingCampaign(false);
+                }
+                return;
             }
 
             if (!pr) {
-                toast.error('Promote event not found');
+                const fallbackSingleRes = await fetchWithAuth(
+                    buildApiUrl(`/api/events/promote/${encodeURIComponent(String(id))}`),
+                    {
+                        method: 'GET',
+                    },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+                const fallbackSingleJson = await safeJson(fallbackSingleRes);
+                if (!fallbackSingleRes.ok || !fallbackSingleJson?.success) {
+                    if (!cancelled) {
+                        setCampaignLoadError(fallbackSingleJson?.message || 'Failed to load promote event.');
+                        setIsLoadingCampaign(false);
+                    }
+                    return;
+                }
+                pr = fallbackSingleJson?.data || null;
+            }
+
+            if (!pr) {
+                if (!cancelled) {
+                    setCampaignLoadError('Promote event not found.');
+                    setIsLoadingCampaign(false);
+                }
                 return;
             }
 
             const ticketType = String(pr?.tickets?.ticketType || '').toLowerCase();
             const isFreeEvent = ticketType === 'free';
-            const totalTickets = typeof pr?.tickets?.noOfTickets === 'number' ? pr.tickets.noOfTickets : 0;
+            const ticketSalesStats = pr?.ticketSalesStats && typeof pr.ticketSalesStats === 'object'
+                ? pr.ticketSalesStats
+                : null;
+
+            const fallbackTicketsSold = typeof pr?.ticketAnalytics?.ticketsSold === 'number'
+                ? Math.max(0, pr.ticketAnalytics.ticketsSold)
+                : 0;
+            const fallbackRemainingTickets = typeof pr?.tickets?.noOfTickets === 'number'
+                ? Math.max(0, pr.tickets.noOfTickets)
+                : 0;
+            const fallbackTotalTickets = fallbackRemainingTickets + fallbackTicketsSold;
+
+            const totalTickets = Number.isFinite(Number(ticketSalesStats?.totalTickets))
+                ? Math.max(0, Math.floor(Number(ticketSalesStats.totalTickets)))
+                : fallbackTotalTickets;
+            const ticketsSold = Number.isFinite(Number(ticketSalesStats?.ticketsSold))
+                ? Math.max(0, Math.floor(Number(ticketSalesStats.ticketsSold)))
+                : fallbackTicketsSold;
+            const grossRevenueInr = Number.isFinite(Number(ticketSalesStats?.grossRevenueInr))
+                ? Number(ticketSalesStats.grossRevenueInr)
+                : (typeof pr?.totalAmount === 'number' ? pr.totalAmount : 0);
+            const totalFeesInr = Number.isFinite(Number(ticketSalesStats?.totalFeesInr))
+                ? Number(ticketSalesStats.totalFeesInr)
+                : (typeof pr?.platformFee === 'number' ? pr.platformFee : 0);
+            const netPnlInr = Number.isFinite(Number(ticketSalesStats?.netPnlInr))
+                ? Number(ticketSalesStats.netPnlInr)
+                : (grossRevenueInr - totalFeesInr);
+
             const roadmapState = buildRoadmap(pr);
             const displayStatus = String(pr?.adminDecision?.status || '').toUpperCase() === 'REJECTED'
                 ? 'REJECTED'
@@ -233,16 +335,19 @@ const EventCommandCenter = () => {
                 location: pr?.venue?.locationName || 'Location TBD',
                 date: toDateTimeLabel(pr?.schedule),
                 description: pr?.eventDescription || '',
-                revenue: isFreeEvent ? '-' : (typeof pr?.totalAmount === 'number' ? pr.totalAmount : '-'),
-                cost: typeof pr?.platformFee === 'number' ? pr.platformFee : 0,
-                revenueGenerated: typeof pr?.totalAmount === 'number' ? pr.totalAmount : 0,
-                ticketsSold: typeof pr?.ticketAnalytics?.ticketsSold === 'number' ? pr.ticketAnalytics.ticketsSold : 0,
+                revenue: isFreeEvent ? '-' : grossRevenueInr,
+                cost: totalFeesInr,
+                revenueGenerated: grossRevenueInr,
+                netPnl: netPnlInr,
+                ticketsSold,
                 totalTickets: totalTickets,
                 hasAssignedManager: Boolean(pr?.assignedManagerId),
                 assignedManagerId: pr?.assignedManagerId || null,
                 managerProfile: pr?.managerProfile || null,
                 trackingStatus: roadmapState.trackingStatus,
                 roadmap: roadmapState.steps,
+                ticketSalesStats,
+                generatedRevenuePayout: normalizeGeneratedRevenuePayout(pr?.generatedRevenuePayout),
                 documents: Array.isArray(pr?.authenticityProofs)
                     ? pr.authenticityProofs
                         .filter((p) => p?.url)
@@ -256,14 +361,82 @@ const EventCommandCenter = () => {
                 bannerUrl: pr?.eventBanner?.url || null,
             };
 
-            if (!cancelled) setCampaign(mapped);
+            if (!cancelled) {
+                setCampaign(mapped);
+                setCampaignLoadError('');
+                setIsLoadingCampaign(false);
+            }
         };
 
-        load();
+        const guardedLoad = async () => {
+            try {
+                await load();
+            } catch (error) {
+                if (cancelled) return;
+                const message = error?.message || 'Unable to fetch promote event data.';
+                setCampaignLoadError(message);
+                setIsLoadingCampaign(false);
+                toast.error(message);
+            }
+        };
+
+        guardedLoad();
         return () => {
             cancelled = true;
         };
-    }, [id]);
+    }, [id, dispatch, reloadTick]);
+
+    useEffect(() => {
+        const resolvedEventId = String(campaign?.id || id || '').trim();
+        if (!resolvedEventId) return;
+
+        let cancelled = false;
+        const refreshPayoutState = async () => {
+            try {
+                const res = await fetchWithAuth(
+                    buildApiUrl(`/api/events/promote/${encodeURIComponent(resolvedEventId)}`),
+                    {
+                        method: 'GET',
+                    },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+                const json = await safeJson(res);
+                if (!res.ok || !json?.success || !json?.data || cancelled) return;
+
+                const pr = json.data;
+                const ticketSalesStats = pr?.ticketSalesStats && typeof pr.ticketSalesStats === 'object'
+                    ? pr.ticketSalesStats
+                    : null;
+                const grossRevenueInr = Number.isFinite(Number(ticketSalesStats?.grossRevenueInr))
+                    ? Number(ticketSalesStats.grossRevenueInr)
+                    : (typeof pr?.totalAmount === 'number' ? pr.totalAmount : 0);
+                const totalFeesInr = Number.isFinite(Number(ticketSalesStats?.totalFeesInr))
+                    ? Number(ticketSalesStats.totalFeesInr)
+                    : (typeof pr?.platformFee === 'number' ? pr.platformFee : 0);
+                const netPnlInr = Number.isFinite(Number(ticketSalesStats?.netPnlInr))
+                    ? Number(ticketSalesStats.netPnlInr)
+                    : (grossRevenueInr - totalFeesInr);
+
+                setCampaign((prev) => prev ? {
+                    ...prev,
+                    ticketSalesStats,
+                    revenueGenerated: grossRevenueInr,
+                    cost: totalFeesInr,
+                    netPnl: netPnlInr,
+                    generatedRevenuePayout: normalizeGeneratedRevenuePayout(pr?.generatedRevenuePayout),
+                } : prev);
+            } catch {
+                // Non-blocking polling refresh.
+            }
+        };
+
+        refreshPayoutState();
+        const intervalId = setInterval(refreshPayoutState, 20000);
+        return () => {
+            cancelled = true;
+            clearInterval(intervalId);
+        };
+    }, [campaign?.id, id, dispatch]);
 
     useEffect(() => {
         if (!campaign?.hasAssignedManager) {
@@ -563,7 +736,7 @@ const EventCommandCenter = () => {
         }
     };
 
-    if (!campaign) {
+    if (isLoadingCampaign) {
         return (
             <div className="min-h-screen bg-[#EBF4F6] flex items-center justify-center">
                 <p className="font-serif-premium text-2xl text-[#09637E] italic animate-pulse">Initializing Command Center...</p>
@@ -571,11 +744,57 @@ const EventCommandCenter = () => {
         );
     }
 
+    if (!campaign) {
+        return (
+            <div className="min-h-screen bg-[#EBF4F6] flex items-center justify-center px-6">
+                <div className="max-w-xl text-center">
+                    <p className="font-serif-premium text-3xl text-[#09637E] italic mb-4">Unable to load event data.</p>
+                    <p className="text-sm font-bold uppercase tracking-wider text-[#09637E]/60 mb-8">
+                        {campaignLoadError || 'Please try again in a moment.'}
+                    </p>
+                    <div className="flex items-center justify-center gap-3">
+                        <button
+                            type="button"
+                            onClick={() => setReloadTick((v) => v + 1)}
+                            className="px-6 py-3 rounded-full bg-[#09637E] text-[#EBF4F6] text-[10px] font-black uppercase tracking-widest hover:bg-[#088395] transition-colors"
+                        >
+                            Retry
+                        </button>
+                        <Link
+                            to="/user/my-events"
+                            className="px-6 py-3 rounded-full bg-white border border-[#09637E]/20 text-[#09637E] text-[10px] font-black uppercase tracking-widest hover:bg-[#EBF4F6] transition-colors"
+                        >
+                            Back to My Events
+                        </Link>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     const isFreeEvent = campaign.revenue === '-';
-    const profitLoss = !isFreeEvent ? (campaign.revenueGenerated - campaign.cost) : 0;
+    const profitLoss = !isFreeEvent
+        ? (Number.isFinite(Number(campaign?.netPnl)) ? Number(campaign.netPnl) : (campaign.revenueGenerated - campaign.cost))
+        : 0;
     const soldPercent = campaign.totalTickets > 0
         ? Math.round((campaign.ticketsSold / campaign.totalTickets) * 100)
         : 0;
+    const generatedRevenuePayout = campaign?.generatedRevenuePayout && typeof campaign.generatedRevenuePayout === 'object'
+        ? campaign.generatedRevenuePayout
+        : null;
+    const generatedRevenuePayoutStatus = String(generatedRevenuePayout?.status || '').trim().toUpperCase();
+    const generatedRevenuePayoutAmountInr = Number(generatedRevenuePayout?.amountPaise || 0) / 100;
+    const generatedRevenuePayoutMode = String(generatedRevenuePayout?.mode || '').trim().toUpperCase();
+    const generatedRevenuePayoutPaidAtLabel = generatedRevenuePayout?.paidAt
+        ? new Date(generatedRevenuePayout.paidAt).toLocaleString('en-IN', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+            timeZone: 'Asia/Kolkata',
+        })
+        : null;
+    const generatedRevenuePayoutTone = generatedRevenuePayoutStatus === 'SUCCESS'
+        ? 'text-emerald-600'
+        : (generatedRevenuePayoutStatus === 'FAILED' ? 'text-red-500' : 'text-[#09637E]');
     const hasAssignedManager = Boolean(campaign.hasAssignedManager);
     const managerIsOnline = String(manager?.status || '').toLowerCase() === 'online';
 
@@ -714,7 +933,7 @@ const EventCommandCenter = () => {
                                                     <span className="inline-block px-2 py-1 bg-emerald-50 text-emerald-600 rounded-md text-[9px] font-black uppercase tracking-widest mb-1">
                                                         {soldPercent}% Conversion
                                                     </span>
-                                                    <p className="text-[10px] font-bold text-[#09637E]/60">{campaign.totalTickets - campaign.ticketsSold} to go</p>
+                                                    <p className="text-[10px] font-bold text-[#09637E]/60">{Math.max(0, campaign.totalTickets - campaign.ticketsSold)} to go</p>
                                                 </div>
                                             </div>
                                             {/* Progress Bar */}
@@ -727,7 +946,7 @@ const EventCommandCenter = () => {
                                         </div>
 
                                         {/* Financials Grid */}
-                                        <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                             <div className="bg-white p-6 rounded-[2rem] border border-[#09637E]/5 shadow-sm">
                                                 <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-2 flex items-center gap-2">
                                                     <BsWallet2 /> Revenue
@@ -741,6 +960,24 @@ const EventCommandCenter = () => {
                                                     {profitLoss >= 0 ? '+' : '-'}₹{Math.abs(profitLoss).toLocaleString()}
                                                 </p>
                                                 <p className="text-[8px] font-bold text-[#09637E]/40 mt-1">After {Math.abs(campaign.cost).toLocaleString()} fees</p>
+                                            </div>
+
+                                            <div className="bg-white p-6 rounded-[2rem] border border-[#09637E]/5 shadow-sm">
+                                                <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-2">Revenue Received</p>
+                                                <p className={`text-lg font-bold ${generatedRevenuePayoutTone}`}>
+                                                    {generatedRevenuePayoutStatus === 'SUCCESS' && generatedRevenuePayoutAmountInr > 0
+                                                        ? `₹${generatedRevenuePayoutAmountInr.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+                                                        : '—'}
+                                                </p>
+                                                <p className="text-[8px] font-bold text-[#09637E]/40 mt-1">
+                                                    {generatedRevenuePayoutStatus === 'SUCCESS'
+                                                        ? `${generatedRevenuePayoutMode || 'DEMO'}${generatedRevenuePayoutPaidAtLabel ? ` • ${generatedRevenuePayoutPaidAtLabel}` : ''}`
+                                                        : (generatedRevenuePayoutStatus === 'FAILED'
+                                                            ? 'Payout failed. Contact support.'
+                                                            : (generatedRevenuePayoutStatus === 'PENDING'
+                                                                ? 'Awaiting manager release.'
+                                                                : 'Not released yet.'))}
+                                                </p>
                                             </div>
                                         </div>
                                     </div>

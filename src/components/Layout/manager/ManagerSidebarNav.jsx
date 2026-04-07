@@ -4,8 +4,8 @@ import { managerNavItems, managerFooterItems } from "../../../data/managerData";
 import { motion } from "framer-motion";
 import { useDispatch } from "react-redux";
 import { logout } from "../../../store/slices/authSlice";
-import { notificationsData } from "../../../data/notificationsData";
 import { useStaffUnread } from "../../../context/useStaffUnread";
+import useNotificationFeed from "../../../hooks/useNotificationFeed";
 
 const MotionDiv = motion.div;
 
@@ -86,8 +86,12 @@ const ManagerSidebarNav = ({ onToggleNotifications }) => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { totalUnreadCount: unreadChatCount } = useStaffUnread();
-
-  const hasUnreadNotifications = notificationsData.new.some((n) => n.unread);
+  const { unreadCount } = useNotificationFeed({
+    enabled: true,
+    fetchItems: false,
+    fetchUnread: true,
+  });
+  const hasUnreadNotifications = unreadCount > 0;
 
   const enrichItems = (items) =>
     items.map((item) => ({

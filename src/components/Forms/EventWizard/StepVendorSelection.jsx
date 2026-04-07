@@ -234,6 +234,10 @@ const mapBackendVenueServiceToCard = ({ vendor, service, index = 0, eventLat, ev
     const computedDistance = haversineKm(eventLat, eventLng, serviceLat, serviceLng);
 
     const image = getVenueServicePrimaryImage(details) || pickFallbackImage('Venue', index);
+    const isAvailable = service?.isAvailable !== false;
+    const unavailableReason = !isAvailable
+        ? (service?.unavailableReason || vendor?.unavailableReason || 'CURRENTLY_LOCKED_WITH_ANOTHER_EVENT')
+        : null;
     const locationName =
         details?.locationAreaName ||
         details?.location ||
@@ -283,6 +287,8 @@ const mapBackendVenueServiceToCard = ({ vendor, service, index = 0, eventLat, ev
 
         details,
         services: Array.isArray(vendor?.services) ? vendor.services : [],
+        isAvailable,
+        unavailableReason,
         _raw: vendor,
         _rawService: service,
     };
@@ -367,10 +373,19 @@ const mapBackendVendorToCard = (vendor, category, index = 0, eventLat, eventLng,
     });
     const normalizedBaseMax = Math.max(basePriceMin, basePriceMax);
 
-    const image = services?.[0]?.details?.image || pickFallbackImage(category, index);
+    const serviceImage = services?.[0]?.details?.image || null;
+    const bannerImage = vendor?.banner || vendor?.images?.banner?.fileUrl || null;
+    const profileImage = vendor?.profileImage || vendor?.images?.profile?.fileUrl || null;
+    const image = category === 'Venue'
+        ? (serviceImage || bannerImage || profileImage || pickFallbackImage(category, index))
+        : (bannerImage || profileImage || serviceImage || pickFallbackImage(category, index));
 
     const { lat, lng } = extractLatLng(vendor);
     const computedDistance = haversineKm(eventLat, eventLng, lat, lng);
+    const isAvailable = vendor?.isAvailable !== false;
+    const unavailableReason = !isAvailable
+        ? (vendor?.unavailableReason || 'CURRENTLY_LOCKED_WITH_ANOTHER_EVENT')
+        : null;
 
     return {
         id: vendor?.vendorAuthId || `${category}-${index}`,
@@ -392,6 +407,8 @@ const mapBackendVendorToCard = (vendor, category, index = 0, eventLat, eventLng,
         priceMin: Math.round(basePriceMin * safeMinMultiplier),
         priceMax: Math.round(normalizedBaseMax * safeMaxMultiplier),
         image,
+        banner: bannerImage || profileImage || serviceImage || null,
+        profileImage: profileImage || null,
         location,
         mapsUrl: vendor?.location?.mapsUrl || null,
         categoryId: vendor?.categoryId || null,
@@ -403,6 +420,8 @@ const mapBackendVendorToCard = (vendor, category, index = 0, eventLat, eventLng,
         description: vendor?.description || null,
         services: normalizedServices,
         category,
+        isAvailable,
+        unavailableReason,
         _raw: vendor,
     };
 };
@@ -581,6 +600,41 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     }, [formData?.services, formData?.vendors]);
 
     const selectedVendorForActiveCategory = formData?.vendors?.[activeCategoryRaw] || formData?.vendors?.[activeCategory];
+    const readVendorIdentity = useCallback((value) => {
+        const source = value && typeof value === 'object' ? value : {};
+        const id = String(source?.id || '').trim();
+        const vendorAuthId = String(source?.vendorAuthId || source?.authId || '').trim();
+        const serviceIdRaw = source?.selectedPackage?.serviceId ?? source?.selectedPackage?.id ?? source?.serviceId;
+        const serviceId = serviceIdRaw != null ? String(serviceIdRaw).trim() : '';
+
+        return {
+            id,
+            vendorAuthId,
+            serviceId,
+        };
+    }, []);
+
+    const isVendorCurrentlySelected = useCallback((vendorLike) => {
+        if (!selectedVendorForActiveCategory || !vendorLike) return false;
+
+        const selectedIdentity = readVendorIdentity(selectedVendorForActiveCategory);
+        const candidateIdentity = readVendorIdentity(vendorLike);
+
+        if (selectedIdentity.serviceId && candidateIdentity.serviceId) {
+            return selectedIdentity.serviceId === candidateIdentity.serviceId;
+        }
+
+        if (selectedIdentity.vendorAuthId && candidateIdentity.vendorAuthId) {
+            return selectedIdentity.vendorAuthId === candidateIdentity.vendorAuthId;
+        }
+
+        if (selectedIdentity.id && candidateIdentity.id) {
+            return selectedIdentity.id === candidateIdentity.id;
+        }
+
+        return false;
+    }, [readVendorIdentity, selectedVendorForActiveCategory]);
+
     const hasSelectedVendorForService = useCallback(
         (serviceLabel) => Boolean(formData?.vendors?.[serviceLabel] || formData?.vendors?.[canonicalizeServiceLabel(serviceLabel)]),
         [formData?.vendors]
@@ -599,6 +653,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     const [sortOption, setSortOption] = useState("Recommended");
     const [showPriceFilter, setShowPriceFilter] = useState(false);
     const [priceRange, setPriceRange] = useState({ min: 0, max: 200000 });
+    const [availabilityFilter, setAvailabilityFilter] = useState('showLocked');
     const [showAddServiceDropdown, setShowAddServiceDropdown] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const [demandPricingMultipliers, setDemandPricingMultipliers] = useState(DEFAULT_DEMAND_PRICING_MULTIPLIERS);
@@ -1120,6 +1175,11 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
     }, [absoluteMaxMultiplier, eventId, formData?.vendors, handleChange, persistVendorSelection, priceMultiplier, repriceVendorCard]);
 
     const handleSelectVendorWrapper = async (category, vendor) => {
+        if (vendor?.isAvailable === false) {
+            toast.error('This vendor is currently locked for the selected date.');
+            return;
+        }
+
         // Mark selection in progress so the hydration effect doesn't overwrite
         selectionInProgressRef.current = true;
         if (selectionGuardTimerRef.current) clearTimeout(selectionGuardTimerRef.current);
@@ -1536,10 +1596,8 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                             })
                             : null;
 
-                        const profileImage =
-                            profile?.images?.profile?.fileUrl ||
-                            profile?.images?.banner?.fileUrl ||
-                            null;
+                        const bannerImage = profile?.images?.banner?.fileUrl || null;
+                        const profileImage = profile?.images?.profile?.fileUrl || null;
 
                         const venueDetails = venueService?.details || {};
                         const venueImage =
@@ -1619,6 +1677,10 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                         const baseUnitMin = Math.max(0, Math.round(hydratedUnitMin / safePriceMultiplier));
                         const baseUnitMax = Math.max(0, Math.round(hydratedUnitMax / safeAbsoluteMaxMultiplier));
 
+                        const hydratedImage = normalizedService === 'Venue'
+                            ? (venueImage || current?.image || bannerImage || profileImage || pickFallbackImage(normalizedService, 0))
+                            : (bannerImage || profileImage || current?.image || venueImage || pickFallbackImage(normalizedService, 0));
+
                         nextVendors[key] = {
                             ...current,
                             id: hydratedId,
@@ -1629,8 +1691,11 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                             categoryId: normalizedService === 'Venue' ? 'venues' : (current?.categoryId || null),
                             name: venueService?.name || current?.name || current?.vendorBusinessName || profile?.businessName || 'Selected Vendor',
                             vendorBusinessName: current?.vendorBusinessName || profile?.businessName || current?.name || null,
-                            image: venueImage || current?.image || profileImage || pickFallbackImage(normalizedService, 0),
-                            banner: current?.banner || venueImage || profileImage || null,
+                            image: hydratedImage,
+                            banner: current?.banner || (normalizedService === 'Venue'
+                                ? (venueImage || bannerImage || profileImage || null)
+                                : (bannerImage || profileImage || venueImage || null)),
+                            profileImage: profileImage || current?.profileImage || null,
                             location,
                             mapsUrl:
                                 venueDetails?.locationMapsUrl ||
@@ -1709,6 +1774,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                     priceMax: String(priceRange.max ?? 0),
                     radiusKm: String(DEFAULT_VENDOR_RADIUS_KM),
                     limit: '100',
+                    includeUnavailable: availabilityFilter === 'showLocked' ? 'true' : 'false',
                 });
                 if (searchQuery?.trim()) qs.set('q', searchQuery.trim());
                 appendReservationQueryParams(qs);
@@ -1766,13 +1832,13 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
         return () => {
             if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
         };
-    }, [activeCategory, appendReservationQueryParams, dispatch, eventId, eventLat, eventLng, priceRange.max, priceRange.min, searchQuery, sortOption, stableSetDemandPricingMultipliers, vendorsRefreshKey]);
+    }, [activeCategory, appendReservationQueryParams, availabilityFilter, dispatch, eventId, eventLat, eventLng, priceRange.max, priceRange.min, searchQuery, sortOption, stableSetDemandPricingMultipliers, vendorsRefreshKey]);
 
     const filteredVendors = useMemo(() => {
         const fetched = vendorsByCategory[activeCategory];
 
         // Never fall back to static dummy vendors on the live selection step.
-        // The list should reflect only currently available backend vendors.
+        // The list should reflect the backend vendor set, including unavailable ones.
         let allVendors = Array.isArray(fetched) ? fetched : [];
 
         if (searchQuery) {
@@ -1791,6 +1857,10 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
             const vendorMax = v.priceMax || (v.priceMin * 1.5);
             return v.priceMin <= priceRange.max && vendorMax >= priceRange.min;
         }).map(v => ({ ...v, category: activeCategory }));
+
+        if (availabilityFilter === 'availableOnly') {
+            allVendors = allVendors.filter((v) => v?.isAvailable !== false);
+        }
 
         switch (sortOption) {
             case 'Top Rated':
@@ -1831,11 +1901,19 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
             });
         }
 
+        allVendors = [...allVendors].sort((a, b) => {
+            const aUnavailable = a?.isAvailable === false ? 1 : 0;
+            const bUnavailable = b?.isAvailable === false ? 1 : 0;
+            return aUnavailable - bUnavailable;
+        });
+
         return allVendors;
-    }, [activeCategory, attendeeInfo.attendeeCount, searchQuery, sortOption, priceRange, vendorsByCategory]);
+    }, [activeCategory, attendeeInfo.attendeeCount, availabilityFilter, searchQuery, sortOption, priceRange, vendorsByCategory]);
 
     const totalPages = Math.max(1, Math.ceil(filteredVendors.length / ITEMS_PER_PAGE));
     const paginatedVendors = filteredVendors.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+    const paginatedAvailableVendors = paginatedVendors.filter((v) => v?.isAvailable !== false);
+    const paginatedUnavailableVendors = paginatedVendors.filter((v) => v?.isAvailable === false);
 
     const allServicesSelected = formData.services?.every((service) => hasSelectedVendorForService(service));
     const getVendorLineMin = (v) => {
@@ -1867,7 +1945,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                         vendor={selectedVendorForDetails}
                         onClose={() => setSelectedVendorForDetails(null)}
                         onSelect={(v) => handleSelectVendorWrapper(activeCategoryRaw, v || selectedVendorForDetails)}
-                        isSelected={selectedVendorForActiveCategory?.id === selectedVendorForDetails.id}
+                        isSelected={isVendorCurrentlySelected(selectedVendorForDetails)}
                         priceMultiplier={priceMultiplier}
                         attendeeCount={attendeeInfo.attendeeCount}
                         attendeeLabel={attendeeInfo.attendeeLabel}
@@ -1901,7 +1979,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                                 <span className="not-italic">Experiences</span>
                             </h1>
                             <p className="max-w-xl text-primary/60 text-sm leading-relaxed font-medium">
-                                Explore our handpicked collection of {activeCategory.toLowerCase()}s, each chosen for their unique character, exceptional service, and ability to create unforgettable moments.
+                                Explore our handpicked collection of {activeCategory.toLowerCase()}{activeCategory.toLowerCase() == "catering & drinks"?'':'s'}, each chosen for their unique character, exceptional service, and ability to create unforgettable moments.
                             </p>
                         </div>
 
@@ -2054,6 +2132,27 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                                         ))}
                                     </div>
 
+                                    <div className="shrink-0 flex items-center gap-2 bg-white border border-primary/10 rounded-full p-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setAvailabilityFilter('availableOnly')}
+                                            className={`px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-widest transition-all ${availabilityFilter === 'availableOnly'
+                                                ? 'bg-primary text-white'
+                                                : 'text-primary/60 hover:text-primary hover:bg-primary/5'}`}
+                                        >
+                                            Available Only
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAvailabilityFilter('showLocked')}
+                                            className={`px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-widest transition-all ${availabilityFilter === 'showLocked'
+                                                ? 'bg-primary text-white'
+                                                : 'text-primary/60 hover:text-primary hover:bg-primary/5'}`}
+                                        >
+                                            Show Locked
+                                        </button>
+                                    </div>
+
                                     <div className="relative shrink-0 z-50">
                                         <button
                                             onClick={() => setShowPriceFilter(!showPriceFilter)}
@@ -2118,7 +2217,7 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                         {/* Vendors Grid */}
                         {vendorsLoading ? (
                             <div className="rounded-3xl border border-primary/10 bg-white p-8 text-center text-primary/60 font-semibold">
-                                Loading available vendors...
+                                Loading vendors...
                             </div>
                         ) : vendorsError ? (
                             <div className="rounded-3xl border border-red-200 bg-red-50 p-8 text-center">
@@ -2127,19 +2226,49 @@ const StepVendorSelection = ({ formData, handleNext, handleBack, activeServiceTa
                             </div>
                         ) : paginatedVendors.length === 0 ? (
                             <div className="rounded-3xl border border-primary/10 bg-white p-8 text-center text-primary/70">
-                                No available {activeCategory.toLowerCase()} vendors for this date.
+                                {availabilityFilter === 'availableOnly'
+                                    ? `No available ${activeCategory.toLowerCase()} vendors matched your date and filters.`
+                                    : `No ${activeCategory.toLowerCase()} vendors matched your date and filters.`}
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-                                {paginatedVendors.map(vendor => (
-                                    <VendorCard
-                                        key={vendor.id}
-                                        vendor={vendor}
-                                        isSelected={selectedVendorForActiveCategory?.id === vendor.id}
-                                        onSelect={() => handleSelectVendorWrapper(activeCategoryRaw, vendor)}
-                                        onViewDetails={() => setSelectedVendorForDetails(vendor)}
-                                    />
-                                ))}
+                            <div className="space-y-8">
+                                {paginatedAvailableVendors.length > 0 && (
+                                    <div>
+                                        <div className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-600">Available</div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+                                            {paginatedAvailableVendors.map(vendor => (
+                                                <VendorCard
+                                                    key={vendor.id}
+                                                    vendor={vendor}
+                                                    isSelected={isVendorCurrentlySelected(vendor)}
+                                                    isUnavailable={vendor?.isAvailable === false}
+                                                    unavailableReason={vendor?.unavailableReason}
+                                                    onSelect={() => handleSelectVendorWrapper(activeCategoryRaw, vendor)}
+                                                    onViewDetails={() => setSelectedVendorForDetails(vendor)}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {availabilityFilter === 'showLocked' && paginatedUnavailableVendors.length > 0 && (
+                                    <div>
+                                        <div className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-red-600">Unavailable / Locked</div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+                                            {paginatedUnavailableVendors.map(vendor => (
+                                                <VendorCard
+                                                    key={vendor.id}
+                                                    vendor={vendor}
+                                                    isSelected={isVendorCurrentlySelected(vendor)}
+                                                    isUnavailable={vendor?.isAvailable === false}
+                                                    unavailableReason={vendor?.unavailableReason}
+                                                    onSelect={() => handleSelectVendorWrapper(activeCategoryRaw, vendor)}
+                                                    onViewDetails={() => setSelectedVendorForDetails(vendor)}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 

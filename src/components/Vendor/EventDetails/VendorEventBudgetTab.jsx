@@ -13,26 +13,31 @@ const VendorEventBudgetTab = () => {
     const normalizedStatus = String(event?.status || '').toUpperCase();
     const isReadOnly = normalizedStatus !== 'PENDING';
     const isConfirmed = normalizedStatus === 'CONFIRMED';
+    const showPaymentSummary = (
+        normalizedStatus === 'CONFIRMED'
+        || normalizedStatus === 'VENDOR PAYMENT PENDING'
+        || normalizedStatus === 'CLOSED'
+    );
     const receivedAmount = Math.max(0, Number(event?.amountReceived || 0) || 0);
     const remainingAmount = Math.max(0, (Number(subtotal) || 0) - receivedAmount);
 
-    const eventLedger = Array.isArray(event?.ledger) ? event.ledger : [];
-    const ledgerRows = React.useMemo(() => {
-        let balance = 0;
-        return eventLedger.map((row) => {
-            const signed = Number(row?.signedAmount || 0) || 0;
-            balance += signed;
-            return {
-                id: String(row?.id || ''),
-                dateLabel: row?.dateLabel || '—',
-                description: row?.description || 'Transaction',
-                status: row?.status || '—',
-                type: row?.type || (signed < 0 ? 'Debit' : 'Credit'),
-                signedAmount: signed,
-                balance,
-            };
-        });
-    }, [eventLedger]);
+    const sourceRows = Array.isArray(event?.ledger) ? event.ledger : [];
+    const ledgerRows = sourceRows.map((row, index) => {
+        const signed = Number(row?.signedAmount || 0) || 0;
+        const balance = sourceRows
+            .slice(0, index + 1)
+            .reduce((sum, current) => sum + (Number(current?.signedAmount || 0) || 0), 0);
+        return {
+            id: String(row?.id || ''),
+            dateLabel: row?.dateLabel || '—',
+            description: row?.description || 'Transaction',
+            status: row?.status || '—',
+            type: row?.type || (signed < 0 ? 'Debit' : 'Credit'),
+            signedAmount: signed,
+            balance,
+            payoutMode: row?.payoutMode || null,
+        };
+    });
 
     return (
         <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-700">
@@ -142,9 +147,9 @@ const VendorEventBudgetTab = () => {
                                     Transactions for this event.
                                 </p>
                             </div>
-                            {isConfirmed && (
+                            {showPaymentSummary && (
                                 <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-green-50 text-green-600">
-                                    Confirmed
+                                    {normalizedStatus === 'CLOSED' ? 'Closed' : 'Payment Tracking'}
                                 </span>
                             )}
                         </div>
@@ -162,6 +167,7 @@ const VendorEventBudgetTab = () => {
                                             <th className="px-8 py-6">Description</th>
                                             <th className="px-8 py-6">Status</th>
                                             <th className="px-8 py-6">Type</th>
+                                            <th className="px-8 py-6">Mode</th>
                                             <th className="px-8 py-6 text-right">Amount</th>
                                             <th className="px-8 py-6 text-right">Balance</th>
                                         </tr>
@@ -188,6 +194,11 @@ const VendorEventBudgetTab = () => {
                                                             isDebit ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'
                                                         }`}>
                                                             {isDebit ? 'Debit' : 'Credit'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-8 py-6">
+                                                        <span className="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-600">
+                                                            {String(row?.payoutMode || '—').toUpperCase()}
                                                         </span>
                                                     </td>
                                                     <td className="px-8 py-6 text-right">
@@ -228,7 +239,7 @@ const VendorEventBudgetTab = () => {
                                 <span className="text-[#0b2d49] font-bold">₹{subtotal.toLocaleString()}</span>
                             </div>
 
-                            {isConfirmed && (
+                            {showPaymentSummary && (
                                 <>
                                     <div className="flex justify-between items-center text-sm font-semibold text-[#708aa0] py-4 border-b border-gray-100">
                                         <span>Amount Received</span>

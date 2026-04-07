@@ -41,8 +41,10 @@ const getStatusDisplay = (status) => {
 const AdminVendorVerification = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const ITEMS_PER_PAGE = 12;
     const [searchQuery, setSearchQuery] = useState("");
     const [showApplicationsModal, setShowApplicationsModal] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
 
     const { vendorApplications, loading, error } = useSelector((state) => state.admin);
 
@@ -62,6 +64,23 @@ const AdminVendorVerification = () => {
         );
         return matchesQuery && vendor.status === "APPROVED";
     });
+
+    const totalPages = Math.max(1, Math.ceil(filteredVendors.length / ITEMS_PER_PAGE));
+    const safePage = Math.min(currentPage, totalPages);
+    const paginatedVendors = filteredVendors.slice(
+        (safePage - 1) * ITEMS_PER_PAGE,
+        safePage * ITEMS_PER_PAGE
+    );
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery]);
+
+    useEffect(() => {
+        if (currentPage > totalPages) {
+            setCurrentPage(totalPages);
+        }
+    }, [currentPage, totalPages]);
 
     // Filter pending/reviewing applications for modal
     const pendingApplications = vendorApplications.filter(v => 
@@ -135,14 +154,15 @@ const AdminVendorVerification = () => {
                     </button>
                 </div>
             ) : (
+            <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {filteredVendors.length > 0 ? (
-                    filteredVendors.map((vendor) => (
+                    paginatedVendors.map((vendor) => (
                     <div 
                         key={vendor.applicationId}
-                        className="bg-white rounded-[2rem] border border-[#708aa0]/10 shadow-sm hover:shadow-2xl hover:shadow-[#0b2d49]/10 transition-all group overflow-hidden flex flex-col h-full"
+                        className="bg-white rounded-4xl border border-[#708aa0]/10 shadow-sm hover:shadow-2xl hover:shadow-[#0b2d49]/10 transition-all group overflow-hidden flex flex-col h-full"
                     >
-                        <div className="h-48 w-full relative overflow-hidden bg-gradient-to-br from-[#0b2d49] to-[#1a4a6e]">
+                        <div className="h-48 w-full relative overflow-hidden bg-linear-to-br from-[#0b2d49] to-[#1a4a6e]">
                             <div className="absolute inset-0 flex items-center justify-center">
                                 <Building2 size={64} className="text-white/20" />
                             </div>
@@ -208,6 +228,33 @@ const AdminVendorVerification = () => {
                     </div>
                 )}
             </div>
+            {filteredVendors.length > 0 && (
+                <div className="mt-6 flex items-center justify-between bg-white border border-[#e9eff1] rounded-2xl px-4 py-3 shadow-sm">
+                    <p className="text-xs font-bold text-[#708aa0] uppercase tracking-widest">
+                        Showing {((safePage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(safePage * ITEMS_PER_PAGE, filteredVendors.length)} of {filteredVendors.length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                            disabled={safePage <= 1}
+                            className="px-4 py-2 rounded-xl border border-[#e9eff1] text-[10px] font-black uppercase tracking-widest text-[#0b2d49] bg-white hover:border-[#0b2d49] disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Prev
+                        </button>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-[#708aa0] px-2">
+                            Page {safePage} / {totalPages}
+                        </span>
+                        <button
+                            onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                            disabled={safePage >= totalPages}
+                            className="px-4 py-2 rounded-xl border border-[#e9eff1] text-[10px] font-black uppercase tracking-widest text-[#0b2d49] bg-white hover:border-[#0b2d49] disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
+            )}
+            </>
             )}
         </div>
 
@@ -246,7 +293,7 @@ const AdminVendorVerification = () => {
                                 className="group flex items-center justify-between p-5 bg-[#f8fafc] hover:bg-white rounded-3xl border border-transparent hover:border-[#e9eff1] transition-all hover:shadow-lg"
                             >
                                 <div className="flex items-center gap-5">
-                                    <div className="w-16 h-16 rounded-2xl overflow-hidden relative shadow-inner bg-gradient-to-br from-[#0b2d49] to-[#1a4a6e] flex items-center justify-center">
+                                    <div className="w-16 h-16 rounded-2xl overflow-hidden relative shadow-inner bg-linear-to-br from-[#0b2d49] to-[#1a4a6e] flex items-center justify-center">
                                         <Building2 size={28} className="text-white/40" />
                                         <div className="absolute inset-0 bg-[#0b2d49]/20"></div>
                                     </div>

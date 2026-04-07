@@ -158,10 +158,12 @@ const mapRequestToUiEvent = (request) => {
 const AdminEvents = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const ITEMS_PER_PAGE = 12;
     const [activeTab, setActiveTab] = useState("Events");
     const [searchQuery, setSearchQuery] = useState("");
     const [showApplicationsModal, setShowApplicationsModal] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
 
     const { eventDashboard, managerAutoAssignConfig, managerAutoAssignLoading, managerAutoAssignUpdating } = useSelector((state) => state.admin);
 
@@ -202,6 +204,23 @@ const AdminEvents = () => {
             );
         });
     }, [activeTab, assignedEvents, rejectedEvents, searchQuery]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredEvents.length / ITEMS_PER_PAGE));
+    const safePage = Math.min(currentPage, totalPages);
+    const paginatedEvents = filteredEvents.slice(
+        (safePage - 1) * ITEMS_PER_PAGE,
+        safePage * ITEMS_PER_PAGE
+    );
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [activeTab, searchQuery]);
+
+    useEffect(() => {
+        if (currentPage > totalPages) {
+            setCurrentPage(totalPages);
+        }
+    }, [currentPage, totalPages]);
 
     return (
         <div className="h-full flex flex-col">
@@ -262,7 +281,7 @@ const AdminEvents = () => {
                         </div>
 
                         {/* Search */}
-                        <div className="relative w-full md:w-[400px]">
+                        <div className="relative w-full md:w-100">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#708aa0]" size={20} />
                             <input 
                                 type="text"
@@ -276,35 +295,64 @@ const AdminEvents = () => {
                 </div>
 
                 {/* Grid Content */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {filteredEvents.length > 0 ? (
-                        filteredEvents.map((event) => (
-                            <InternalEventCard
-                                key={event.id}
-                                title={event.title}
-                                category={event.category}
-                                image={event.image}
-                                organizer={event.organizer}
-                                eventDate={event.date}
-                                submittedDate={event.submitted}
-                                status={event.status}
-                                onVerify={() => navigate(`${event.id}`)}
-                                onDetails={() => navigate(`${event.id}`)}
-                            />
-                        ))
-                    ) : (
-                        <div className="col-span-full py-12 flex flex-col items-center justify-center text-[#708aa0] border-2 border-dashed border-[#e9eff1] rounded-3xl">
-                             <Search size={48} className="mb-4 opacity-20" />
-                             <p className="text-lg font-medium">No requests found matching your criteria</p>
-                             <button 
-                                onClick={() => {setSearchQuery(""); setActiveTab("Events");}}
-                                className="mt-4 text-[#d7a444] font-bold hover:underline"
-                             >
-                                Clear all filters
-                             </button>
+                <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {filteredEvents.length > 0 ? (
+                            paginatedEvents.map((event) => (
+                                <InternalEventCard
+                                    key={event.id}
+                                    title={event.title}
+                                    category={event.category}
+                                    image={event.image}
+                                    organizer={event.organizer}
+                                    eventDate={event.date}
+                                    submittedDate={event.submitted}
+                                    status={event.status}
+                                    onVerify={() => navigate(`${event.id}`)}
+                                    onDetails={() => navigate(`${event.id}`)}
+                                />
+                            ))
+                        ) : (
+                            <div className="col-span-full py-12 flex flex-col items-center justify-center text-[#708aa0] border-2 border-dashed border-[#e9eff1] rounded-3xl">
+                                 <Search size={48} className="mb-4 opacity-20" />
+                                 <p className="text-lg font-medium">No requests found matching your criteria</p>
+                                 <button 
+                                    onClick={() => {setSearchQuery(""); setActiveTab("Events");}}
+                                    className="mt-4 text-[#d7a444] font-bold hover:underline"
+                                 >
+                                    Clear all filters
+                                 </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {filteredEvents.length > 0 && (
+                        <div className="mt-6 flex items-center justify-between bg-white border border-[#e9eff1] rounded-2xl px-4 py-3 shadow-sm">
+                            <p className="text-xs font-bold text-[#708aa0] uppercase tracking-widest">
+                                Showing {((safePage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(safePage * ITEMS_PER_PAGE, filteredEvents.length)} of {filteredEvents.length}
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                                    disabled={safePage <= 1}
+                                    className="px-4 py-2 rounded-xl border border-[#e9eff1] text-[10px] font-black uppercase tracking-widest text-[#0b2d49] bg-white hover:border-[#0b2d49] disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Prev
+                                </button>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-[#708aa0] px-2">
+                                    Page {safePage} / {totalPages}
+                                </span>
+                                <button
+                                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                                    disabled={safePage >= totalPages}
+                                    className="px-4 py-2 rounded-xl border border-[#e9eff1] text-[10px] font-black uppercase tracking-widest text-[#0b2d49] bg-white hover:border-[#0b2d49] disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Next
+                                </button>
+                            </div>
                         </div>
                     )}
-                </div>
+                </>
             </div>
 
             {/* Applications Modal */}

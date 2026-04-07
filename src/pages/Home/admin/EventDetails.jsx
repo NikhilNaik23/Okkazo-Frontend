@@ -430,6 +430,125 @@ const EventDetails = () => {
         };
     }, [selectedEventRequestType, selectedEventVendorSelection, eventData]);
 
+    const normalizeServiceKey = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+    const privateBilling = useMemo(() => {
+        const isPrivatePlanning = selectedEventRequestType === 'PLANNING'
+            && String(selectedEventRequest?.category || '').trim().toLowerCase() === 'private';
+        const normalizedPlanningStatus = String(selectedEventRequest?.status || '').trim().toUpperCase().replace(/_/g, ' ');
+        const normalizedUiStatus = String(currentStatus || '').trim().toUpperCase().replace(/_/g, ' ');
+        const allowedBillingStatuses = ['VERIFIED', 'CONFIRMED', 'COMPLETED', 'VENDOR PAYMENT PENDING'];
+        const canShow = isPrivatePlanning && (
+            allowedBillingStatuses.includes(normalizedPlanningStatus)
+            || allowedBillingStatuses.includes(normalizedUiStatus)
+        );
+
+        if (!isPrivatePlanning) {
+            return { enabled: false };
+        }
+
+        const vendors = Array.isArray(selectedEventVendorSelection?.vendors) ? selectedEventVendorSelection.vendors : [];
+        const vendorProfiles = Array.isArray(selectedEventVendorSelection?.vendorProfiles) ? selectedEventVendorSelection.vendorProfiles : [];
+        const profileByAuthId = new Map(
+            vendorProfiles
+                .map((profile) => [String(profile?.authId || '').trim(), profile])
+                .filter(([key]) => Boolean(key))
+        );
+
+        const vendorByService = new Map(
+            vendors
+                .filter((row) => row?.service)
+                .map((row) => [normalizeServiceKey(row.service), row])
+        );
+
+        const lineItems = (Array.isArray(selectedServices) ? selectedServices : [])
+            .map((serviceName, idx) => {
+                const serviceKey = normalizeServiceKey(serviceName);
+                const vendorRow = vendorByService.get(serviceKey) || null;
+                const vendorAuthId = String(vendorRow?.vendorAuthId || '').trim();
+                const vendorProfile = vendorAuthId ? profileByAuthId.get(vendorAuthId) : null;
+                const lockedPrice = Number(vendorRow?.vendorQuotedPrice || 0);
+                const minPrice = Number(vendorRow?.servicePrice?.min || 0);
+                const maxPrice = Number(vendorRow?.servicePrice?.max || 0);
+                const safeLockedPrice = Number.isFinite(lockedPrice) && lockedPrice > 0 ? lockedPrice : 0;
+                const safeEstimate = Math.max(
+                    Number.isFinite(minPrice) && minPrice > 0 ? minPrice : 0,
+                    Number.isFinite(maxPrice) && maxPrice > 0 ? maxPrice : 0
+                );
+                const amountInr = safeLockedPrice || safeEstimate;
+
+                return {
+                    id: `${serviceKey || 'service'}:${idx}`,
+                    serviceName: String(vendorRow?.serviceName || serviceName || 'Service').trim(),
+                    businessName: vendorProfile?.businessName || (vendorAuthId ? 'Selected Vendor' : 'Vendor TBD'),
+                    amountInr,
+                };
+            })
+            .filter((item) => item.amountInr > 0 || item.businessName);
+
+        const toInrFromPaise = (value) => {
+            const n = Number(value || 0);
+            if (!Number.isFinite(n) || n <= 0) return 0;
+            return Number((n / 100).toFixed(2));
+        };
+
+        const lineItemsTotalInr = lineItems.reduce((sum, item) => sum + Number(item?.amountInr || 0), 0);
+        const lockedTotalInr = vendors.reduce((sum, row) => {
+            const amount = Number(row?.vendorQuotedPrice || 0);
+            return sum + (Number.isFinite(amount) && amount > 0 ? amount : 0);
+        }, 0);
+
+        const selectionMaxInr = Number(selectedEventVendorSelection?.totalMaxAmount || 0);
+        const requestTotalInr = Number(selectedEventRequest?.totalAmount || 0);
+        const totalAmountInr = [requestTotalInr, lockedTotalInr, selectionMaxInr, lineItemsTotalInr].find((v) => Number.isFinite(v) && v > 0) || 0;
+
+        const depositPaidInr = toInrFromPaise(selectedEventRequest?.depositPaidAmountPaise);
+        const vendorConfirmationPaidInr = toInrFromPaise(selectedEventRequest?.vendorConfirmationPaidAmountPaise);
+        const remainingPaymentPaidInr = toInrFromPaise(selectedEventRequest?.remainingPaymentPaidAmountPaise);
+        const paidTotalInr = Number((depositPaidInr + vendorConfirmationPaidInr + remainingPaymentPaidInr).toFixed(2));
+        const outstandingDueInr = Number(Math.max(0, totalAmountInr - paidTotalInr).toFixed(2));
+
+        return {
+            enabled: canShow,
+            normalizedStatus: normalizedPlanningStatus,
+            totalAmountInr,
+            paidTotalInr,
+            outstandingDueInr,
+            depositPaidInr,
+            vendorConfirmationPaidInr,
+            remainingPaymentPaidInr,
+            lineItems,
+        };
+    }, [
+        selectedEventRequestType,
+        selectedEventRequest?.category,
+        selectedEventRequest?.status,
+        selectedEventRequest?.totalAmount,
+        selectedEventRequest?.depositPaidAmountPaise,
+        selectedEventRequest?.vendorConfirmationPaidAmountPaise,
+        selectedEventRequest?.remainingPaymentPaidAmountPaise,
+        selectedEventVendorSelection?.vendors,
+        selectedEventVendorSelection?.vendorProfiles,
+        selectedEventVendorSelection?.totalMaxAmount,
+        selectedServices,
+        currentStatus,
+    ]);
+
+    const eventWorkflowStatusLabel = useMemo(() => {
+        const rawStatus = selectedEventRequestType === 'PLANNING'
+            ? selectedEventRequest?.status
+            : (selectedEventRequest?.eventStatus || selectedEventRequest?.status || selectedEventRequest?.adminDecision?.status);
+
+        const normalized = String(rawStatus || '').trim().replace(/_/g, ' ');
+        if (!normalized) return 'N/A';
+        return normalized.toUpperCase();
+    }, [
+        selectedEventRequestType,
+        selectedEventRequest?.status,
+        selectedEventRequest?.eventStatus,
+        selectedEventRequest?.adminDecision?.status,
+    ]);
+
     const iconForService = (serviceName) => {
         const key = String(serviceName || '').trim().toLowerCase();
         if (key.includes('cater')) return Utensils;
@@ -449,14 +568,19 @@ const EventDetails = () => {
             </Link>
           </div>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                  <h1 className="text-2xl font-bold text-[#0b2d49] tracking-tight">{headerTitle}</h1>
-                  <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
-                      currentStatus === 'VERIFIED' ? 'bg-[#28a785]/10 text-[#28a785]' : 
-                      currentStatus === 'REJECTED' ? 'bg-rose-100 text-rose-600' : 'bg-[#e9eff1] text-[#0b2d49]'
-                  }`}>
-                      {currentStatus}
-                  </span>
+              <div>
+                  <div className="flex items-center gap-4">
+                      <h1 className="text-2xl font-bold text-[#0b2d49] tracking-tight">{headerTitle}</h1>
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
+                          currentStatus === 'VERIFIED' ? 'bg-[#28a785]/10 text-[#28a785]' : 
+                          currentStatus === 'REJECTED' ? 'bg-rose-100 text-rose-600' : 'bg-[#e9eff1] text-[#0b2d49]'
+                      }`}>
+                          {currentStatus}
+                      </span>
+                  </div>
+                  <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-[#708aa0]">
+                      Event Status: <span className="text-[#0b2d49]">{eventWorkflowStatusLabel}</span>
+                  </p>
               </div>
           </div>
        </div>
@@ -664,6 +788,86 @@ const EventDetails = () => {
                             )}
 
                             {/* Financial Summary (Mini) */}
+                            {privateBilling.enabled && (
+                                <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#e9eff1]">
+                                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8] mb-2">Billing Overview</p>
+                                            <h3 className="text-lg font-bold text-[#0b2d49]">Bills & Payment</h3>
+                                            <p className="text-sm text-[#708aa0]">Private event billing summary with current outstanding dues.</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+                                        <div className="bg-[#f8fafc] p-4 rounded-2xl border border-[#e9eff1]">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8] mb-1">Total Amount</p>
+                                            <p className="text-lg font-black text-[#0b2d49]">₹{formatInr(privateBilling.totalAmountInr)}</p>
+                                        </div>
+                                        <div className="bg-[#f8fafc] p-4 rounded-2xl border border-[#e9eff1]">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8] mb-1">Total Paid</p>
+                                            <p className="text-lg font-black text-[#0b2d49]">₹{formatInr(privateBilling.paidTotalInr)}</p>
+                                        </div>
+                                        <div className="bg-[#f8fafc] p-4 rounded-2xl border border-[#e9eff1]">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8] mb-1">Outstanding Due</p>
+                                            <p className="text-lg font-black text-[#0b2d49]">₹{formatInr(privateBilling.outstandingDueInr)}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                        <div className="bg-[#f8fafc] rounded-2xl border border-[#e9eff1] overflow-hidden">
+                                            <div className="px-4 py-3 bg-white border-b border-[#e9eff1] text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">
+                                                Price Breakdown
+                                            </div>
+                                            {privateBilling.lineItems.length > 0 ? (
+                                                <div className="divide-y divide-[#e9eff1]">
+                                                    {privateBilling.lineItems.map((item) => (
+                                                        <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3 text-xs">
+                                                            <div className="min-w-0">
+                                                                <p className="font-bold text-[#0b2d49] truncate">{item.serviceName}</p>
+                                                                <p className="text-[#708aa0] truncate">{item.businessName}</p>
+                                                            </div>
+                                                            <p className="font-black text-[#0b2d49] shrink-0">₹{formatInr(item.amountInr)}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="px-4 py-4 text-xs text-[#708aa0]">Price details are being prepared.</div>
+                                            )}
+                                        </div>
+
+                                        <div className="bg-[#f8fafc] rounded-2xl border border-[#e9eff1] overflow-hidden">
+                                            <div className="px-4 py-3 bg-white border-b border-[#e9eff1] text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">
+                                                Paid Breakdown
+                                            </div>
+                                            <div className="divide-y divide-[#e9eff1] text-xs">
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <p className="font-bold text-[#0b2d49]">Deposit Fee</p>
+                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(privateBilling.depositPaidInr)}</p>
+                                                </div>
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <p className="font-bold text-[#0b2d49]">Vendor Confirmation</p>
+                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(privateBilling.vendorConfirmationPaidInr)}</p>
+                                                </div>
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <p className="font-bold text-[#0b2d49]">Remaining Payment</p>
+                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(privateBilling.remainingPaymentPaidInr)}</p>
+                                                </div>
+                                                <div className="flex items-center justify-between px-4 py-3 bg-white/70">
+                                                    <p className="font-black text-[#0b2d49]">Total Paid</p>
+                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(privateBilling.paidTotalInr)}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {privateBilling.normalizedStatus === 'CONFIRMED' && (
+                                        <div className="mt-4 text-[11px] font-bold text-[#0b2d49] bg-[#f8fafc] border border-[#e9eff1] rounded-xl px-4 py-3">
+                                            Billing is now visible for confirmed private events.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#e9eff1]">
                                 <div className="flex items-center gap-3 mb-6">
                                     <CreditCard className="text-[#d7a444]" size={24} />

@@ -1,7 +1,42 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Search, ChevronDown, SlidersHorizontal, Users, ShieldCheck, Clock, TrendingUp, ArrowUpDown, Star, Filter, Check } from 'lucide-react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
+import { Search, SlidersHorizontal, Users, ArrowUpDown, Filter, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useDispatch } from 'react-redux';
 import ManagerVendorCard from '../../../components/Global/cards/ManagerVendorCard';
+import { fetchWithAuth } from '../../../utils/apiHandler';
+import { refreshAccessToken } from '../../../store/slices/authSlice';
+
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+const MotionDiv = motion.div;
+const MotionH1 = motion.h1;
+const MotionP = motion.p;
+
+const safeJson = async (response) => {
+    try {
+        return await response.json();
+    } catch {
+        return null;
+    }
+};
+
+const normalizeText = (value) => String(value || '').trim().toLowerCase();
+
+const mapVendorStatus = (rawStatus) => {
+    const status = String(rawStatus || '').trim().toUpperCase();
+
+    if (status === 'APPROVED') return 'Active';
+    if (['PENDING_REVIEW', 'DOCUMENTS_REQUESTED', 'UNDER_VERIFICATION'].includes(status)) {
+        return 'Under Review';
+    }
+    if (['REJECTED', 'SUSPENDED'].includes(status)) return 'Inactive';
+
+    return 'Inactive';
+};
+
+const toTimestamp = (value) => {
+    const d = value ? new Date(value) : null;
+    return d && !Number.isNaN(d.getTime()) ? d.getTime() : 0;
+};
 
 // Reusable Custom Dropdown Component
 const CustomDropdown = ({
@@ -9,7 +44,7 @@ const CustomDropdown = ({
     value,
     options,
     onSelect,
-    icon: Icon,
+    icon,
     searchable = false,
     placeholder = "Search..."
 }) => {
@@ -35,31 +70,13 @@ const CustomDropdown = ({
         )
         : options;
 
-    const getDisplayValue = (val) => {
-        if (!val) return label;
-        // Handle complex objects vs strings
-        const found = options.find(o => (typeof o === 'string' ? o === val : o.value === val));
-        if (!found) return val; // Fallback
-        return typeof found === 'string' ? (found === 'All' ? label : found) : found.label;
-    };
-
-    // For the specific format requested: "Category: All", "Status: Active" etc.
-    // If value is "All" or "Any", show Header Label (e.g. "Category: All"). 
-    // Otherwise show just the value ? Or "Category: Value"?
-    // The user's previous code had logic like: `cat === 'All' ? 'Category: All' : cat`
-    // Let's replicate generic logic:
     const displayText = (val) => {
-        const isDefault = val === 'All' || val === 'Any' || val === 'Newest'; // simplistic check
-
-        // Custom formatting based on the 'label' prop context
         if (label.includes('Category')) return val === 'All' ? 'Category: All' : val;
         if (label.includes('Status')) return val === 'All' ? 'Status: All' : val;
-        if (label.includes('Rating')) return val === 'Any' ? 'Rating: Any' : `${val}+ Stars`;
         if (label.includes('Sort')) {
             const sortMap = {
                 'Newest': 'Sort: Newest',
                 'Oldest': 'Sort: Oldest',
-                'Rating High': 'Sort: Top Rated',
                 'A-Z': 'Sort: Name A-Z'
             };
             return sortMap[val] || val;
@@ -67,19 +84,21 @@ const CustomDropdown = ({
         return val;
     };
 
+    const DropdownIcon = icon;
+
     return (
-        <div className="relative min-w-[160px] shrink-0" ref={dropdownRef}>
+        <div className="relative min-w-40 shrink-0" ref={dropdownRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 rounded-xl text-sm font-bold text-gray-700 transition-colors"
             >
                 <span className="truncate">{displayText(value)}</span>
-                <Icon className="w-4 h-4 text-gray-400" />
+                {DropdownIcon ? <DropdownIcon className="w-4 h-4 text-gray-400" /> : null}
             </button>
 
             <AnimatePresence>
                 {isOpen && (
-                    <motion.div
+                    <MotionDiv
                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -99,7 +118,7 @@ const CustomDropdown = ({
                             </div>
                         )}
 
-                        <div className="max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
+                        <div className="max-h-50 overflow-y-auto pr-1 custom-scrollbar">
                             {filteredOptions.length > 0 ? (
                                 filteredOptions.map((opt) => {
                                     const optVal = typeof opt === 'string' ? opt : opt.value;
@@ -130,7 +149,7 @@ const CustomDropdown = ({
                                 </div>
                             )}
                         </div>
-                    </motion.div>
+                    </MotionDiv>
                 )}
             </AnimatePresence>
         </div>
@@ -138,173 +157,178 @@ const CustomDropdown = ({
 };
 
 const ManagerVendors = () => {
-    // 1. Mock Data
-    const [vendors] = useState([
-        {
-            id: 1,
-            name: 'Epicurean Catering',
-            category: 'Catering',
-            status: 'Active',
-            rating: 4.8,
-            reviewCount: 124,
-            email: 'contact@epicurean.com',
-            phone: '+1 (555) 123-4567',
-            joined: '2023-01-15'
-        },
-        {
-            id: 2,
-            name: 'Stellar Decors',
-            category: 'Decor',
-            status: 'Under Review',
-            rating: 4.5,
-            reviewCount: 45,
-            email: 'info@stellar.com',
-            phone: '+1 (555) 987-6543',
-            joined: '2023-03-22'
-        },
-        {
-            id: 3,
-            name: 'Apex Audio Visual',
-            category: 'Audio/Visual',
-            status: 'Active',
-            rating: 5.0,
-            reviewCount: 89,
-            email: 'sales@apexaudiovisual.com',
-            phone: '+1 (555) 345-6789',
-            joined: '2022-11-05'
-        },
-        {
-            id: 4,
-            name: 'SafeGuard Pros',
-            category: 'Security',
-            status: 'Inactive',
-            rating: 3.7,
-            reviewCount: 12,
-            email: 'hq@safeguard.com',
-            phone: '+1 (555) 765-4321',
-            joined: '2023-05-10'
-        },
-        {
-            id: 5,
-            name: 'Luxe Linens',
-            category: 'Decor',
-            status: 'Active',
-            rating: 4.2,
-            reviewCount: 230,
-            email: 'orders@luxelinens.com',
-            phone: '+1 (555) 111-2222',
-            joined: '2023-02-18'
-        },
-        {
-            id: 6,
-            name: 'Capture Moments',
-            category: 'Photography',
-            status: 'Active',
-            rating: 4.9,
-            reviewCount: 67,
-            email: 'hello@capturemoments.com',
-            phone: '+1 (555) 999-8888',
-            joined: '2023-04-30'
-        }
-    ]);
+    const dispatch = useDispatch();
 
-    // 2. State
+    const [vendors, setVendors] = useState([]);
+    const [serviceCategories, setServiceCategories] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+
     const [searchTerm, setSearchTerm] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('All');
     const [statusFilter, setStatusFilter] = useState('All');
-    const [ratingFilter, setRatingFilter] = useState('Any');
     const [sortBy, setSortBy] = useState('Newest');
 
-    // Filter Options
-    const categories = ['All', 'Catering', 'Decor', 'Audio/Visual', 'Security', 'Photography', 'Transport', 'Entertainment', 'Staffing', 'Florist'];
-    const statuses = ['All', 'Active', 'Inactive', 'Under Review'];
-    const ratingOptions = [
-        { label: 'Rating: Any', value: 'Any' },
-        { label: '4.5+ Stars', value: '4.5' },
-        { label: '4.0+ Stars', value: '4.0' },
-        { label: '3.5+ Stars', value: '3.5' }
-    ];
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadVendors = async () => {
+            setLoading(true);
+            setError('');
+
+            try {
+                const [applicationsRes, categoriesRes] = await Promise.all([
+                    fetchWithAuth(
+                        `${API_BASE_URL}/api/vendor/applications?limit=500&skip=0`,
+                        { method: 'GET' },
+                        { dispatch, refreshAction: refreshAccessToken }
+                    ),
+                    fetchWithAuth(
+                        `${API_BASE_URL}/auth/vendor/service-categories`,
+                        { method: 'GET' },
+                        { dispatch, refreshAction: refreshAccessToken }
+                    ),
+                ]);
+
+                const applicationsJson = await safeJson(applicationsRes);
+                const categoriesJson = await safeJson(categoriesRes);
+
+                if (!applicationsRes.ok || !applicationsJson?.success) {
+                    throw new Error(applicationsJson?.error?.message || applicationsJson?.message || 'Failed to fetch vendors');
+                }
+
+                const applications = Array.isArray(applicationsJson?.data?.applications)
+                    ? applicationsJson.data.applications
+                    : [];
+
+                const mappedVendors = applications.map((app) => {
+                    const createdOrJoined = app?.approvedAt || app?.submittedAt || app?.createdAt || null;
+                    return {
+                        id: String(app?.applicationId || app?._id || app?.authId || Math.random()).trim(),
+                        authId: String(app?.authId || '').trim(),
+                        logo: app?.images?.profile?.fileUrl || null,
+                        name: String(app?.businessName || 'Vendor').trim() || 'Vendor',
+                        category: String(app?.serviceCategory || 'Other').trim() || 'Other',
+                        status: mapVendorStatus(app?.status),
+                        rawStatus: String(app?.status || '').trim().toUpperCase(),
+                        rating: Number(app?.rating || app?.avgRating || 0),
+                        reviewCount: Number(app?.reviewCount || app?.totalReviews || 0),
+                        email: String(app?.email || '—').trim() || '—',
+                        phone: String(app?.phone || '—').trim() || '—',
+                        joined: createdOrJoined,
+                    };
+                });
+
+                const categoriesFromApi = Array.isArray(categoriesJson)
+                    ? categoriesJson.filter((c) => typeof c === 'string' && c.trim())
+                    : [];
+
+                const categoriesFromData = Array.from(new Set(
+                    mappedVendors.map((v) => v.category).filter(Boolean)
+                )).sort((a, b) => a.localeCompare(b));
+
+                if (cancelled) return;
+                setVendors(mappedVendors);
+                setServiceCategories(categoriesFromApi.length ? categoriesFromApi : categoriesFromData);
+            } catch (loadError) {
+                if (cancelled) return;
+                setVendors([]);
+                setServiceCategories([]);
+                setError(loadError?.message || 'Failed to load vendors');
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+
+        loadVendors();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [dispatch]);
+
+    const categories = useMemo(() => {
+        return ['All', ...serviceCategories];
+    }, [serviceCategories]);
+
+    const statuses = ['All', 'Active', 'Under Review', 'Inactive'];
+
     const sortOptions = [
         { label: 'Sort: Newest', value: 'Newest' },
         { label: 'Sort: Oldest', value: 'Oldest' },
-        { label: 'Sort: Top Rated', value: 'Rating High' },
         { label: 'Sort: Name A-Z', value: 'A-Z' }
     ];
 
-    // 3. Filter & Sort Logic
-    const filteredVendors = vendors.filter(vendor => {
-        const matchesSearch = vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            vendor.category.toLowerCase().includes(searchTerm.toLowerCase());
+    const filteredVendors = vendors.filter((vendor) => {
+        const q = normalizeText(searchTerm);
+        const matchesSearch = !q
+            || normalizeText(vendor.name).includes(q)
+            || normalizeText(vendor.category).includes(q)
+            || normalizeText(vendor.email).includes(q);
         const matchesCategory = categoryFilter === 'All' || vendor.category === categoryFilter;
         const matchesStatus = statusFilter === 'All' || vendor.status === statusFilter;
-        const matchesRating = ratingFilter === 'Any' || vendor.rating >= parseFloat(ratingFilter);
 
-        return matchesSearch && matchesCategory && matchesStatus && matchesRating;
+        return matchesSearch && matchesCategory && matchesStatus;
     }).sort((a, b) => {
         switch (sortBy) {
-            case 'Newest': return new Date(b.joined) - new Date(a.joined);
-            case 'Oldest': return new Date(a.joined) - new Date(b.joined);
-            case 'Rating High': return b.rating - a.rating;
-            case 'Rating Low': return a.rating - b.rating;
+            case 'Newest': return toTimestamp(b.joined) - toTimestamp(a.joined);
+            case 'Oldest': return toTimestamp(a.joined) - toTimestamp(b.joined);
             case 'A-Z': return a.name.localeCompare(b.name);
             default: return 0;
         }
     });
 
-    // Stats Calculation
-    const activeVendors = vendors.filter(v => v.status === 'Active').length;
-    const reviewVendors = vendors.filter(v => v.status === 'Under Review').length;
-    const avgRating = (vendors.reduce((acc, curr) => acc + curr.rating, 0) / vendors.length).toFixed(1);
+    const verifiedVendorsCount = useMemo(() => {
+        return vendors.filter((v) => v.rawStatus === 'APPROVED').length;
+    }, [vendors]);
 
     return (
-        <div className="min-h-screen bg-gray-50/50 p-8 max-w-[1920px] mx-auto">
+        <div className="min-h-screen bg-gray-50/50 p-8 max-w-480 mx-auto">
 
             {/* Header Section */}
             <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6 mb-10">
                 <div>
-                    <motion.h1
+                    <MotionH1
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         className="text-4xl font-extrabold text-gray-900 mb-2 tracking-tight"
                     >
                         Vendor Directory
-                    </motion.h1>
-                    <motion.p
+                    </MotionH1>
+                    <MotionP
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.1 }}
                         className="text-gray-500 font-medium"
                     >
-                        Manage your network of {vendors.length} global partners.
-                    </motion.p>
+                        View your verified vendor network.
+                    </MotionP>
                 </div>
 
                 {/* Quick Stats Row */}
                 <div className="flex gap-4 overflow-x-auto pb-2 xl:pb-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-                    {[
-                        { label: 'Total Vendors', value: vendors.length, icon: Users, color: 'bg-blue-50 text-blue-600' },
-                        { label: 'Active Partners', value: activeVendors, icon: ShieldCheck, color: 'bg-emerald-50 text-emerald-600' },
-                        { label: 'Pending Review', value: reviewVendors, icon: Clock, color: 'bg-amber-50 text-amber-600' },
-                        { label: 'Avg Rating', value: avgRating, icon: TrendingUp, color: 'bg-indigo-50 text-indigo-600' },
-                    ].map((stat, idx) => (
-                        <motion.div
-                            key={idx}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.1 * idx }}
-                            className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4 min-w-[180px]"
-                        >
-                            <div className={`p-3 rounded-xl ${stat.color}`}>
-                                <stat.icon className="w-5 h-5" />
-                            </div>
-                            <div>
-                                <div className="text-2xl font-bold text-gray-900 leading-none mb-1">{stat.value}</div>
-                                <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">{stat.label}</div>
-                            </div>
-                        </motion.div>
-                    ))}
+                    <MotionDiv
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                        className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4 min-w-55"
+                    >
+                        <div className="p-3 rounded-xl bg-blue-50 text-blue-600">
+                            <Users className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <div className="text-2xl font-bold text-gray-900 leading-none mb-1">{verifiedVendorsCount}</div>
+                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Total Vendors (Verified)</div>
+                        </div>
+                    </MotionDiv>
                 </div>
             </div>
+
+            {error && (
+                <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+                    {error}
+                </div>
+            )}
 
             {/* Controls Bar */}
             <div className="flex flex-col xl:flex-row justify-between items-center gap-6 mb-8 bg-white p-2 rounded-3xl shadow-sm border border-gray-100 sticky top-4 z-30">
@@ -324,7 +348,7 @@ const ManagerVendors = () => {
                     />
 
                     {/* Search Pill */}
-                    <div className="relative group min-w-[200px] shrink-0">
+                    <div className="relative group min-w-50 shrink-0">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-teal-500 transition-colors" />
                         <input
                             type="text"
@@ -344,15 +368,6 @@ const ManagerVendors = () => {
                         icon={SlidersHorizontal}
                     />
 
-                    {/* Rating Dropdown */}
-                    <CustomDropdown
-                        label="Rating"
-                        value={ratingFilter}
-                        options={ratingOptions}
-                        onSelect={setRatingFilter}
-                        icon={Star}
-                    />
-
                     {/* Sort By Dropdown */}
                     <CustomDropdown
                         label="Sort"
@@ -365,25 +380,23 @@ const ManagerVendors = () => {
             </div>
 
             {/* Grid Area */}
-            <motion.div
+            <MotionDiv
                 layout
                 className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
             >
                 <AnimatePresence>
-                    {filteredVendors.map((vendor) => (
+                    {filteredVendors.map((vendor, index) => (
                         <ManagerVendorCard
-                            key={vendor.id}
+                            key={`${vendor.id}-${index}`}
                             {...vendor}
-                            onEdit={() => console.log('Edit', vendor.id)}
-                            onUpdateStatus={() => console.log('Update Status', vendor.id)}
                         />
                     ))}
                 </AnimatePresence>
-            </motion.div>
+            </MotionDiv>
 
             {/* Empty State */}
             {filteredVendors.length === 0 && (
-                <motion.div
+                <MotionDiv
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="flex flex-col items-center justify-center py-20 text-center"
@@ -396,12 +409,21 @@ const ManagerVendors = () => {
                         We couldn't find any vendors matching your current filters. Try adjusting your search criteria.
                     </p>
                     <button
-                        onClick={() => { setSearchTerm(''); setCategoryFilter('All'); setStatusFilter('All'); setRatingFilter('Any'); }}
+                        onClick={() => {
+                            setSearchTerm('');
+                            setCategoryFilter('All');
+                            setStatusFilter('All');
+                            setSortBy('Newest');
+                        }}
                         className="mt-6 text-teal-600 font-bold hover:underline"
                     >
                         Clear all filters
                     </button>
-                </motion.div>
+                </MotionDiv>
+            )}
+
+            {loading && (
+                <div className="mt-6 text-xs text-gray-400 font-medium">Refreshing vendors...</div>
             )}
         </div>
     );

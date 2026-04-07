@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
     ArrowLeft, MapPin, Edit, FileText, Users, Briefcase, MessageSquare,
     ListTodo, CalendarDays, DollarSign, FolderOpen, Share2, Printer, CheckCircle
@@ -24,7 +24,6 @@ import {
     OverviewTab,
     GuestsTab,
     VendorsTab,
-    ScheduleTab,
     FinancialsTab,
     ChatTab,
     ToDoTab,
@@ -69,6 +68,23 @@ const formatEventDateTime = (value) => {
     });
 };
 
+const toNonNegativeNumber = (value) => {
+    const n = Number(value || 0);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+const formatMoneyShort = (value) => {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n) || n <= 0) return '₹0';
+    return `₹${Math.round(n).toLocaleString('en-IN')}`;
+};
+
+const toInrFromPaise = (value) => {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return Number((n / 100).toFixed(2));
+};
+
 const decodeJwtPayload = (token) => {
     try {
         const parts = String(token || '').split('.');
@@ -103,10 +119,15 @@ const ManagerEventDetails = () => {
     // Force HMR Update
     const { id } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const dispatch = useDispatch();
     const user = useSelector(selectUser);
     const accessToken = useSelector((state) => state.auth.accessToken) || localStorage.getItem('accessToken');
     const currentUserAuthId = resolveAuthId({ user, accessToken });
+    const shouldAutoExportFinancialUi = useMemo(() => {
+        const params = new URLSearchParams(location.search || '');
+        return String(params.get('exportUi') || '').trim() === '1';
+    }, [location.search]);
 
     const vendorSelection = useSelector((state) => selectPlanningVendorSelectionByEventId(state, id));
     const [activeTab, setActiveTab] = useState('overview');
@@ -125,6 +146,11 @@ const ManagerEventDetails = () => {
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [unreadChatCount, setUnreadChatCount] = useState(0);
+    const [guestCount, setGuestCount] = useState(null);
+    const [markingComplete, setMarkingComplete] = useState(false);
+    const [payingGeneratedRevenue, setPayingGeneratedRevenue] = useState(false);
+    const [promotionActionLoadingKey, setPromotionActionLoadingKey] = useState('');
+    const [vendorPayoutMode, setVendorPayoutMode] = useState('DEMO');
 
     // Scroll listener for sticky header
     useEffect(() => {
@@ -134,9 +160,62 @@ const ManagerEventDetails = () => {
     }, []);
 
     useEffect(() => {
+        const params = new URLSearchParams(location.search || '');
+        const requestedTab = String(params.get('tab') || '').trim().toLowerCase();
+        if (!requestedTab) return;
+
+        const allowedTabs = new Set(['overview', 'guests', 'vendors', 'chat', 'todo', 'financials', 'documents']);
+        if (!allowedTabs.has(requestedTab)) return;
+
+        setActiveTab(requestedTab);
+    }, [location.search, id]);
+
+    useEffect(() => {
         if (!id) return;
         dispatch(fetchPlanningVendorSelectionByEventId(id));
     }, [dispatch, id]);
+
+    useEffect(() => {
+        setGuestCount(null);
+    }, [id]);
+
+    useEffect(() => {
+        if (!id) {
+            setGuestCount(0);
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadGuestCount = async () => {
+            try {
+                const res = await fetchWithAuth(
+                    `${API_BASE_URL}/api/events/tickets/events/${encodeURIComponent(String(id))}/guests?page=1&limit=1`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+
+                const json = await safeJson(res);
+                if (cancelled) return;
+
+                if (!res.ok || !json?.success) {
+                    setGuestCount(0);
+                    return;
+                }
+
+                const total = Number(json?.data?.total || 0);
+                setGuestCount(Number.isFinite(total) && total >= 0 ? total : 0);
+            } catch {
+                if (!cancelled) setGuestCount(0);
+            }
+        };
+
+        loadGuestCount();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [id, dispatch]);
 
     useEffect(() => {
         if (!id) return;
@@ -254,6 +333,33 @@ const ManagerEventDetails = () => {
     }, [id, dispatch, staffRefreshKey]);
 
     useEffect(() => {
+        let cancelled = false;
+
+        const loadPayoutMode = async () => {
+            try {
+                const res = await fetchWithAuth(
+                    `${API_BASE_URL}/api/orders/settings`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+
+                const json = await safeJson(res);
+                if (cancelled || !res.ok || !json?.success) return;
+
+                const mode = String(json?.data?.vendorPayoutMode || 'DEMO').trim().toUpperCase();
+                setVendorPayoutMode(mode === 'RAZORPAY' ? 'RAZORPAY' : 'DEMO');
+            } catch {
+                if (!cancelled) setVendorPayoutMode('DEMO');
+            }
+        };
+
+        loadPayoutMode();
+        return () => {
+            cancelled = true;
+        };
+    }, [dispatch]);
+
+    useEffect(() => {
         const coreStaffIds = Array.isArray(rawEvent?.coreStaffIds)
             ? rawEvent.coreStaffIds.map((v) => String(v || '').trim()).filter(Boolean)
             : [];
@@ -306,9 +412,11 @@ const ManagerEventDetails = () => {
             const ticketAvailabilityStartAt = rawEvent?.ticketAvailability?.startAt || null;
             const ticketAvailabilityEndAt = rawEvent?.ticketAvailability?.endAt || null;
             const expectedGuests = rawEvent?.guestCount ?? rawEvent?.noOfGuest ?? rawEvent?.noOfGuests ?? null;
+            const listingType = String(rawEvent?.category || '').trim().toLowerCase() === 'public' ? 'public' : 'private';
             return {
                 id: rawEvent.eventId || id,
                 type: 'planning',
+                listingType,
                 status: rawEvent.status || '—',
                 title: rawEvent.eventTitle || 'Event',
                 description: rawEvent.eventDescription || '',
@@ -321,6 +429,14 @@ const ManagerEventDetails = () => {
                 expectedGuests,
                 ticketAvailabilityStart: formatEventDateTime(ticketAvailabilityStartAt),
                 ticketAvailabilityEnd: formatEventDateTime(ticketAvailabilityEndAt),
+                ticketType: rawEvent?.tickets?.ticketType || null,
+                ticketTiers: Array.isArray(rawEvent?.tickets?.tiers) ? rawEvent.tickets.tiers : [],
+                ticketDayWiseAllocations: Array.isArray(rawEvent?.tickets?.dayWiseAllocations) ? rawEvent.tickets.dayWiseAllocations : [],
+                totalTicketCapacity: rawEvent?.tickets?.totalTickets ?? null,
+                ticketSalesStats: rawEvent?.ticketSalesStats && typeof rawEvent.ticketSalesStats === 'object' ? rawEvent.ticketSalesStats : null,
+                selectedPromotions: Array.isArray(rawEvent?.promotionType) ? rawEvent.promotionType : [],
+                platformFee: rawEvent?.platformFee ?? null,
+                serviceChargePercent: rawEvent?.serviceChargePercent ?? null,
                 client,
                 availableCoreStaff,
                 selectedTeamMembers,
@@ -333,6 +449,7 @@ const ManagerEventDetails = () => {
             return {
                 id: rawEvent.eventId || id,
                 type: 'promote',
+                listingType: 'public',
                 status: rawEvent.eventStatus || rawEvent.status || '—',
                 title: rawEvent.eventTitle || 'Event',
                 description: rawEvent.eventDescription || '',
@@ -344,6 +461,14 @@ const ManagerEventDetails = () => {
                 preferredLocation: rawEvent?.venue?.locationName || '—',
                 ticketAvailabilityStart: formatEventDateTime(ticketAvailabilityStartAt),
                 ticketAvailabilityEnd: formatEventDateTime(ticketAvailabilityEndAt),
+                ticketType: rawEvent?.tickets?.ticketType || null,
+                ticketTiers: Array.isArray(rawEvent?.tickets?.tiers) ? rawEvent.tickets.tiers : [],
+                ticketDayWiseAllocations: Array.isArray(rawEvent?.tickets?.dayWiseAllocations) ? rawEvent.tickets.dayWiseAllocations : [],
+                totalTicketCapacity: rawEvent?.tickets?.noOfTickets ?? null,
+                ticketSalesStats: rawEvent?.ticketSalesStats && typeof rawEvent.ticketSalesStats === 'object' ? rawEvent.ticketSalesStats : null,
+                selectedPromotions: Array.isArray(rawEvent?.promotion) ? rawEvent.promotion : [],
+                platformFee: rawEvent?.platformFee ?? null,
+                serviceChargePercent: rawEvent?.serviceChargePercent ?? null,
                 client,
                 availableCoreStaff,
                 selectedTeamMembers,
@@ -540,12 +665,19 @@ const ManagerEventDetails = () => {
     }, [id, currentUserAuthId, activeTab, dispatch, chatContactAuthIds]);
 
     const tabs = tabsData
-        .filter((tab) => !(eventType === 'promote' && tab.id === 'vendors'))
+        .filter((tab) => {
+            if (tab.id === 'schedule') return false;
+            if (eventType === 'promote' && tab.id === 'vendors') return false;
+            if (eventType === 'planning' && tab.id === 'documents') return false;
+            return true;
+        })
         .map(tab => ({
             ...tab,
             icon: iconMap[tab.icon],
             count: tab.id === 'vendors'
                 ? (vendorSlotCount ?? tab.count)
+                : tab.id === 'guests'
+                    ? (guestCount ?? tab.count)
                 : tab.id === 'chat'
                     ? unreadChatCount
                 : tab.id === 'documents' && eventType === 'promote'
@@ -559,6 +691,17 @@ const ManagerEventDetails = () => {
         }
     }, [eventType, activeTab]);
 
+    useEffect(() => {
+        if (activeTab === 'schedule') {
+            setActiveTab('overview');
+            return;
+        }
+
+        if (eventType === 'planning' && activeTab === 'documents') {
+            setActiveTab('overview');
+        }
+    }, [eventType, activeTab]);
+
     const handleCopyLink = () => {
         navigator.clipboard.writeText(window.location.href);
         toast.success("Link copied to clipboard!");
@@ -567,6 +710,300 @@ const ManagerEventDetails = () => {
     const handlePrint = () => {
         toast("Preparing print view...", { icon: '🖨️' });
         setTimeout(() => window.print(), 1000);
+    };
+
+    const normalizedStatus = String(event?.status || '').trim().toUpperCase();
+    const isPrivatePlanning = eventType === 'planning' && String(event?.listingType || '').trim().toLowerCase() === 'private';
+    const hasEventDateReached = useMemo(() => {
+        const sourceDate = rawEvent?.schedule?.startAt || rawEvent?.eventDate || null;
+        if (!sourceDate) return false;
+
+        const parsed = new Date(sourceDate);
+        if (Number.isNaN(parsed.getTime())) return false;
+
+        const eventDayStart = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()).getTime();
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        return todayStart >= eventDayStart;
+    }, [rawEvent?.schedule?.startAt, rawEvent?.eventDate]);
+    const canMarkAsComplete = isPrivatePlanning && normalizedStatus === 'CONFIRMED' && hasEventDateReached;
+    const generatedRevenuePayout = useMemo(() => {
+        const isPlanningPublic = eventType === 'planning' && String(event?.listingType || '').trim().toLowerCase() === 'public';
+        const isPromote = eventType === 'promote';
+        const isSupported = isPlanningPublic || isPromote;
+
+        const generatedRevenueInr = toNonNegativeNumber(event?.ticketSalesStats?.grossRevenueInr);
+        const totalFeesInr = toNonNegativeNumber(
+            event?.ticketSalesStats?.totalFeesInr
+            ?? event?.ticketSalesStats?.platformFeeInr
+        );
+
+        const totalVendorCostInr = isPlanningPublic
+            ? (Array.isArray(vendorSelection?.vendors) ? vendorSelection.vendors : []).reduce((sum, row) => {
+                const lockedPrice = toNonNegativeNumber(row?.vendorQuotedPrice);
+                const commissionAmount = toNonNegativeNumber(row?.commissionAmount);
+                const isLocked = Boolean(row?.priceLocked) && lockedPrice > 0;
+                if (!isLocked) return sum;
+                return sum + Math.max(0, lockedPrice - commissionAmount);
+            }, 0)
+            : 0;
+
+        const payoutAmountInr = Number(
+            Math.max(0, generatedRevenueInr - totalVendorCostInr - totalFeesInr).toFixed(2)
+        );
+        const payoutStatus = String(rawEvent?.generatedRevenuePayout?.status || '').trim().toUpperCase();
+
+        return {
+            isSupported,
+            generatedRevenueInr,
+            totalVendorCostInr,
+            totalFeesInr,
+            payoutAmountInr,
+            alreadyPaid: payoutStatus === 'SUCCESS',
+        };
+    }, [
+        eventType,
+        event?.listingType,
+        event?.ticketSalesStats,
+        vendorSelection?.vendors,
+        rawEvent?.generatedRevenuePayout?.status,
+    ]);
+
+    const privateBilling = useMemo(() => {
+        const isPrivatePlanningEvent = eventType === 'planning' && String(event?.listingType || '').trim().toLowerCase() === 'private';
+        const normalizedEventStatus = String(event?.status || '').trim().toUpperCase().replace(/_/g, ' ');
+        const canShow = isPrivatePlanningEvent && ['VERIFIED', 'CONFIRMED', 'COMPLETED', 'VENDOR PAYMENT PENDING', 'CLOSED'].includes(normalizedEventStatus);
+
+        if (!isPrivatePlanningEvent) {
+            return { enabled: false };
+        }
+
+        const selectedServices = Array.isArray(vendorSelection?.selectedServices)
+            ? vendorSelection.selectedServices
+            : (Array.isArray(rawEvent?.selectedServices) ? rawEvent.selectedServices : []);
+        const vendors = Array.isArray(vendorSelection?.vendors) ? vendorSelection.vendors : [];
+        const vendorProfiles = Array.isArray(vendorSelection?.vendorProfiles) ? vendorSelection.vendorProfiles : [];
+        const profileByAuthId = new Map(
+            vendorProfiles
+                .map((profile) => [String(profile?.authId || '').trim(), profile])
+                .filter(([key]) => Boolean(key))
+        );
+
+        const toServiceKey = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        const vendorByService = new Map(
+            vendors
+                .filter((row) => row?.service)
+                .map((row) => [toServiceKey(row.service), row])
+        );
+
+        const lineItems = (Array.isArray(selectedServices) ? selectedServices : [])
+            .map((serviceName, idx) => {
+                const serviceKey = toServiceKey(serviceName);
+                const vendorRow = vendorByService.get(serviceKey) || null;
+                const vendorAuthId = String(vendorRow?.vendorAuthId || '').trim();
+                const vendorProfile = vendorAuthId ? profileByAuthId.get(vendorAuthId) : null;
+                const lockedPrice = toNonNegativeNumber(vendorRow?.vendorQuotedPrice);
+                const estimatedPrice = Math.max(
+                    toNonNegativeNumber(vendorRow?.servicePrice?.max),
+                    toNonNegativeNumber(vendorRow?.servicePrice?.min)
+                );
+                const amountInr = lockedPrice > 0 ? lockedPrice : estimatedPrice;
+
+                return {
+                    id: `${serviceKey || 'service'}:${idx}`,
+                    serviceName: String(vendorRow?.serviceName || serviceName || 'Service').trim(),
+                    businessName: vendorProfile?.businessName || (vendorAuthId ? 'Selected Vendor' : 'Vendor TBD'),
+                    amountInr,
+                };
+            })
+            .filter((item) => item.amountInr > 0 || item.businessName);
+
+        const lockedTotalInr = vendors.reduce((sum, row) => sum + toNonNegativeNumber(row?.vendorQuotedPrice), 0);
+        const lineItemsTotalInr = lineItems.reduce((sum, item) => sum + toNonNegativeNumber(item?.amountInr), 0);
+        const rangeMaxInr = toNonNegativeNumber(vendorSelection?.totalMaxAmount);
+        const eventTotalInr = toNonNegativeNumber(rawEvent?.totalAmount);
+        const totalAmountInr = eventTotalInr || lockedTotalInr || rangeMaxInr || lineItemsTotalInr;
+
+        const depositPaidInr = toInrFromPaise(rawEvent?.depositPaidAmountPaise);
+        const vendorConfirmationPaidInr = toInrFromPaise(rawEvent?.vendorConfirmationPaidAmountPaise);
+        const remainingPaymentPaidInr = toInrFromPaise(rawEvent?.remainingPaymentPaidAmountPaise);
+        const paidTotalInr = Number((depositPaidInr + vendorConfirmationPaidInr + remainingPaymentPaidInr).toFixed(2));
+        const outstandingDueInr = Number(Math.max(0, totalAmountInr - paidTotalInr).toFixed(2));
+
+        return {
+            enabled: canShow,
+            normalizedStatus: normalizedEventStatus,
+            totalAmountInr,
+            paidTotalInr,
+            outstandingDueInr,
+            depositPaidInr,
+            vendorConfirmationPaidInr,
+            remainingPaymentPaidInr,
+            lineItems,
+        };
+    }, [
+        eventType,
+        event?.listingType,
+        event?.status,
+        rawEvent?.selectedServices,
+        rawEvent?.totalAmount,
+        rawEvent?.depositPaidAmountPaise,
+        rawEvent?.vendorConfirmationPaidAmountPaise,
+        rawEvent?.remainingPaymentPaidAmountPaise,
+        vendorSelection?.selectedServices,
+        vendorSelection?.vendors,
+        vendorSelection?.vendorProfiles,
+        vendorSelection?.totalMaxAmount,
+    ]);
+
+    const handlePayGeneratedRevenue = async () => {
+        if (!event || !generatedRevenuePayout.isSupported) {
+            toast('Generated revenue payout is available only for planning public and promote events.', { icon: 'ℹ️' });
+            return;
+        }
+
+        if (generatedRevenuePayout.alreadyPaid) {
+            toast.success('Generated revenue payout has already been sent to the user.');
+            return;
+        }
+
+        if (generatedRevenuePayout.payoutAmountInr <= 0) {
+            toast.error('Generated revenue payout amount is zero for this event.');
+            return;
+        }
+
+        const endpoint = eventType === 'planning'
+            ? `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(id))}/generated-revenue-payout`
+            : `${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}/generated-revenue-payout`;
+
+        try {
+            setPayingGeneratedRevenue(true);
+            const res = await fetchWithAuth(
+                endpoint,
+                {
+                    method: 'PATCH',
+                    body: JSON.stringify({ mode: vendorPayoutMode }),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const json = await safeJson(res);
+            if (!res.ok || !json?.success) {
+                throw new Error(json?.message || 'Failed to send generated revenue payout');
+            }
+
+            setRawEvent(json.data);
+            const responseMode = String(json?.data?.generatedRevenuePayout?.mode || vendorPayoutMode).trim().toUpperCase();
+            toast.success(responseMode === 'RAZORPAY'
+                ? 'Generated revenue payout sent to user (RAZORPAY mode).'
+                : 'Generated revenue payout sent to user (DEMO).');
+        } catch (error) {
+            toast.error(error?.message || 'Failed to send generated revenue payout');
+        } finally {
+            setPayingGeneratedRevenue(false);
+        }
+    };
+
+    const handleMarkAsComplete = async () => {
+        if (!event) return;
+
+        if (!isPrivatePlanning) {
+            toast('Mark as complete is currently available only for private planning events.', { icon: 'ℹ️' });
+            return;
+        }
+
+        if (normalizedStatus === 'COMPLETED') {
+            toast.success('This event is already marked as completed.');
+            return;
+        }
+
+        if (!hasEventDateReached) {
+            toast('Mark as complete is available on the event date.', { icon: '📅' });
+            return;
+        }
+
+        if (!canMarkAsComplete) {
+            toast.error('Only CONFIRMED events can be marked as complete.');
+            return;
+        }
+
+        try {
+            setMarkingComplete(true);
+            const res = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(id))}/mark-complete`,
+                { method: 'PATCH' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const json = await safeJson(res);
+            if (!res.ok || !json?.success) {
+                throw new Error(json?.message || 'Failed to mark event as complete');
+            }
+
+            setRawEvent(json.data);
+            toast.success('Event marked as completed.');
+        } catch (error) {
+            toast.error(error?.message || 'Failed to mark event as complete');
+        } finally {
+            setMarkingComplete(false);
+        }
+    };
+
+    const handlePromotionAction = async (label) => {
+        const actionKey = String(label || '').trim().toLowerCase();
+
+        if (actionKey === 'advanced analytics') {
+            toast('No manager action is needed for Advanced Analytics right now.', { icon: 'ℹ️' });
+            return;
+        }
+
+        if (actionKey === 'social synergy') {
+            toast('Social Synergy posting is not available yet.', { icon: 'ℹ️' });
+            return;
+        }
+
+        if (actionKey === 'featured placement') {
+            toast('Featured Placement flow is still in progress and will be added next.', { icon: 'ℹ️' });
+            return;
+        }
+
+        if (actionKey !== 'email blast') {
+            toast('Unsupported promotion action.', { icon: '⚠️' });
+            return;
+        }
+
+        if (!id || !eventType) {
+            toast.error('Event details are still loading. Please try again.');
+            return;
+        }
+
+        const endpoint = eventType === 'planning'
+            ? `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(id))}/promotion-actions/email-blast`
+            : `${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}/promotion-actions/email-blast`;
+
+        try {
+            setPromotionActionLoadingKey(actionKey);
+
+            const res = await fetchWithAuth(
+                endpoint,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const json = await safeJson(res);
+            if (!res.ok || !json?.success) {
+                throw new Error(json?.message || 'Failed to trigger email blast');
+            }
+
+            toast.success('Email Blast triggered. Event details will be sent to all platform users.');
+        } catch (error) {
+            toast.error(error?.message || 'Failed to trigger email blast');
+        } finally {
+            setPromotionActionLoadingKey('');
+        }
     };
 
     return (
@@ -631,13 +1068,35 @@ const ManagerEventDetails = () => {
                             <button onClick={handlePrint} className="h-10 w-10 flex items-center justify-center bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl text-white border border-white/10 transition-colors" title="Print Event Summary">
                                 <Printer className="w-5 h-5" />
                             </button>
-                            <button
-                                onClick={() => setIsEditModalOpen(true)}
-                                disabled={!event}
-                                className="px-6 py-2.5 bg-white text-gray-900 hover:bg-gray-100 rounded-xl font-bold transition-colors shadow-lg shadow-black/10 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-                            >
-                                <Edit className="w-4 h-4" /> Edit Event
-                            </button>
+                            <div className="flex flex-col gap-2">
+                                <button
+                                    onClick={handleMarkAsComplete}
+                                    disabled={!event || markingComplete || !canMarkAsComplete}
+                                    title={!event
+                                        ? 'Event details are loading.'
+                                        : markingComplete
+                                            ? 'Marking event as completed...'
+                                            : !isPrivatePlanning
+                                                ? 'Available only for private planning events.'
+                                                : normalizedStatus === 'COMPLETED'
+                                                    ? 'Event is already completed.'
+                                                    : normalizedStatus !== 'CONFIRMED'
+                                                        ? 'Only CONFIRMED events can be marked as complete.'
+                                                        : !hasEventDateReached
+                                                            ? 'Available on the event date.'
+                                                            : 'Mark this event as complete.'}
+                                    className="px-6 py-2.5 bg-teal-600 text-white hover:bg-teal-700 rounded-xl font-bold transition-colors shadow-lg shadow-black/10 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    <CheckCircle className="w-4 h-4" /> {markingComplete ? 'Marking…' : 'Mark as Complete'}
+                                </button>
+                                <button
+                                    onClick={() => setIsEditModalOpen(true)}
+                                    disabled={!event}
+                                    className="px-6 py-2.5 bg-white text-gray-900 hover:bg-gray-100 rounded-xl font-bold transition-colors shadow-lg shadow-black/10 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    <Edit className="w-4 h-4" /> Edit Event
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -645,36 +1104,60 @@ const ManagerEventDetails = () => {
 
             {/* 2. Sticky Tab Navigation */}
             <div className={`sticky top-0 z-30 transition-all duration-300 border-b ${scrolled ? 'bg-white/90 backdrop-blur-md shadow-sm border-gray-200 py-2' : 'bg-transparent border-transparent py-4'}`}>
-                <div className="max-w-[1920px] mx-auto px-6 overflow-x-auto">
-                    <nav className="flex items-center gap-1 p-1 bg-white/50 backdrop-blur-sm rounded-xl border border-gray-200/50 w-fit">
-                        {tabs.map((tab) => {
-                            const Icon = tab.icon;
-                            const isActive = activeTab === tab.id;
-                            const hasCount = tab.count !== undefined && tab.count !== null;
-                            const numericCount = Number(tab.count);
-                            const displayCount = Number.isFinite(numericCount)
-                                ? (numericCount > 999 ? '2.4k' : String(numericCount))
-                                : String(tab.count);
-                            return (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setActiveTab(tab.id)}
-                                    className={`
-                                        relative px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all
-                                        ${isActive ? 'text-teal-700 bg-teal-50 shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/50'}
-                                    `}
-                                >
-                                    <Icon className={`w-4 h-4 ${isActive ? 'text-teal-600' : 'text-gray-400'}`} />
-                                    {tab.label}
-                                    {hasCount && (
-                                        <span className={`inline-flex min-w-5 h-5 items-center justify-center px-1.5 py-0.5 rounded-full text-[10px] leading-none ${isActive ? 'bg-teal-200 text-teal-800' : 'bg-gray-200 text-gray-600'}`}>
-                                            {displayCount}
-                                        </span>
-                                    )}
-                                </button>
-                            );
-                        })}
-                    </nav>
+                <div className="max-w-[1920px] mx-auto px-6">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="overflow-x-auto">
+                            <nav className="flex items-center gap-1 p-1 bg-white/50 backdrop-blur-sm rounded-xl border border-gray-200/50 w-max">
+                                {tabs.map((tab) => {
+                                    const Icon = tab.icon;
+                                    const isActive = activeTab === tab.id;
+                                    const hasCount = tab.count !== undefined && tab.count !== null;
+                                    const numericCount = Number(tab.count);
+                                    const displayCount = Number.isFinite(numericCount)
+                                        ? (numericCount > 999 ? `${(numericCount / 1000).toFixed(1)}k` : String(numericCount))
+                                        : String(tab.count);
+                                    return (
+                                        <button
+                                            key={tab.id}
+                                            onClick={() => setActiveTab(tab.id)}
+                                            className={`
+                                                relative px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-all
+                                                ${isActive ? 'text-teal-700 bg-teal-50 shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/50'}
+                                            `}
+                                        >
+                                            <Icon className={`w-4 h-4 ${isActive ? 'text-teal-600' : 'text-gray-400'}`} />
+                                            {tab.label}
+                                            {hasCount && (
+                                                <span className={`inline-flex min-w-5 h-5 items-center justify-center px-1.5 py-0.5 rounded-full text-[10px] leading-none ${isActive ? 'bg-teal-200 text-teal-800' : 'bg-gray-200 text-gray-600'}`}>
+                                                    {displayCount}
+                                                </span>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </nav>
+                        </div>
+
+                        {event && generatedRevenuePayout.isSupported ? (
+                            <button
+                                onClick={handlePayGeneratedRevenue}
+                                disabled={payingGeneratedRevenue || generatedRevenuePayout.alreadyPaid || generatedRevenuePayout.payoutAmountInr <= 0}
+                                title={generatedRevenuePayout.alreadyPaid
+                                    ? 'Generated revenue payout already sent to user.'
+                                    : generatedRevenuePayout.payoutAmountInr <= 0
+                                        ? 'No payable generated revenue for this event.'
+                                        : `Pay ${formatMoneyShort(generatedRevenuePayout.payoutAmountInr)} to user using ${vendorPayoutMode} mode.`}
+                                className="px-4 py-2.5 rounded-xl font-bold text-sm bg-teal-600 text-white hover:bg-teal-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                <DollarSign className="w-4 h-4" />
+                                {payingGeneratedRevenue
+                                    ? 'Paying...'
+                                    : generatedRevenuePayout.alreadyPaid
+                                        ? 'Revenue Paid'
+                                        : `${vendorPayoutMode === 'DEMO' ? 'Demo Pay' : 'Pay'} Generated Revenue (${formatMoneyShort(generatedRevenuePayout.payoutAmountInr)})`}
+                            </button>
+                        ) : null}
+                    </div>
                 </div>
             </div>
 
@@ -696,6 +1179,9 @@ const ManagerEventDetails = () => {
                                     onRemoveTeamMember={handleRemoveTeamMember}
                                     getInitials={getInitials}
                                     onMessageClient={() => setActiveTab('chat')}
+                                    onPromotionAction={handlePromotionAction}
+                                    promotionActionLoadingKey={promotionActionLoadingKey}
+                                    privateBilling={privateBilling}
                                 />
                             ) : (
                                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
@@ -705,13 +1191,22 @@ const ManagerEventDetails = () => {
                                 </div>
                             )
                         )}
-                        {activeTab === 'guests' && <GuestsTab onAddClick={() => setIsGuestModalOpen(true)} />}
+                        {activeTab === 'guests' && (
+                            <GuestsTab
+                                onAddClick={() => setIsGuestModalOpen(true)}
+                                onGuestCountChange={setGuestCount}
+                            />
+                        )}
                         {activeTab === 'vendors' && eventType !== 'promote' && <VendorsTab />}
-                        {activeTab === 'chat' && <ChatTab eventId={id} client={client} />}
+                        {activeTab === 'chat' && <ChatTab eventId={id} client={client} teamMembers={selectedTeamMembers} />}
                         {activeTab === 'todo' && <ToDoTab />}
-                        {activeTab === 'schedule' && <ScheduleTab />}
-                        {activeTab === 'financials' && event && <FinancialsTab event={event} />}
-                        {activeTab === 'documents' && <DocumentsTab eventType={eventType} eventData={rawEvent} />}
+                        {activeTab === 'financials' && event && (
+                            <FinancialsTab
+                                event={event}
+                                exportUiOnLoad={shouldAutoExportFinancialUi}
+                            />
+                        )}
+                        {activeTab === 'documents' && eventType === 'promote' && <DocumentsTab eventType={eventType} eventData={rawEvent} />}
                     </motion.div>
                 </AnimatePresence>
             </div>

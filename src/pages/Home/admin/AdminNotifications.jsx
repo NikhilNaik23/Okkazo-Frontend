@@ -2,23 +2,22 @@ import React, { useState } from 'react';
 import { 
     MdSearch, 
     MdFilterList, 
-    MdMoreVert, 
     MdCheckCircle, 
-    MdDelete,
     MdVolumeOff,
     MdMoreHoriz
 } from 'react-icons/md';
-import { vendorNotificationsData } from '../../../data/vendorNotificationsData';
+import { toast } from 'react-hot-toast';
+import useNotificationFeed from '../../../hooks/useNotificationFeed';
 
 const AdminNotifications = () => {
-    const [notifications, setNotifications] = useState(vendorNotificationsData);
+    const { grouped, markAllRead } = useNotificationFeed();
     const [activeTab, setActiveTab] = useState('all'); // all, unread, system
     const [searchTerm, setSearchTerm] = useState('');
 
     const allItems = [
-        ...notifications.new.map(n => ({ ...n, category: 'New' })),
-        ...notifications.earlier.map(n => ({ ...n, category: 'Earlier' })),
-        ...notifications.promotions.map(n => ({ ...n, category: 'Promotions' }))
+        ...grouped.new,
+        ...grouped.earlier,
+        ...grouped.promotions,
     ];
 
     const filteredNotifications = allItems.filter(n => {
@@ -26,15 +25,13 @@ const AdminNotifications = () => {
                              n.message.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesTab = activeTab === 'all' || 
                           (activeTab === 'unread' && n.unread) ||
-                          (activeTab === 'system' && n.category !== 'Promotions');
+                          (activeTab === 'system' && n.category !== 'PROMOTION');
         return matchesSearch && matchesTab;
     });
 
-    const markAllAsRead = () => {
-        setNotifications(prev => ({
-            ...prev,
-            new: prev.new.map(n => ({ ...n, unread: false }))
-        }));
+    const markAllAsRead = async () => {
+        await markAllRead();
+        toast.success('All notifications marked as read');
     };
 
     return (

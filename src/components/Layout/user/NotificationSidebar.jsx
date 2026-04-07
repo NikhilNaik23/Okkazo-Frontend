@@ -1,20 +1,15 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BsXLg, BsCheck2All } from 'react-icons/bs';
 import { Link } from 'react-router-dom';
-import { notificationsData } from '../../../data/notificationsData';
+import useNotificationFeed from '../../../hooks/useNotificationFeed';
 
 const NotificationSidebar = ({ isOpen, onClose }) => {
-    // Flatten data for sidebar or keep sections. Sections look better.
-    const [notifications, setNotifications] = useState(notificationsData);
+    const { grouped, markAllRead } = useNotificationFeed({ enabled: isOpen });
+    const notifications = grouped;
 
-    // Mock "Mark all as read"
-    const handleMarkAllRead = () => {
-        // In a real app, this would make an API call.
-        // For now, we just visually indicate it (though data is static import so state won't persist deep reload without more complex logic, 
-        // but local state works for this session).
-        const updatedNew = notifications.new.map(n => ({ ...n, unread: false }));
-        setNotifications({ ...notifications, new: updatedNew });
+    const handleMarkAllRead = async () => {
+        await markAllRead();
     };
 
     return (

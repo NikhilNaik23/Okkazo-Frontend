@@ -45,7 +45,7 @@ const PaymentSuccess = ({ displayTransactionId, countdown, onNext }) => {
                 </div>
                 <div className="flex justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Amount Paid</span>
-                    <span className="text-xs font-bold text-gray-700">₹15,000</span>
+                    <span className="text-xs font-bold text-gray-700">₹150</span>
                 </div>
             </div>
 

@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useDispatch } from "react-redux";
 import { 
   Settings, 
   Globe, 
@@ -11,14 +12,18 @@ import {
   ChevronRight,
   CheckCircle2
 } from "lucide-react";
+import { fetchWithAuth } from "../../../utils/apiHandler";
+import { refreshAccessToken } from "../../../store/slices/authSlice";
 
 const STORAGE_KEY = 'okkazo.admin.settings.v1';
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
 const DEFAULT_SETTINGS = {
     general: {
         language: 'en-US',
         maintenanceMode: false,
         requireAdmin2FA: true,
+        vendorPayoutMode: 'DEMO',
         dataRetentionYears: 2,
         webhookUrl: 'https://api.okkazo.com/webhooks/v1',
     },
@@ -50,6 +55,14 @@ const safeParse = (raw) => {
     }
 };
 
+const safeJson = (raw) => {
+    try {
+        return JSON.parse(raw);
+    } catch {
+        return null;
+    }
+};
+
 const isValidUrl = (value) => {
     try {
         const u = new URL(String(value));
@@ -60,10 +73,11 @@ const isValidUrl = (value) => {
 };
 
 const AdminSettings = () => {
+    const dispatch = useDispatch();
     const [activeTab, setActiveTab] = useState("General");
 
     const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-    const [saveState, setSaveState] = useState({ status: 'idle', message: '' }); // idle | saved | error
+    const [saveState, setSaveState] = useState({ status: 'idle', message: '' }); // idle | saving | saved | error
 
     useEffect(() => {
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -80,6 +94,46 @@ const AdminSettings = () => {
         }));
     }, []);
 
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadPaymentSettings = async () => {
+            try {
+                const response = await fetchWithAuth(
+                    `${API_BASE_URL}/api/orders/settings`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+
+                const data = await safeJson(await response.text());
+                if (!response.ok || !data?.success) {
+                    return;
+                }
+
+                const mode = String(data?.data?.vendorPayoutMode || 'DEMO').trim().toUpperCase() === 'RAZORPAY'
+                    ? 'RAZORPAY'
+                    : 'DEMO';
+
+                if (!cancelled) {
+                    setSettings((prev) => ({
+                        ...prev,
+                        general: {
+                            ...prev.general,
+                            vendorPayoutMode: mode,
+                        },
+                    }));
+                }
+            } catch {
+                // keep local fallback
+            }
+        };
+
+        loadPaymentSettings();
+        return () => {
+            cancelled = true;
+        };
+    }, [dispatch]);
+
     const updateSetting = (section, key, value) => {
         setSettings((prev) => ({
             ...prev,
@@ -91,7 +145,7 @@ const AdminSettings = () => {
         setSaveState({ status: 'idle', message: '' });
     };
 
-    const handleSaveAll = () => {
+    const handleSaveAll = useCallback(async () => {
         // basic validation
         const webhookUrl = settings?.general?.webhookUrl;
         if (webhookUrl && !isValidUrl(webhookUrl)) {
@@ -99,14 +153,55 @@ const AdminSettings = () => {
             return;
         }
 
+        const vendorPayoutMode = String(settings?.general?.vendorPayoutMode || 'DEMO').trim().toUpperCase() === 'RAZORPAY'
+            ? 'RAZORPAY'
+            : 'DEMO';
+
+        setSaveState({ status: 'saving', message: '' });
+
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/orders/settings`,
+                {
+                    method: 'PATCH',
+                    body: JSON.stringify({ vendorPayoutMode }),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(await response.text());
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.message || 'Could not save payout mode settings');
+            }
+
+            const effectiveMode = String(data?.data?.vendorPayoutMode || 'DEMO').trim().toUpperCase() === 'RAZORPAY'
+                ? 'RAZORPAY'
+                : 'DEMO';
+
+            setSettings((prev) => ({
+                ...prev,
+                general: {
+                    ...prev.general,
+                    vendorPayoutMode: effectiveMode,
+                },
+            }));
+
+            if (effectiveMode !== vendorPayoutMode) {
+                setSaveState({
+                    status: 'saved',
+                    message: 'Saved. Effective payout mode is DEMO because live Razorpay payouts are disabled on server.',
+                });
+                return;
+            }
+
             setSaveState({ status: 'saved', message: 'Saved' });
             window.setTimeout(() => setSaveState({ status: 'idle', message: '' }), 1500);
-        } catch {
-            setSaveState({ status: 'error', message: 'Could not save settings' });
+        } catch (error) {
+            setSaveState({ status: 'error', message: error?.message || 'Could not save settings' });
         }
-    };
+    }, [dispatch, settings]);
 
     const tabs = [
         { id: "General", icon: <Globe size={18} /> },
@@ -181,6 +276,24 @@ const AdminSettings = () => {
                             onChange={(v) => updateSetting('general', 'requireAdmin2FA', v)}
                             label="Require Admin 2FA"
                         />
+                    ),
+                },
+                {
+                    title: 'Vendor Payout Mode',
+                    description: 'Choose whether vendor payouts use DEMO simulation or live Razorpay Route transfers.',
+                    control: (
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#f8fafc] border border-[#f0f2f5] rounded-lg text-xs font-bold text-[#0b2d49]">
+                            <select
+                                value={settings.general.vendorPayoutMode}
+                                onChange={(e) => updateSetting('general', 'vendorPayoutMode', e.target.value)}
+                                className="bg-transparent outline-none cursor-pointer"
+                                aria-label="Vendor payout mode"
+                            >
+                                <option value="DEMO">DEMO (no real transfer)</option>
+                                <option value="RAZORPAY">RAZORPAY (live transfer)</option>
+                            </select>
+                            <ChevronRight size={14} className="rotate-90 text-[#94a3b8]" />
+                        </div>
                     ),
                 },
                 {
@@ -385,9 +498,23 @@ const AdminSettings = () => {
     }, [activeTab, settings]);
 
     const saveButton = useMemo(() => {
+        if (saveState.status === 'saving') {
+            return (
+                <button
+                    type="button"
+                    disabled
+                    className="text-xs font-bold text-[#0b2d49] bg-[#e9eff1] px-3 py-1.5 rounded-lg border border-[#d6dee5] cursor-not-allowed"
+                >
+                    Saving...
+                </button>
+            );
+        }
         if (saveState.status === 'saved') {
             return (
-                <div className="flex items-center gap-2 text-xs font-bold text-[#28a785] bg-[#ebf7f3] px-3 py-1.5 rounded-lg border border-[#28a785]/10">
+                <div
+                    className="flex items-center gap-2 text-xs font-bold text-[#28a785] bg-[#ebf7f3] px-3 py-1.5 rounded-lg border border-[#28a785]/10"
+                    title={saveState.message || 'Saved'}
+                >
                     <CheckCircle2 size={14} /> Saved
                 </div>
             );
@@ -413,7 +540,7 @@ const AdminSettings = () => {
                 Save All Changes
             </button>
         );
-    }, [saveState, settings]);
+    }, [handleSaveAll, saveState]);
 
     return (
         <div className="flex flex-col h-full bg-[#fcfdfe] overflow-hidden">

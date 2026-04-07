@@ -63,7 +63,8 @@ const EditEventModal = ({ isOpen, onClose, event, onSave }) => {
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-gray-500 uppercase">Date</label>
                             <input
-                                type="date"
+                                type="text"
+                                value={String(event?.date || '')}
                                 disabled
                                 className="w-full px-4 py-2 border border-gray-200 rounded-xl font-medium focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none bg-gray-50 text-gray-400"
                             />

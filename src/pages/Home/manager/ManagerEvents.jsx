@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Search, ChevronDown, Filter, Calendar as CalendarIcon, LayoutGrid, List, Kanban as KanbanIcon, MoreHorizontal, X, Plus, Users, DollarSign, Calendar, Archive, Download, CheckSquare, BarChart3, Bell } from 'lucide-react';
+import { Search, ChevronDown, Filter, Calendar as CalendarIcon, LayoutGrid, List, Kanban as KanbanIcon, MoreHorizontal, X, Plus, Users, Calendar, Archive, Download, CheckSquare, BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ManagerEventCard from '../../../components/Global/cards/ManagerEventCard';
 import { useDispatch, useSelector } from 'react-redux';
 import {
-    fetchManagerPlanningApplications,
     fetchManagerPlanningEvents,
     fetchManagerPromoteEvents,
 } from '../../../store/slices/managerEventsSlice';
@@ -92,7 +91,7 @@ const ManagerEvents = () => {
     const [activeTab, setActiveTab] = useState('All Events');
     const [selectedEvents, setSelectedEvents] = useState([]);
 
-    const { planningEvents, promoteEvents, planningApplications, error } = useSelector(
+    const { planningEvents, promoteEvents, error } = useSelector(
         (state) => state.managerEvents
     );
 
@@ -102,7 +101,6 @@ const ManagerEvents = () => {
         const poll = () => {
             dispatch(fetchManagerPlanningEvents({ limit: 200 }));
             dispatch(fetchManagerPromoteEvents({ limit: 200 }));
-            dispatch(fetchManagerPlanningApplications({ limit: 200 }));
         };
 
         poll();
@@ -198,8 +196,6 @@ const ManagerEvents = () => {
         return mixedEvents.filter(isActiveEvent).length;
     }, [mixedEvents]);
 
-    const applicationsCount = Array.isArray(planningApplications) ? planningApplications.length : 0;
-
     const toggleSelect = (id) => {
         if (selectedEvents.includes(id)) {
             setSelectedEvents(selectedEvents.filter(eventId => eventId !== id));
@@ -222,18 +218,10 @@ const ManagerEvents = () => {
                 </div>
 
                 {/* Stats Row */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 w-full lg:w-auto">
+                <div className="grid grid-cols-1 gap-4 w-full lg:w-auto">
                     <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center min-w-35">
                         <span className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1"><Calendar className="w-3 h-3" /> Active</span>
                         <span className="text-2xl font-extrabold text-gray-800">{activeCount}</span>
-                    </div>
-                    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center min-w-35">
-                        <span className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1"><DollarSign className="w-3 h-3" /> Revenue</span>
-                        <span className="text-2xl font-extrabold text-teal-600">₹1.28L</span>
-                    </div>
-                    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center min-w-35">
-                        <span className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-1 flex items-center gap-1"><Bell className="w-3 h-3" /> Applications</span>
-                        <span className="text-2xl font-extrabold text-rose-500">{applicationsCount}</span>
                     </div>
                 </div>
             </div>

@@ -1,30 +1,20 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { BsCheck2All, BsX } from "react-icons/bs";
-import { vendorNotificationsData } from "../../../data/vendorNotificationsData";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "react-hot-toast";
+import useNotificationFeed from "../../../hooks/useNotificationFeed";
 
 const AdminNotificationsPanel = ({ isOpen, onClose }) => {
-    const [notifications, setNotifications] = useState(vendorNotificationsData);
-    const [isLoading, setIsLoading] = useState(false);
     const [visibleCount, setVisibleCount] = useState(5);
+    const { grouped, markAllRead } = useNotificationFeed({ enabled: isOpen });
 
-    const allPastItems = [...notifications.earlier, ...notifications.promotions];
-    const filteredNew = notifications.new;
+    const allPastItems = [...grouped.earlier, ...grouped.promotions];
+    const filteredNew = grouped.new;
     const filteredPast = allPastItems;
 
-    const handleMarkAllRead = () => {
-        const updatedNew = notifications.new.map(n => ({
-            ...n,
-            unread: false
-        }));
-
-        setNotifications(prev => ({
-            ...prev,
-            new: updatedNew
-        }));
-
+    const handleMarkAllRead = async () => {
+        await markAllRead();
         toast.success("All notifications marked as read");
     };
 

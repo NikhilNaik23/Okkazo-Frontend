@@ -9,6 +9,7 @@ import feesReducer from './slices/feesSlice';
 import managerEventsReducer from './slices/managerEventsSlice';
 import promotionsConfigReducer from './slices/promotionsConfigSlice';
 import dashboardReducer from './slices/dashboardSlice';
+import notificationsReducer from './slices/notificationsSlice';
 
 export const store = configureStore({
     reducer: {
@@ -22,6 +23,7 @@ export const store = configureStore({
         promotionsConfig: promotionsConfigReducer,
         managerEvents: managerEventsReducer,
         dashboard: dashboardReducer,
+        notifications: notificationsReducer,
     },
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({

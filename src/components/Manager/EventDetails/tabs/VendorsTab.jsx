@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom';
 import {
-    CheckCircle, Clock, XCircle, MapPin, Star, RefreshCw, Send,
+    CheckCircle, Clock, XCircle, MapPin, Star, RefreshCw, Send, Wallet,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import {
@@ -41,9 +41,14 @@ const formatServiceLabel = (service) => {
 const formatMoneyShort = (value) => {
     const n = Number(value || 0);
     if (!Number.isFinite(n) || n <= 0) return '—';
-    if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
-    if (n >= 1000) return `₹${(n / 1000).toFixed(0)}k`;
-    return `₹${n.toFixed(0)}`;
+    return `₹${Math.round(n).toLocaleString('en-IN')}`;
+};
+
+const toPayoutKey = (vendorAuthId, service) => {
+    const a = String(vendorAuthId || '').trim().toLowerCase();
+    const b = String(service || '').trim().toLowerCase();
+    if (!a || !b) return null;
+    return `${a}::${b}`;
 };
 
 const formatMoneyRangeFromBasePrice = (price, { serviceLabel, guestCount, dayCount } = {}) => {
@@ -92,6 +97,11 @@ const VendorsTab = () => {
     const [guestCountForPricing, setGuestCountForPricing] = useState(null);
     const [dayCountForPricing, setDayCountForPricing] = useState(1);
     const [clientAuthId, setClientAuthId] = useState('');
+    const [planningStatus, setPlanningStatus] = useState('');
+    const [isSendingQuotationEmail, setIsSendingQuotationEmail] = useState(false);
+    const [payoutsByKey, setPayoutsByKey] = useState({});
+    const [payoutLoadingByKey, setPayoutLoadingByKey] = useState({});
+    const [vendorPayoutMode, setVendorPayoutMode] = useState('DEMO');
 
     const selectVendorForService = async ({ service, vendorAuthId, serviceId, price }) => {
         if (!eventId) return;
@@ -275,10 +285,132 @@ const VendorsTab = () => {
         }
     };
 
+    const sendQuotationMailToClient = async () => {
+        if (!eventId || isSendingQuotationEmail) return;
+
+        setIsSendingQuotationEmail(true);
+        try {
+            const res = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(eventId))}/quote/send-email`,
+                {
+                    method: 'POST',
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const json = await safeJson(res);
+            if (!res.ok || !json?.success) {
+                throw new Error(json?.message || 'Failed to send quotation email');
+            }
+
+            toast.success(json?.message || 'Quotation email sent');
+        } catch (e) {
+            toast.error(e?.message || 'Failed to send quotation email');
+        } finally {
+            setIsSendingQuotationEmail(false);
+        }
+    };
+
+    const fetchEventPayouts = useCallback(async () => {
+        if (!eventId) return;
+
+        try {
+            const res = await fetchWithAuth(
+                `${API_BASE_URL}/api/orders/vendor-payouts/event/${encodeURIComponent(String(eventId))}`,
+                { method: 'GET' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const json = await safeJson(res);
+            if (!res.ok || !json?.success) {
+                return;
+            }
+
+            const rows = Array.isArray(json?.data?.payouts) ? json.data.payouts : [];
+            const next = {};
+            rows.forEach((row) => {
+                const key = toPayoutKey(row?.vendorAuthId, row?.service);
+                if (key) next[key] = row;
+            });
+            setPayoutsByKey(next);
+        } catch {
+            // best-effort only
+        }
+    }, [dispatch, eventId]);
+
+    const fetchPaymentSettings = useCallback(async () => {
+        try {
+            const res = await fetchWithAuth(
+                `${API_BASE_URL}/api/orders/settings`,
+                { method: 'GET' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const json = await safeJson(res);
+            if (!res.ok || !json?.success) {
+                return;
+            }
+
+            const mode = String(json?.data?.vendorPayoutMode || 'DEMO').trim().toUpperCase();
+            setVendorPayoutMode(mode === 'RAZORPAY' ? 'RAZORPAY' : 'DEMO');
+        } catch {
+            // best-effort only
+        }
+    }, [dispatch]);
+
+    const handleReleaseVendorPayout = async (vendor) => {
+        if (!eventId || !vendor?.vendorAuthId || !vendor?.service) return;
+        const key = toPayoutKey(vendor.vendorAuthId, vendor.service);
+        if (!key) return;
+
+        setPayoutLoadingByKey((prev) => ({ ...prev, [key]: true }));
+        try {
+            const res = await fetchWithAuth(
+                `${API_BASE_URL}/api/orders/vendor-payouts/release`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        eventId: String(eventId),
+                        vendorAuthId: String(vendor.vendorAuthId),
+                        service: String(vendor.service),
+                    }),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const json = await safeJson(res);
+            if (!res.ok || !json?.success) {
+                throw new Error(json?.message || 'Failed to release vendor payout');
+            }
+
+            const payout = json?.data?.payout;
+            if (payout) {
+                setPayoutsByKey((prev) => ({ ...prev, [key]: payout }));
+            }
+
+            const responseMode = String(json?.data?.payoutMode || '').trim().toUpperCase();
+            if (responseMode === 'DEMO' || responseMode === 'RAZORPAY') {
+                setVendorPayoutMode(responseMode);
+            }
+
+            const successMessage = responseMode === 'DEMO'
+                ? 'Demo payout marked successfully'
+                : (json?.message || 'Vendor payout processed');
+            toast.success(successMessage);
+            fetchEventPayouts();
+        } catch (e) {
+            toast.error(e?.message || 'Failed to release vendor payout');
+        } finally {
+            setPayoutLoadingByKey((prev) => ({ ...prev, [key]: false }));
+        }
+    };
+
     useEffect(() => {
         if (!eventId) return;
         dispatch(fetchPlanningVendorSelectionByEventId(eventId));
-    }, [dispatch, eventId]);
+        fetchEventPayouts();
+        fetchPaymentSettings();
+    }, [dispatch, eventId, fetchEventPayouts, fetchPaymentSettings]);
 
     useEffect(() => {
         let cancelled = false;
@@ -296,8 +428,10 @@ const VendorsTab = () => {
                         || action?.payload?.ownerAuthId
                         || ''
                     ).trim();
+                    const status = String(action?.payload?.status || '').trim();
                     const pricingDemand = derivePricingDemandFromEvent(action?.payload || {});
                     setClientAuthId(resolvedClientAuthId);
+                    setPlanningStatus(status);
                     setGuestCountForPricing(pricingDemand?.attendeeCount ?? null);
                     setDayCountForPricing(pricingDemand?.dayCount ?? 1);
                 }
@@ -345,6 +479,15 @@ const VendorsTab = () => {
                 const color = availability === 'available' ? 'blue' : availability === 'unavailable' ? 'orange' : 'purple';
                 const serviceNameRaw = v?.serviceName != null ? String(v.serviceName).trim() : '';
                 const serviceName = serviceNameRaw || formatServiceLabel(service);
+                const normalizedServiceCategory = String(v?.serviceCategory || profile?.serviceCategory || '').trim().toLowerCase();
+                const isVenueService = String(service || '').trim().toLowerCase() === 'venue' || normalizedServiceCategory === 'venue';
+                const serviceLocationRaw = v?.serviceLocation != null ? String(v.serviceLocation).trim() : '';
+                const locationFromProfile = profile?.location || profile?.place || null;
+                const resolvedLocation = isVenueService && serviceLocationRaw ? serviceLocationRaw : locationFromProfile;
+                const resolvedCountry = isVenueService && serviceLocationRaw ? null : (profile?.country || null);
+                const displayName = vendorAuthId
+                    ? (profile?.businessName || 'Vendor')
+                    : 'Yet to select';
 
                 const quotedPriceRaw = Number(v?.vendorQuotedPrice);
                 const quotedPrice = Number.isFinite(quotedPriceRaw) && quotedPriceRaw > 0 ? quotedPriceRaw : 0;
@@ -365,7 +508,10 @@ const VendorsTab = () => {
                 const maxPrice = Number.isFinite(maxRaw) && maxRaw > 0 ? maxRaw : 0;
 
                 const isPriceLocked = Boolean(v?.priceLocked) && quotedPrice > 0;
-                const totalFees = isPriceLocked ? (quotedPrice + commissionAmount) : 0;
+                const totalFees = isPriceLocked ? quotedPrice : 0;
+                const payoutAmount = isPriceLocked ? Math.max(0, quotedPrice - commissionAmount) : 0;
+                const payoutKey = vendorAuthId ? toPayoutKey(vendorAuthId, service) : null;
+                const payout = payoutKey ? payoutsByKey[payoutKey] || null : null;
 
                 return {
                     id: `${service}:${vendorAuthId || 'NONE'}`,
@@ -375,9 +521,10 @@ const VendorsTab = () => {
                     serviceId: v?.serviceId || null,
                     vendorAuthId: vendorAuthId || null,
                     businessName: vendorAuthId ? (profile?.businessName || 'Vendor') : 'Yet to select',
-                    serviceCategory: profile?.serviceCategory || null,
-                    location: profile?.location || profile?.place || null,
-                    country: profile?.country || null,
+                    displayName,
+                    serviceCategory: v?.serviceCategory || profile?.serviceCategory || null,
+                    location: resolvedLocation,
+                    country: resolvedCountry,
                     description: profile?.description || null,
                     status,
                     availability,
@@ -391,12 +538,15 @@ const VendorsTab = () => {
                     commissionAmount,
                     commissionPercent,
                     totalFees,
+                    payoutAmount,
+                    payoutKey,
+                    payout,
                     priceLocked: isPriceLocked,
                     icon,
                     color,
                 };
             });
-    }, [vendorSelection]);
+    }, [vendorSelection, payoutsByKey]);
 
     const getAvailabilityBadge = (av) => {
         if (av === 'available') return { bg: 'bg-green-50 border-green-200', text: 'text-green-700', label: '✅ Available', icon: CheckCircle };
@@ -404,17 +554,38 @@ const VendorsTab = () => {
         return { bg: 'bg-red-50 border-red-200', text: 'text-red-700', label: '❌ Unavailable', icon: XCircle };
     };
 
+    const normalizedPlanningStatus = String(planningStatus || '').trim().toUpperCase().replace(/_/g, ' ');
+    const canShowPayoutAction = normalizedPlanningStatus === 'VENDOR PAYMENT PENDING';
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
                     <h3 className="text-xl font-bold text-gray-900">Vendor Management</h3>
                     <p className="text-sm text-gray-500 mt-1">Verify availability, confirm vendors, and manage alternatives</p>
+                    <p className="text-xs font-bold uppercase tracking-wide mt-1 text-indigo-600">Payout mode: {vendorPayoutMode}</p>
                 </div>
                 <div className="flex gap-3">
                     <button
+                        onClick={sendQuotationMailToClient}
+                        disabled={isSendingQuotationEmail}
+                        className="px-4 py-2.5 bg-teal-600 border border-teal-600 rounded-xl text-sm font-bold text-white hover:bg-teal-700 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                        <Send className="w-4 h-4" /> {isSendingQuotationEmail ? 'Sending...' : 'Send Quotation Mail'}
+                    </button>
+                    <button
                         onClick={() => {
-                            if (eventId) dispatch(fetchPlanningVendorSelectionByEventId(eventId));
+                            if (eventId) {
+                                dispatch(fetchPlanningVendorSelectionByEventId(eventId));
+                                dispatch(fetchPlanningByEventId(String(eventId))).then((action) => {
+                                    if (action?.meta?.requestStatus === 'fulfilled') {
+                                        const status = String(action?.payload?.status || '').trim();
+                                        setPlanningStatus(status);
+                                    }
+                                });
+                                fetchEventPayouts();
+                                fetchPaymentSettings();
+                            }
                         }}
                         className="px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-2"
                     >
@@ -481,7 +652,7 @@ const VendorsTab = () => {
                                         </div>
                                         <div className="flex-1">
                                             <div className="flex items-center gap-3 mb-1">
-                                                <h4 className="font-extrabold text-gray-900 text-lg">{vendor.businessName}</h4>
+                                                <h4 className="font-extrabold text-gray-900 text-lg">{vendor.displayName || vendor.businessName}</h4>
                                                 <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${badge.bg} ${badge.text}`}>
                                                     {badge.label}
                                                 </span>
@@ -521,7 +692,7 @@ const VendorsTab = () => {
                                                 ? `${formatMoneyShort(vendor.commissionAmount)}${vendor.commissionPercent > 0 ? ` (${vendor.commissionPercent}%)` : ''}`
                                                 : '—'}
                                         </p>
-                                        <p className="mt-1 text-xs font-bold uppercase tracking-wide text-gray-400">Total Fee</p>
+                                        <p className="mt-1 text-xs font-bold uppercase tracking-wide text-gray-400">Client Total</p>
                                         <p className={`text-sm font-extrabold ${vendor.priceLocked ? 'text-teal-700' : 'text-gray-500'}`}>
                                             {vendor.priceLocked ? formatMoneyShort(vendor.totalFees) : '—'}
                                         </p>
@@ -548,9 +719,32 @@ const VendorsTab = () => {
                                             </span>
                                         )}
                                         {vendor.availability === 'available' && (
-                                            <span className="px-4 py-2.5 bg-green-50 text-green-700 rounded-xl text-sm font-bold border border-green-200 flex items-center gap-2">
-                                                <CheckCircle className="w-4 h-4" /> Accepted
-                                            </span>
+                                            <div className="flex flex-col gap-2">
+                                                <span className="px-4 py-2.5 bg-green-50 text-green-700 rounded-xl text-sm font-bold border border-green-200 flex items-center gap-2">
+                                                    <CheckCircle className="w-4 h-4" /> Accepted
+                                                </span>
+                                                {canShowPayoutAction && (
+                                                    <button
+                                                        onClick={() => handleReleaseVendorPayout(vendor)}
+                                                        disabled={
+                                                            !vendor.priceLocked
+                                                            || !(vendor.payoutAmount > 0)
+                                                            || !vendor.vendorAuthId
+                                                            || payoutLoadingByKey[vendor.payoutKey]
+                                                            || String(vendor?.payout?.status || '').trim().toUpperCase() === 'SUCCESS'
+                                                            || String(vendor?.payout?.status || '').trim().toUpperCase() === 'INITIATED'
+                                                        }
+                                                        className="px-4 py-2.5 bg-indigo-50 text-indigo-700 rounded-xl text-xs font-bold border border-indigo-200 hover:bg-indigo-100 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                                    >
+                                                        <Wallet className="w-4 h-4" />
+                                                        {String(vendor?.payout?.status || '').trim().toUpperCase() === 'SUCCESS'
+                                                            ? (vendorPayoutMode === 'DEMO' ? 'Demo Paid' : 'Paid')
+                                                            : (String(vendor?.payout?.status || '').trim().toUpperCase() === 'INITIATED' || payoutLoadingByKey[vendor.payoutKey])
+                                                                ? 'Processing...'
+                                                                : `${vendorPayoutMode === 'DEMO' ? 'Demo Pay' : 'Pay Vendor'} ${formatMoneyShort(vendor.payoutAmount)}`}
+                                                    </button>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </div>

@@ -1,22 +1,19 @@
 import React, { useState, useEffect } from "react";
-import { BsCheck2All, BsTicketPerforated, BsChatLeftText, BsArrowRepeat, BsStar, BsStars, BsClock } from "react-icons/bs";
-import { notificationsData } from "../../../data/notificationsData";
+import { BsCheck2All } from "react-icons/bs";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "react-hot-toast";
 import { useSearchParams } from "react-router-dom";
+import useNotificationFeed from "../../../hooks/useNotificationFeed";
 
 const Notifications = () => {
-    // Initial State from data
-    const [notifications, setNotifications] = useState(notificationsData);
+    const { grouped, status, markAllRead } = useNotificationFeed();
     const [searchParams] = useSearchParams();
     const searchQuery = searchParams.get("search")?.toLowerCase() || "";
 
-    // Merge earlier and promotions for the "Past Moments" timeline
-    // We use the state version to ensure updates reflect (though currently only 'new' changes)
-    const allPastItems = [...notifications.earlier, ...notifications.promotions];
+    const allPastItems = [...grouped.earlier, ...grouped.promotions];
 
     // Filter items based on search query
-    const filteredNew = notifications.new.filter(n =>
+    const filteredNew = grouped.new.filter(n =>
         n.title.toLowerCase().includes(searchQuery) ||
         n.message.toLowerCase().includes(searchQuery)
     );
@@ -44,18 +41,8 @@ const Notifications = () => {
         }, 800);
     };
 
-    const handleMarkAllRead = () => {
-        // Create new state with all 'new' items marked as read
-        const updatedNew = notifications.new.map(n => ({
-            ...n,
-            unread: false
-        }));
-
-        setNotifications(prev => ({
-            ...prev,
-            new: updatedNew
-        }));
-
+    const handleMarkAllRead = async () => {
+        await markAllRead();
         toast.success("All notifications marked as read");
     };
 
@@ -87,6 +74,10 @@ const Notifications = () => {
                 </div>
 
                 <div className="space-y-16">
+                    {status === 'loading' && filteredNew.length === 0 && filteredPast.length === 0 && (
+                        <div className="text-center py-16 text-[#09637E]/60 font-semibold">Loading notifications...</div>
+                    )}
+
                     {/* Recent Intentions (New) */}
                     {filteredNew.length > 0 && (
                         <div className="relative">

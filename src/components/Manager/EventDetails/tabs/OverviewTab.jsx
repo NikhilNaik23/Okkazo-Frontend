@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { 
     CheckCircle, Clock, ChevronRight, Star, ExternalLink, 
-    AlertCircle, Mail, Phone, Download, Send, Plus, MessageSquare, MoreHorizontal
+    Mail, Phone, Download, Send, Plus, MessageSquare, Trash2
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { Badge } from '../ui';
@@ -16,7 +16,33 @@ const promotePipelineStages = [
     { id: 'completed', label: 'Completed' },
 ];
 
-const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, onMessageClient }) => {
+const PROMOTION_BUTTONS = [
+    'Featured Placement',
+    'Email Blast',
+    'Social Synergy',
+    'Advanced Analytics',
+];
+
+const normalizeSelectionLabel = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    return raw
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .split(' ')
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join(' ');
+};
+
+const formatInr = (value) => {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n) || n <= 0) return '₹0';
+    return `₹${Math.round(n).toLocaleString('en-IN')}`;
+};
+
+const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, onMessageClient, onPromotionAction, promotionActionLoadingKey, privateBilling }) => {
     const [addingTeam, setAddingTeam] = useState(false);
     const [pickedStaffKey, setPickedStaffKey] = useState('');
     const [savingTeam, setSavingTeam] = useState(false);
@@ -70,6 +96,42 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, 
     const servicesOpted = useMemo(() => {
         return Array.isArray(event?.servicesOpted) ? event.servicesOpted : [];
     }, [event?.servicesOpted]);
+
+    const selectedPromotions = useMemo(() => {
+        const rows = Array.isArray(event?.selectedPromotions) ? event.selectedPromotions : [];
+        const seen = new Set();
+        const normalized = [];
+
+        rows.forEach((row) => {
+            const raw = typeof row === 'string'
+                ? row
+                : (row?.label || row?.name || row?.title || row?.value || '');
+            const label = normalizeSelectionLabel(raw);
+            if (!label) return;
+
+            const key = label.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            normalized.push(label);
+        });
+
+        return normalized;
+    }, [event?.selectedPromotions]);
+
+    const selectedPromotionSet = useMemo(() => {
+        return new Set(selectedPromotions.map((value) => String(value || '').trim().toLowerCase()));
+    }, [selectedPromotions]);
+
+    const shouldShowPromotions = useMemo(() => {
+        const type = String(event?.type || '').trim().toLowerCase();
+        if (type === 'promote') return true;
+        if (type !== 'planning') return false;
+        return String(event?.listingType || '').trim().toLowerCase() === 'public';
+    }, [event?.type, event?.listingType]);
+
+    const isPromotionActionStatusAllowed = useMemo(() => {
+        return String(event?.status || '').trim().toUpperCase() === 'CONFIRMED';
+    }, [event?.status]);
 
     const client = event?.client || null;
     const clientName = client?.name || client?.fullName || '—';
@@ -186,6 +248,22 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, 
                                         <p className="font-bold text-gray-900">—</p>
                                     )}
                                 </div>
+                                {shouldShowPromotions ? (
+                                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Promotions Opted</p>
+                                        {selectedPromotions.length ? (
+                                            <div className="flex flex-wrap gap-2">
+                                                {selectedPromotions.map((promotion) => (
+                                                    <span key={promotion} className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white border border-gray-200 text-gray-800">
+                                                        {promotion}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="font-bold text-gray-900">—</p>
+                                        )}
+                                    </div>
+                                ) : null}
                             </div>
                             <div className="space-y-4">
                                 <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
@@ -216,6 +294,37 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, 
                         <div className="prose prose-gray max-w-none">
                             <p className="text-gray-600 leading-relaxed text-lg">{event.description}</p>
                         </div>
+                        <div className="mt-6 pt-6 border-t border-gray-100">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Promotion Actions</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                                {PROMOTION_BUTTONS.map((label) => {
+                                                    const actionKey = String(label).toLowerCase();
+                                                    const isOpted = selectedPromotionSet.has(String(label).toLowerCase());
+                                                    const isEnabled = isOpted && isPromotionActionStatusAllowed;
+                                                    const isLoading = String(promotionActionLoadingKey || '').toLowerCase() === actionKey;
+                                    return (
+                                        <button
+                                            key={label}
+                                            type="button"
+                                                            disabled={!isEnabled || isLoading}
+                                                            onClick={async () => {
+                                                if (!isEnabled) return;
+                                                                if (typeof onPromotionAction === 'function') {
+                                                                    await onPromotionAction(label);
+                                                                    return;
+                                                                }
+                                                                toast('Action for this promotion button will be configured next.', { icon: 'ℹ️' });
+                                            }}
+                                                            className={`px-3.5 py-2.5 rounded-xl text-sm font-bold border transition-colors ${isEnabled
+                                                ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
+                                                : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'}`}
+                                        >
+                                                            {isLoading ? 'Sending…' : label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-8 pt-8 border-t border-gray-100">
                             <div>
                                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Organizer</p>
@@ -236,47 +345,88 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, 
                         </div>
                     </section>
 
-                    {/* Planning Progress */}
-                    <section className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
-                        <h3 className="text-xl font-bold text-gray-900 mb-6">Planning Progress</h3>
-                        <div className="space-y-6">
-                            <div>
-                                <div className="flex justify-between items-end mb-2">
-                                    <div>
-                                        <h4 className="font-bold text-gray-900">Task Completion</h4>
-                                        <p className="text-sm text-gray-500">89 of 145 tasks completed</p>
-                                    </div>
-                                    <span className="text-2xl font-extrabold text-teal-600">61%</span>
-                                </div>
-                                <div className="w-full bg-gray-100 rounded-full h-3">
-                                    <div className="bg-teal-500 h-3 rounded-full shadow-[0_0_10px_rgba(20,184,166,0.4)]" style={{ width: '61%' }}></div>
+                    {privateBilling?.enabled ? (
+                        <section className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
+                            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Billing Overview</p>
+                                    <h3 className="text-xl font-bold text-gray-900 mb-1">Bills & Payment</h3>
+                                    <p className="text-sm text-gray-600">
+                                        Private event billing summary with outstanding dues and paid milestones.
+                                    </p>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <div className="p-1.5 bg-blue-100 text-blue-600 rounded-lg"><CheckCircle className="w-4 h-4" /></div>
-                                        <span className="font-bold text-gray-700">Done</span>
-                                    </div>
-                                    <p className="text-2xl font-bold text-gray-900">89</p>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Total Amount</p>
+                                    <p className="text-lg font-black text-gray-900">{formatInr(privateBilling.totalAmountInr)}</p>
                                 </div>
-                                <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <div className="p-1.5 bg-amber-100 text-amber-600 rounded-lg"><Clock className="w-4 h-4" /></div>
-                                        <span className="font-bold text-gray-700">In Progress</span>
-                                    </div>
-                                    <p className="text-2xl font-bold text-gray-900">42</p>
+                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Total Paid</p>
+                                    <p className="text-lg font-black text-gray-900">{formatInr(privateBilling.paidTotalInr)}</p>
                                 </div>
-                                <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <div className="p-1.5 bg-rose-100 text-rose-600 rounded-lg"><AlertCircle className="w-4 h-4" /></div>
-                                        <span className="font-bold text-gray-700">Blocked</span>
-                                    </div>
-                                    <p className="text-2xl font-bold text-gray-900">14</p>
+                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Outstanding Due</p>
+                                    <p className="text-lg font-black text-teal-700">{formatInr(privateBilling.outstandingDueInr)}</p>
                                 </div>
                             </div>
-                        </div>
-                    </section>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                <div className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+                                    <div className="px-4 py-3 bg-white border-b border-gray-100 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                        Price Breakdown
+                                    </div>
+                                    {Array.isArray(privateBilling.lineItems) && privateBilling.lineItems.length > 0 ? (
+                                        <div className="divide-y divide-gray-100">
+                                            {privateBilling.lineItems.map((item) => (
+                                                <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3 text-xs">
+                                                    <div className="min-w-0">
+                                                        <p className="font-bold text-gray-900 truncate">{item.serviceName}</p>
+                                                        <p className="text-gray-500 truncate">{item.businessName}</p>
+                                                    </div>
+                                                    <p className="font-black text-gray-900 shrink-0">{formatInr(item.amountInr)}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="px-4 py-4 text-xs text-gray-500">Price details are being prepared.</div>
+                                    )}
+                                </div>
+
+                                <div className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+                                    <div className="px-4 py-3 bg-white border-b border-gray-100 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                        Paid Breakdown
+                                    </div>
+                                    <div className="divide-y divide-gray-100 text-xs">
+                                        <div className="flex items-center justify-between px-4 py-3">
+                                            <p className="font-bold text-gray-900">Deposit Fee</p>
+                                            <p className="font-black text-gray-900">{formatInr(privateBilling.depositPaidInr)}</p>
+                                        </div>
+                                        <div className="flex items-center justify-between px-4 py-3">
+                                            <p className="font-bold text-gray-900">Vendor Confirmation</p>
+                                            <p className="font-black text-gray-900">{formatInr(privateBilling.vendorConfirmationPaidInr)}</p>
+                                        </div>
+                                        <div className="flex items-center justify-between px-4 py-3">
+                                            <p className="font-bold text-gray-900">Remaining Payment</p>
+                                            <p className="font-black text-gray-900">{formatInr(privateBilling.remainingPaymentPaidInr)}</p>
+                                        </div>
+                                        <div className="flex items-center justify-between px-4 py-3 bg-white/70">
+                                            <p className="font-black text-gray-900">Total Paid</p>
+                                            <p className="font-black text-teal-700">{formatInr(privateBilling.paidTotalInr)}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {privateBilling.normalizedStatus === 'CONFIRMED' ? (
+                                <div className="mt-4 text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-100 rounded-xl px-4 py-3">
+                                    Billing is visible now for confirmed private events. Remaining collection is completed after event completion.
+                                </div>
+                            ) : null}
+                        </section>
+                    ) : null}
+
                 </div>
 
                 {/* Right Col */}
@@ -312,21 +462,22 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, 
                         </div>
                         {addingTeam ? (
                             <div className="mb-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Add Core Staff</p>
+                                <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Add Team Staff (Coordinator)</p>
                                 <div className="flex gap-2">
                                     <select
                                         value={pickedStaffKey}
                                         onChange={(e) => setPickedStaffKey(e.target.value)}
                                         className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-bold text-gray-700 outline-none"
                                     >
-                                        <option value="">Select staff...</option>
+                                        <option value="">Select coordinator...</option>
                                         {availableStaff.map((s) => {
                                             const key = String(s?.id || s?._id || '');
                                             const name = String(s?.name || 'Staff');
                                             const dept = String(s?.department || '').trim();
+                                            const assignedRole = String(s?.assignedRole || '').trim();
                                             return (
                                                 <option key={key} value={key}>
-                                                    {dept ? `${name} • ${dept}` : name}
+                                                    {assignedRole ? `${name} • ${assignedRole}` : (dept ? `${name} • ${dept}` : name)}
                                                 </option>
                                             );
                                         })}
@@ -340,7 +491,7 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, 
                                     </button>
                                 </div>
                                 {!availableStaff.length ? (
-                                    <p className="mt-2 text-xs font-medium text-gray-500">No available core staff right now.</p>
+                                    <p className="mt-2 text-xs font-medium text-gray-500">No available coordinators for this event date.</p>
                                 ) : null}
                             </div>
                         ) : null}
@@ -359,10 +510,10 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, 
                                     <button
                                         onClick={() => handleRemoveMember(member)}
                                         disabled={savingTeam}
-                                        className="ml-auto text-gray-400 hover:text-teal-600 disabled:opacity-60"
-                                        title="Remove"
+                                        className="ml-auto text-gray-400 hover:text-red-600 disabled:opacity-60"
+                                        title="Remove team member"
                                     >
-                                        <MoreHorizontal className="w-4 h-4" />
+                                        <Trash2 className="w-4 h-4" />
                                     </button>
                                 </div>
                             )) : (

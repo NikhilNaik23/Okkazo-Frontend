@@ -333,6 +333,7 @@ const App = () => {
             <Route path="dashboard" element={<ManagerHomePage />} />
             <Route path="events" element={<ManagerEvents />} />
             <Route path="events/:id" element={<ManagerEventDetails />} />
+            <Route path="event/:id" element={<ManagerEventDetails />} />
             <Route path="vendors" element={<ManagerVendors />} />
             <Route path="analytics" element={<ManagerAnalytics />} />
             <Route path="chat" element={<ManagerChatPage />} />

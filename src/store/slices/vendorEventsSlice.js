@@ -90,7 +90,7 @@ export const acceptVendorEventRequest = createAsyncThunk(
 
 export const lockVendorEventServicePrice = createAsyncThunk(
     'vendorEvents/lockVendorEventServicePrice',
-    async ({ eventId, service, price }, { dispatch, rejectWithValue }) => {
+    async ({ eventId, service, price, priceHikeReason }, { dispatch, rejectWithValue }) => {
         try {
             if (!eventId) return rejectWithValue('Event ID is required');
             if (!service || !String(service).trim()) return rejectWithValue('Service is required');
@@ -104,7 +104,13 @@ export const lockVendorEventServicePrice = createAsyncThunk(
                 `${API_BASE_URL}/api/events/vendor/requests/${encodeURIComponent(String(eventId))}/lock-price`,
                 {
                     method: 'POST',
-                    body: JSON.stringify({ service: String(service).trim(), price: quote }),
+                    body: JSON.stringify({
+                        service: String(service).trim(),
+                        price: quote,
+                        ...(String(priceHikeReason || '').trim()
+                            ? { priceHikeReason: String(priceHikeReason).trim() }
+                            : {}),
+                    }),
                 },
                 { dispatch, refreshAction: refreshAccessToken }
             );

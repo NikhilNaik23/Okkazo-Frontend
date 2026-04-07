@@ -42,6 +42,7 @@ const EventCheckout = () => {
     const queryParams = new URLSearchParams(location.search);
     const quantity = parseInt(queryParams.get('qty')) || 1;
     const selectedCategory = queryParams.get("category") || "General";
+    const selectedTicketDay = String(location?.state?.selectedTicketDay || queryParams.get('day') || '').trim();
 
     const [event, setEvent] = useState(null);
     const [isSuccess, setIsSuccess] = useState(false);
@@ -142,6 +143,7 @@ const EventCheckout = () => {
                     method: 'POST',
                     body: JSON.stringify({
                         eventId,
+                        ...(selectedTicketDay ? { selectedDay: selectedTicketDay } : {}),
                         tiers: requestedTiers.map((tier) => ({
                             name: tier.name,
                             quantity: Number(tier.quantity || 0),
@@ -421,6 +423,7 @@ const EventCheckout = () => {
                                         quantity={quantity}
                                         category={selectedCategory}
                                         ticketSelection={location?.state?.ticketSelection || {}}
+                                        selectedTicketDay={selectedTicketDay}
                                     />
                                 </div>
 

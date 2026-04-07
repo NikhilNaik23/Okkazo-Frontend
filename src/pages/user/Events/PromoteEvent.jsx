@@ -147,14 +147,14 @@ const PromoteEvent = () => {
             (step.id === 1 && !!formData.eventName && (formData.eventDescription?.trim().length || 0) >= 10) ||
             (step.id === 2 && !!formData.category && (formData.category !== 'Other' || !!formData.customCategory?.trim()) && (formData.interests?.length || 0) > 0) ||
             (step.id === 3 && !!formData.banner && !!formData.bannerFile) ||
-            (step.id === 4 &&
+            (step.id === 4 && !!formData.startDate && !!formData.endDate && !!formData.ticketReleaseDate && !!formData.ticketSalesEndDate && !!formData.address && !!formData.lat && !!formData.lng) ||
+            (step.id === 5 &&
                 formData.totalCapacity > 0 &&
                 formData.tickets.length > 0 &&
                 formData.tickets.reduce((sum, t) => sum + (parseInt(t.quantity) || 0), 0) === parseInt(formData.totalCapacity) &&
                 formData.tickets.every(t => !!t.name && (formData.ticketType === 'free' || (t.price !== "" && t.price > 0))) &&
                 (promoteScheduleDays.length === 0 || hasPerDayTicketAllocations)
             ) ||
-            (step.id === 5 && !!formData.startDate && !!formData.endDate && !!formData.ticketReleaseDate && !!formData.ticketSalesEndDate && !!formData.address && !!formData.lat && !!formData.lng) ||
             (step.id === 6) || // Promote is optional
             (step.id === 7 && formData.authDocuments?.length > 0) || // Verify: at least 1 doc
             (step.id === 8) // Review
@@ -244,19 +244,19 @@ const PromoteEvent = () => {
                     return Number.isFinite(price) && price > 0;
                 })
             );
-        if (!ticketsValid) {
-            errors.push('Complete Step 4: valid ticket tiers and quantities matching total tickets.');
-        }
-
-        if (promoteScheduleDays.length > 0 && !promoteAllocationValidation.isValid) {
-            errors.push('Daily ticket totals must match per-tier day allocations and each tier total must match its quantity.');
-        }
-
         const hasSchedule = !!formData.startDate && !!formData.endDate && !!formData.ticketReleaseDate && !!formData.ticketSalesEndDate;
         const hasVenue = (formData.address || '').trim().length > 0;
         const hasCoordinates = Number.isFinite(Number(formData.lat)) && Number.isFinite(Number(formData.lng));
         if (!hasSchedule || !hasVenue || !hasCoordinates) {
-            errors.push('Complete Step 5: schedule, venue address, and map location.');
+            errors.push('Complete Step 4: schedule, venue address, and map location.');
+        }
+
+        if (!ticketsValid) {
+            errors.push('Complete Step 5: valid ticket tiers and quantities matching total tickets.');
+        }
+
+        if (promoteScheduleDays.length > 0 && !promoteAllocationValidation.isValid) {
+            errors.push('Daily ticket totals must match per-tier day allocations and each tier total must match its quantity.');
         }
 
         if ((formData.authDocuments?.length || 0) === 0) {
@@ -297,6 +297,39 @@ const PromoteEvent = () => {
         if (currentStep > 1) {
             setCurrentStep(prev => prev - 1);
         }
+    };
+
+    const handleStepClick = (idx) => {
+        const targetStep = idx + 1;
+
+        if (targetStep <= currentStep) {
+            setCurrentStep(targetStep);
+            return;
+        }
+
+        const missingStepIndex = steps.findIndex((step, i) => i + 1 < targetStep && !step.completed);
+        if (missingStepIndex !== -1) {
+            const missingStepNumber = missingStepIndex + 1;
+            const message = missingStepNumber === 7
+                ? 'Upload at least one authenticity proof in Step 7 before proceeding.'
+                : `Complete Step ${missingStepNumber} before moving ahead.`;
+
+            toast.error(message, {
+                id: 'promote-step-guard',
+                duration: 4000,
+                style: {
+                    background: '#09637E',
+                    color: '#EBF4F6',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                },
+            });
+
+            setCurrentStep(missingStepNumber);
+            return;
+        }
+
+        setCurrentStep(targetStep);
     };
 
     const handlePaymentSuccess = (eventId, transactionId) => {
@@ -353,7 +386,7 @@ const PromoteEvent = () => {
                 <VerticalStepTransition
                     currentStep={currentStep - 1} // 0-based index for visual transition
                     steps={steps}
-                    onStepClick={(idx) => setCurrentStep(idx + 1)}
+                    onStepClick={handleStepClick}
                 />
             </div>
 
@@ -392,7 +425,8 @@ const PromoteEvent = () => {
                                 {currentStep === 1 && <StepDetails formData={formData} setFormData={setFormData} />}
                                 {currentStep === 2 && <StepSphere formData={formData} setFormData={setFormData} />}
                                 {currentStep === 3 && <StepMedia formData={formData} setFormData={setFormData} />}
-                                {currentStep === 4 && (
+                                {currentStep === 4 && <StepSchedule formData={formData} setFormData={setFormData} />}
+                                {currentStep === 5 && (
                                     <StepTickets
                                         formData={formData}
                                         setFormData={setFormData}
@@ -402,7 +436,6 @@ const PromoteEvent = () => {
                                         onChange={handleTicketChange}
                                     />
                                 )}
-                                {currentStep === 5 && <StepSchedule formData={formData} setFormData={setFormData} />}
                                 {currentStep === 6 && <StepPromote formData={formData} setFormData={setFormData} />}
                                 {currentStep === 7 && <StepVerify formData={formData} setFormData={setFormData} />}
                                 {currentStep === 8 && (
