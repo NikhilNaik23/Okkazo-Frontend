@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { BsArrowLeft, BsCheckCircleFill, BsQrCode, BsCalendarEvent } from "react-icons/bs";
 import { toast, Toaster } from "react-hot-toast";
 import PaymentMethod from "../../../components/Forms/Checkout/PaymentMethod";
@@ -9,6 +9,11 @@ import { allEvents, popularEvents } from "../../../data/eventsData";
 import { fetchWithAuth } from "../../../utils/apiHandler";
 import { refreshAccessToken } from "../../../store/slices/authSlice";
 import { createOrder, verifyPayment } from "../../../store/slices/planningSlice";
+import {
+    fetchFeesConfig,
+    selectFeesStatus,
+    selectServiceChargePercent,
+} from "../../../store/slices/feesSlice";
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -36,6 +41,8 @@ const safeJson = async (response) => {
 
 const EventCheckout = () => {
     const dispatch = useDispatch();
+    const serviceChargePercent = useSelector(selectServiceChargePercent);
+    const feesStatus = useSelector(selectFeesStatus);
     const { eventId } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
@@ -49,6 +56,12 @@ const EventCheckout = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [ticketId, setTicketId] = useState(null);
     const [ticketQrToken, setTicketQrToken] = useState(null);
+
+    useEffect(() => {
+        if (feesStatus === 'idle') {
+            dispatch(fetchFeesConfig());
+        }
+    }, [dispatch, feesStatus]);
 
     useEffect(() => {
         const stateEvent = location?.state?.event;
@@ -116,8 +129,12 @@ const EventCheckout = () => {
         (sum, tier) => sum + (Number(tier?.price || 0) * Number(tier?.quantity || 0)),
         0
     );
-    const serviceFee = subtotal === 0 ? 0 : subtotal * 0.2;
-    const processingFee = subtotal === 0 ? 0 : subtotal * 0.2;
+    const normalizedServiceChargePercent = Number.isFinite(Number(serviceChargePercent))
+        ? Math.max(0, Math.min(100, Number(serviceChargePercent)))
+        : 0;
+    const feeRate = normalizedServiceChargePercent / 100;
+    const serviceFee = subtotal === 0 ? 0 : subtotal * feeRate;
+    const processingFee = subtotal === 0 ? 0 : subtotal * feeRate;
     const totalFees = serviceFee + processingFee;
     const totalPayable = subtotal + totalFees;
     const isFreeCheckout = totalPayable <= 0;
@@ -186,10 +203,12 @@ const EventCheckout = () => {
                 return;
             }
 
+            const payableAmountInInr = Number(totalPayable.toFixed(2));
+
             const orderResult = await dispatch(createOrder({
                 eventId,
                 orderType: 'TICKET SALE',
-                amount: Number(preparedTicket?.amountInInr || 0),
+                amount: payableAmountInInr,
                 notes: {
                     ticketId: preparedTicket?.ticketId,
                     ticketQuantity: preparedTicket?.quantity,
@@ -197,6 +216,8 @@ const EventCheckout = () => {
                     eventTitle: preparedTicket?.eventTitle,
                     eventLocation: preparedTicket?.eventLocation,
                     ticketLink: preparedTicket?.checkoutLink,
+                    serviceChargePercent: normalizedServiceChargePercent,
+                    checkoutTotalInInr: payableAmountInInr,
                 },
             }));
 
@@ -445,6 +466,7 @@ const EventCheckout = () => {
                                         category={selectedCategory}
                                         ticketSelection={location?.state?.ticketSelection || {}}
                                         selectedTicketDay={selectedTicketDay}
+                                        serviceChargePercent={normalizedServiceChargePercent}
                                     />
                                 </div>
 

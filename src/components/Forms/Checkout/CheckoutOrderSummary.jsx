@@ -1,7 +1,14 @@
 import React from "react";
 import { BsGeoAlt, BsCalendarEvent, BsCheckCircleFill } from "react-icons/bs";
 
-const CheckoutOrderSummary = ({ event, quantity = 1, category = "General", ticketSelection = {}, selectedTicketDay = "" }) => {
+const CheckoutOrderSummary = ({
+    event,
+    quantity = 1,
+    category = "General",
+    ticketSelection = {},
+    selectedTicketDay = "",
+    serviceChargePercent = 0,
+}) => {
     if (!event) return null;
 
     // Helper to parse price reliably
@@ -67,8 +74,13 @@ const CheckoutOrderSummary = ({ event, quantity = 1, category = "General", ticke
 
     const subtotal = ticketLines.reduce((sum, line) => sum + Number(line?.lineTotal || 0), 0);
 
-    const serviceFee = subtotal === 0 ? 0 : subtotal * 0.2;
-    const processingFee = subtotal === 0 ? 0 : subtotal * 0.2;
+    const normalizedServiceChargePercent = Number.isFinite(Number(serviceChargePercent))
+        ? Math.max(0, Math.min(100, Number(serviceChargePercent)))
+        : 0;
+    const feeRate = normalizedServiceChargePercent / 100;
+
+    const serviceFee = subtotal === 0 ? 0 : subtotal * feeRate;
+    const processingFee = subtotal === 0 ? 0 : subtotal * feeRate;
 
     return (
         <div className="bg-white rounded-[2.5rem] overflow-hidden shadow-sm border border-gray-100 h-fit sticky top-32">
@@ -138,11 +150,11 @@ const CheckoutOrderSummary = ({ event, quantity = 1, category = "General", ticke
 
                         <div className="space-y-3 pl-[3.25rem]">
                             <div className="flex justify-between text-xs">
-                                <span className="text-[#09637E]/60 font-medium">Service Fee (20%)</span>
+                                <span className="text-[#09637E]/60 font-medium">Service Fee ({normalizedServiceChargePercent}%)</span>
                                 <span className="text-[#09637E]/60 font-bold">₹{serviceFee.toFixed(2)}</span>
                             </div>
                             <div className="flex justify-between text-xs">
-                                <span className="text-[#09637E]/60 font-medium">Processing Fee (20%)</span>
+                                <span className="text-[#09637E]/60 font-medium">Processing Fee ({normalizedServiceChargePercent}%)</span>
                                 <span className="text-[#09637E]/60 font-bold">₹{processingFee.toFixed(2)}</span>
                             </div>
                         </div>
