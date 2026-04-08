@@ -1607,6 +1607,9 @@ const UserEventManagement = () => {
     const optedVendorsForFeedback = React.useMemo(() => {
         const rows = Array.isArray(selectedVendors) ? selectedVendors : [];
         const vendorRows = Array.isArray(vendorSelectionVendors) ? vendorSelectionVendors : [];
+        const quoteLineItems = Array.isArray(quoteDisplay?.lineItems)
+            ? quoteDisplay.lineItems
+            : [];
         const profileMap = new Map(
             (Array.isArray(vendorProfiles) ? vendorProfiles : [])
                 .map((p) => [String(p?.authId || '').trim().toLowerCase(), p])
@@ -1615,6 +1618,11 @@ const UserEventManagement = () => {
         const vendorRowByService = new Map(
             vendorRows
                 .map((row) => [toServiceKey(row?.service), row])
+                .filter(([key]) => Boolean(key))
+        );
+        const quoteItemByService = new Map(
+            quoteLineItems
+                .map((item) => [toServiceKey(item?.serviceName || item?.service), item])
                 .filter(([key]) => Boolean(key))
         );
 
@@ -1632,11 +1640,15 @@ const UserEventManagement = () => {
 
             const profile = profileMap.get(vendorAuthId.toLowerCase()) || null;
             const vendorRow = vendorRowByService.get(toServiceKey(service)) || null;
+            const quoteItem = quoteItemByService.get(toServiceKey(service)) || null;
             const businessName = String(
                 profile?.businessName
                 || vendorRow?.businessName
                 || vendorRow?.vendorName
-                || `${vendorAuthId.slice(0, 8)}...`
+                || quoteItem?.businessName
+                || quoteItem?.serviceName
+                || service
+                || 'Vendor'
             ).trim();
 
             result.push({
@@ -1647,7 +1659,7 @@ const UserEventManagement = () => {
         }
 
         return result;
-    }, [selectedVendors, vendorSelectionVendors, vendorProfiles]);
+    }, [selectedVendors, vendorSelectionVendors, vendorProfiles, quoteDisplay?.lineItems]);
 
     useEffect(() => {
         if (!event || String(event?.kind || '').toUpperCase() !== 'PLANNING') return;
