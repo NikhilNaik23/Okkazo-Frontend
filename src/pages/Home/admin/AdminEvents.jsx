@@ -75,6 +75,20 @@ const deriveUiStatus = (request) => {
     return 'PENDING';
 };
 
+const normalizeStatusToken = (value) =>
+    String(value || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[\s-]+/g, '_');
+
+const isPaymentRequiredRequest = (request) => {
+    const statusTokens = [
+        normalizeStatusToken(request?.status),
+        normalizeStatusToken(request?.eventStatus),
+    ];
+    return statusTokens.includes('PAYMENT_REQUIRED');
+};
+
 const mapRequestToUiEvent = (request) => {
     const requestType = request?.requestType;
 
@@ -189,7 +203,12 @@ const AdminEvents = () => {
 
     const assignedEvents = useMemo(() => (eventDashboard?.assigned || []).map(mapRequestToUiEvent), [eventDashboard]);
     const rejectedEvents = useMemo(() => (eventDashboard?.rejected || []).map(mapRequestToUiEvent), [eventDashboard]);
-    const pendingApplications = useMemo(() => (eventDashboard?.applications || []).map(mapRequestToUiEvent), [eventDashboard]);
+    const pendingApplications = useMemo(
+        () => (eventDashboard?.applications || [])
+            .filter((request) => !isPaymentRequiredRequest(request))
+            .map(mapRequestToUiEvent),
+        [eventDashboard]
+    );
 
     const filteredEvents = useMemo(() => {
         const list = activeTab === 'Rejected' ? rejectedEvents : assignedEvents;

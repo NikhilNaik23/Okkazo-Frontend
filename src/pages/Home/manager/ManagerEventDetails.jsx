@@ -38,6 +38,7 @@ import { refreshAccessToken, selectUser } from '../../../store/slices/authSlice'
 import { ensureEventDmConversation, fetchConversationMessages } from '../../../utils/chatApi';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+const MotionDiv = motion.div;
 
 const safeJson = async (response) => {
     try {
@@ -75,8 +76,11 @@ const toNonNegativeNumber = (value) => {
 
 const formatMoneyShort = (value) => {
     const n = Number(value || 0);
-    if (!Number.isFinite(n) || n <= 0) return '₹0';
-    return `₹${Math.round(n).toLocaleString('en-IN')}`;
+    if (!Number.isFinite(n) || n <= 0) return '₹0.00';
+    return `₹${new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(n)}`;
 };
 
 const toInrFromPaise = (value) => {
@@ -84,6 +88,9 @@ const toInrFromPaise = (value) => {
     if (!Number.isFinite(n) || n <= 0) return 0;
     return Number((n / 100).toFixed(2));
 };
+
+const MANAGER_ACTION_ALLOWED_ASSIGNED_ROLES = new Set(['JUNIOR MANAGER', 'SENIOR EVENT MANAGER']);
+const normalizeAssignedRole = (value) => String(value || '').trim().toUpperCase().replace(/[_-]/g, ' ').replace(/\s+/g, ' ');
 
 const decodeJwtPayload = (token) => {
     try {
@@ -140,6 +147,7 @@ const ManagerEventDetails = () => {
     const [eventType, setEventType] = useState(null); // 'planning' | 'promote'
     const [rawEvent, setRawEvent] = useState(null);
     const [client, setClient] = useState(null);
+    const [assignedManager, setAssignedManager] = useState(null);
     const [availableCoreStaff, setAvailableCoreStaff] = useState([]);
     const [selectedTeamMembers, setSelectedTeamMembers] = useState([]);
     const [staffRefreshKey, setStaffRefreshKey] = useState(0);
@@ -151,6 +159,7 @@ const ManagerEventDetails = () => {
     const [payingGeneratedRevenue, setPayingGeneratedRevenue] = useState(false);
     const [promotionActionLoadingKey, setPromotionActionLoadingKey] = useState('');
     const [vendorPayoutMode, setVendorPayoutMode] = useState('DEMO');
+    const [eventTransactions, setEventTransactions] = useState(null);
 
     // Scroll listener for sticky header
     useEffect(() => {
@@ -174,6 +183,43 @@ const ManagerEventDetails = () => {
         if (!id) return;
         dispatch(fetchPlanningVendorSelectionByEventId(id));
     }, [dispatch, id]);
+
+    useEffect(() => {
+        if (!id) {
+            setEventTransactions(null);
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadEventTransactions = async () => {
+            try {
+                const res = await fetchWithAuth(
+                    `${API_BASE_URL}/api/orders/admin/${encodeURIComponent(String(id))}`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+
+                const json = await safeJson(res);
+                if (cancelled) return;
+
+                if (!res.ok || !json?.success) {
+                    setEventTransactions(null);
+                    return;
+                }
+
+                setEventTransactions(json.data || null);
+            } catch {
+                if (!cancelled) setEventTransactions(null);
+            }
+        };
+
+        loadEventTransactions();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [id, dispatch]);
 
     useEffect(() => {
         setGuestCount(null);
@@ -257,6 +303,7 @@ const ManagerEventDetails = () => {
                 setEventType(null);
                 setRawEvent(null);
                 setClient(null);
+                setAssignedManager(null);
                 setAvailableCoreStaff([]);
                 setLoadError(err?.message || 'Failed to load event details');
             } finally {
@@ -300,6 +347,43 @@ const ManagerEventDetails = () => {
             cancelled = true;
         };
     }, [rawEvent?.authId, dispatch]);
+
+    useEffect(() => {
+        const assignedManagerId = String(rawEvent?.assignedManagerId || rawEvent?.managerId || '').trim();
+        if (!assignedManagerId) {
+            setAssignedManager(null);
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadAssignedManager = async () => {
+            try {
+                const res = await fetchWithAuth(
+                    `${API_BASE_URL}/api/users/${encodeURIComponent(assignedManagerId)}`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+                const json = await safeJson(res);
+                if (cancelled) return;
+
+                if (!res.ok || !json?.success) {
+                    setAssignedManager(null);
+                    return;
+                }
+
+                setAssignedManager(json.data || null);
+            } catch {
+                if (!cancelled) setAssignedManager(null);
+            }
+        };
+
+        loadAssignedManager();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [rawEvent?.assignedManagerId, rawEvent?.managerId, dispatch]);
 
     useEffect(() => {
         if (!id) return;
@@ -581,11 +665,16 @@ const ManagerEventDetails = () => {
         return Array.isArray(rawEvent?.authenticityProofs) ? rawEvent.authenticityProofs.length : 0;
     }, [eventType, rawEvent?.authenticityProofs]);
 
+    const canUseRestrictedManagerActions = useMemo(
+        () => MANAGER_ACTION_ALLOWED_ASSIGNED_ROLES.has(normalizeAssignedRole(user?.assignedRole)),
+        [user?.assignedRole]
+    );
+
     const chatContactAuthIds = useMemo(() => {
         const ids = new Set();
 
         const clientAuthId = String(client?.authId || rawEvent?.authId || '').trim();
-        if (clientAuthId) ids.add(clientAuthId);
+        if (canUseRestrictedManagerActions && clientAuthId) ids.add(clientAuthId);
 
         const acceptedVendorAuthIds = (Array.isArray(vendorSelection?.vendors) ? vendorSelection.vendors : [])
             .filter((v) => String(v?.status || '').trim().toUpperCase() === 'ACCEPTED')
@@ -593,8 +682,28 @@ const ManagerEventDetails = () => {
             .filter(Boolean);
 
         for (const authId of acceptedVendorAuthIds) ids.add(authId);
+
+        const assignedManagerAuthId = String(assignedManager?.authId || '').trim();
+        if (assignedManagerAuthId && assignedManagerAuthId !== String(currentUserAuthId || '').trim()) {
+            ids.add(assignedManagerAuthId);
+        }
+
+        for (const member of (Array.isArray(selectedTeamMembers) ? selectedTeamMembers : [])) {
+            const authId = String(member?.authId || '').trim();
+            if (!authId || authId === String(currentUserAuthId || '').trim()) continue;
+            ids.add(authId);
+        }
+
         return Array.from(ids);
-    }, [client?.authId, rawEvent?.authId, vendorSelection?.vendors]);
+    }, [
+        canUseRestrictedManagerActions,
+        client?.authId,
+        rawEvent?.authId,
+        vendorSelection?.vendors,
+        assignedManager?.authId,
+        selectedTeamMembers,
+        currentUserAuthId,
+    ]);
 
     useEffect(() => {
         const eventId = String(id || '').trim();
@@ -607,8 +716,7 @@ const ManagerEventDetails = () => {
         }
 
         if (activeTab === 'chat') {
-            // Chat tab marks messages as read when opened.
-            setUnreadChatCount(0);
+            // While chat tab is open, ChatTab itself pushes live unread totals.
             return;
         }
 
@@ -667,6 +775,7 @@ const ManagerEventDetails = () => {
     const tabs = tabsData
         .filter((tab) => {
             if (tab.id === 'schedule') return false;
+            if (!canUseRestrictedManagerActions && tab.id === 'vendors') return false;
             if (eventType === 'promote' && tab.id === 'vendors') return false;
             if (eventType === 'planning' && tab.id === 'documents') return false;
             return true;
@@ -686,10 +795,15 @@ const ManagerEventDetails = () => {
         }));
 
     useEffect(() => {
+        if (!canUseRestrictedManagerActions && activeTab === 'vendors') {
+            setActiveTab('overview');
+            return;
+        }
+
         if (eventType === 'promote' && activeTab === 'vendors') {
             setActiveTab('overview');
         }
-    }, [eventType, activeTab]);
+    }, [eventType, activeTab, canUseRestrictedManagerActions]);
 
     useEffect(() => {
         if (activeTab === 'schedule') {
@@ -713,7 +827,9 @@ const ManagerEventDetails = () => {
     };
 
     const normalizedStatus = String(event?.status || '').trim().toUpperCase();
-    const isPrivatePlanning = eventType === 'planning' && String(event?.listingType || '').trim().toLowerCase() === 'private';
+    const planningListingType = String(event?.listingType || '').trim().toLowerCase();
+    const isPlanningEvent = eventType === 'planning';
+    const canManagerCompletePlanning = isPlanningEvent && ['private', 'public'].includes(planningListingType);
     const hasEventDateReached = useMemo(() => {
         const sourceDate = rawEvent?.schedule?.startAt || rawEvent?.eventDate || null;
         if (!sourceDate) return false;
@@ -726,16 +842,24 @@ const ManagerEventDetails = () => {
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
         return todayStart >= eventDayStart;
     }, [rawEvent?.schedule?.startAt, rawEvent?.eventDate]);
-    const canMarkAsComplete = isPrivatePlanning && normalizedStatus === 'CONFIRMED' && hasEventDateReached;
+    const canMarkAsComplete = canManagerCompletePlanning && normalizedStatus === 'CONFIRMED' && hasEventDateReached;
     const generatedRevenuePayout = useMemo(() => {
         const isPlanningPublic = eventType === 'planning' && String(event?.listingType || '').trim().toLowerCase() === 'public';
         const isPromote = eventType === 'promote';
         const isSupported = isPlanningPublic || isPromote;
+        const normalizedEventStatus = String(event?.status || '').trim().toUpperCase().replace(/_/g, ' ');
+        const planningCompletionMarked = !isPlanningPublic
+            || ['COMPLETED', 'VENDOR PAYMENT PENDING', 'CLOSED'].includes(normalizedEventStatus);
 
         const generatedRevenueInr = toNonNegativeNumber(event?.ticketSalesStats?.grossRevenueInr);
+        const platformFeeInr = toNonNegativeNumber(
+            event?.ticketSalesStats?.platformFeeInr
+            ?? event?.platformFee
+        );
+        const serviceChargeInr = toNonNegativeNumber(event?.ticketSalesStats?.serviceChargeInr);
         const totalFeesInr = toNonNegativeNumber(
             event?.ticketSalesStats?.totalFeesInr
-            ?? event?.ticketSalesStats?.platformFeeInr
+            ?? (platformFeeInr + serviceChargeInr)
         );
 
         const totalVendorCostInr = isPlanningPublic
@@ -748,34 +872,230 @@ const ManagerEventDetails = () => {
             }, 0)
             : 0;
 
-        const payoutAmountInr = Number(
-            Math.max(0, generatedRevenueInr - totalVendorCostInr - totalFeesInr).toFixed(2)
-        );
+        const payoutAmountInr = Number(Math.max(0, generatedRevenueInr - totalFeesInr).toFixed(2));
         const payoutStatus = String(rawEvent?.generatedRevenuePayout?.status || '').trim().toUpperCase();
+        const payoutPaidInr = payoutStatus === 'SUCCESS'
+            ? toInrFromPaise(rawEvent?.generatedRevenuePayout?.amountPaise)
+            : 0;
+        const payoutPendingInr = Number(Math.max(0, payoutAmountInr - payoutPaidInr).toFixed(2));
+
+        const totalAmountInr = toNonNegativeNumber(
+            rawEvent?.totalAmount
+            ?? vendorSelection?.totalMaxAmount
+        );
+        const depositPaidInr = toInrFromPaise(rawEvent?.depositPaidAmountPaise);
+        const vendorConfirmationPaidInr = toInrFromPaise(rawEvent?.vendorConfirmationPaidAmountPaise);
+        const remainingPaymentPaidInr = toInrFromPaise(rawEvent?.remainingPaymentPaidAmountPaise);
+        const totalMilestonesPaidInr = Number((depositPaidInr + vendorConfirmationPaidInr + remainingPaymentPaidInr).toFixed(2));
+        const remainingPaymentDueInr = Number(Math.max(0, totalAmountInr - totalMilestonesPaidInr).toFixed(2));
+        const remainingPaymentSettled = !isPlanningPublic
+            || Boolean(rawEvent?.remainingPaymentPaid)
+            || remainingPaymentDueInr <= 0;
 
         return {
             isSupported,
             generatedRevenueInr,
             totalVendorCostInr,
+            platformFeeInr,
+            serviceChargeInr,
             totalFeesInr,
             payoutAmountInr,
             alreadyPaid: payoutStatus === 'SUCCESS',
+            payoutPaidInr,
+            payoutPendingInr,
+            requiresCompletionFirst: isPlanningPublic,
+            completionMarked: planningCompletionMarked,
+            requiresRemainingPaymentFirst: isPlanningPublic,
+            remainingPaymentSettled,
+            remainingPaymentDueInr,
         };
     }, [
         eventType,
         event?.listingType,
+        event?.status,
+        event?.platformFee,
         event?.ticketSalesStats,
+        rawEvent?.totalAmount,
+        rawEvent?.remainingPaymentPaid,
+        rawEvent?.depositPaidAmountPaise,
+        rawEvent?.vendorConfirmationPaidAmountPaise,
+        rawEvent?.remainingPaymentPaidAmountPaise,
+        rawEvent?.generatedRevenuePayout?.amountPaise,
         vendorSelection?.vendors,
+        vendorSelection?.totalMaxAmount,
         rawEvent?.generatedRevenuePayout?.status,
     ]);
 
     const privateBilling = useMemo(() => {
-        const isPrivatePlanningEvent = eventType === 'planning' && String(event?.listingType || '').trim().toLowerCase() === 'private';
-        const normalizedEventStatus = String(event?.status || '').trim().toUpperCase().replace(/_/g, ' ');
-        const canShow = isPrivatePlanningEvent && ['VERIFIED', 'CONFIRMED', 'COMPLETED', 'VENDOR PAYMENT PENDING', 'CLOSED'].includes(normalizedEventStatus);
+        const listingType = String(event?.listingType || '').trim().toLowerCase();
+        const isPlanningEvent = eventType === 'planning';
+        const isPrivatePlanningEvent = isPlanningEvent && listingType === 'private';
+        const isPublicPlanningEvent = isPlanningEvent && listingType === 'public';
+        const isPromoteEvent = eventType === 'promote';
+        const isPlanningMilestoneBilling = isPrivatePlanningEvent || isPublicPlanningEvent;
 
-        if (!isPrivatePlanningEvent) {
+        const normalizedEventStatus = String(event?.status || '').trim().toUpperCase().replace(/_/g, ' ');
+        const planningVisibleStatuses = ['VERIFIED', 'CONFIRMED', 'COMPLETED', 'VENDOR PAYMENT PENDING', 'CLOSED'];
+        const canShow = isPlanningMilestoneBilling
+            ? planningVisibleStatuses.includes(normalizedEventStatus)
+            : isPromoteEvent;
+
+        if (!isPlanningMilestoneBilling && !isPromoteEvent) {
             return { enabled: false };
+        }
+
+        if (isPromoteEvent) {
+            const promoteOrders = (Array.isArray(eventTransactions?.orders) ? eventTransactions.orders : [])
+                .map((row) => ({
+                    status: String(row?.status || '').trim().toUpperCase(),
+                    orderType: String(row?.orderType || '').trim().toUpperCase(),
+                    amountPaise: Number(row?.amount || 0),
+                    createdAt: row?.createdAt || null,
+                    paidAt: row?.paidAt || null,
+                }))
+                .filter((row) => row.orderType === 'PROMOTE EVENT')
+                .filter((row) => Number.isFinite(row.amountPaise) && row.amountPaise > 0)
+                .sort((a, b) => {
+                    const at = new Date(a?.createdAt || 0).getTime();
+                    const bt = new Date(b?.createdAt || 0).getTime();
+                    return bt - at;
+                });
+
+            const latestPromoteOrder = promoteOrders[0] || null;
+            const latestPaidPromoteOrder = [...promoteOrders]
+                .filter((row) => row.status === 'PAID')
+                .sort((a, b) => {
+                    const at = new Date(a?.paidAt || a?.createdAt || 0).getTime();
+                    const bt = new Date(b?.paidAt || b?.createdAt || 0).getTime();
+                    return bt - at;
+                })[0] || null;
+
+            const promotePaidTotalInrRaw = Number(
+                (
+                    promoteOrders
+                        .filter((row) => row.status === 'PAID')
+                        .reduce((sum, row) => sum + Number(row.amountPaise || 0), 0)
+                ) / 100
+            );
+
+            const settlementAmountInr = latestPaidPromoteOrder
+                ? toInrFromPaise(latestPaidPromoteOrder.amountPaise)
+                : (latestPromoteOrder ? toInrFromPaise(latestPromoteOrder.amountPaise) : 0);
+
+            const promotePaidTotalInr = settlementAmountInr > 0
+                ? Number(Math.min(settlementAmountInr, promotePaidTotalInrRaw || 0).toFixed(2))
+                : Number((promotePaidTotalInrRaw || 0).toFixed(2));
+
+            const settlementOutstandingInr = Number(
+                Math.max(0, settlementAmountInr - promotePaidTotalInr).toFixed(2)
+            );
+
+            const hasSettlementOrders = settlementAmountInr > 0 || promotePaidTotalInr > 0;
+
+            if (hasSettlementOrders) {
+                const hasPendingCreatedOrder = promoteOrders.some((row) => row.status === 'CREATED');
+
+                return {
+                    enabled: canShow,
+                    normalizedStatus: normalizedEventStatus,
+                    billingScope: 'promote',
+                    summaryText: 'Promote settlement summary for activation billing.',
+                    statusNote: promotePaidTotalInr > 0
+                        ? (hasPendingCreatedOrder
+                            ? 'Payment is completed. Additional CREATED entries are pending retries and do not increase due amount.'
+                            : 'Payment is completed for this promote event.')
+                        : 'Settlement payment is pending for this promote event.',
+                    totalAmountInr: settlementAmountInr,
+                    paidTotalInr: promotePaidTotalInr,
+                    outstandingDueInr: settlementOutstandingInr,
+                    lineItems: [
+                        {
+                            id: 'promote-settlement',
+                            serviceName: 'Promote Settlement Fee',
+                            businessName: 'Platform + marketing + tax billing',
+                            amountInr: settlementAmountInr,
+                        },
+                    ],
+                    paidBreakdownRows: [
+                        { label: 'Settlement Total', amountInr: settlementAmountInr },
+                        { label: 'Settlement Paid', amountInr: promotePaidTotalInr },
+                        { label: 'Outstanding Due', amountInr: settlementOutstandingInr },
+                    ],
+                };
+            }
+
+            const grossRevenueInr = toNonNegativeNumber(event?.ticketSalesStats?.grossRevenueInr);
+            const platformFeeInr = toNonNegativeNumber(
+                event?.ticketSalesStats?.platformFeeInr
+                ?? event?.platformFee
+            );
+            const serviceChargeInr = toNonNegativeNumber(event?.ticketSalesStats?.serviceChargeInr);
+            const totalFeesInr = toNonNegativeNumber(
+                event?.ticketSalesStats?.totalFeesInr
+                ?? (platformFeeInr + serviceChargeInr)
+            );
+
+            const totalVendorCostInr = isPublicPlanningEvent
+                ? (Array.isArray(vendorSelection?.vendors) ? vendorSelection.vendors : []).reduce((sum, row) => {
+                    const lockedPrice = toNonNegativeNumber(row?.vendorQuotedPrice);
+                    const commissionAmount = toNonNegativeNumber(row?.commissionAmount);
+                    const isLocked = Boolean(row?.priceLocked) && lockedPrice > 0;
+                    if (!isLocked) return sum;
+                    return sum + Math.max(0, lockedPrice - commissionAmount);
+                }, 0)
+                : 0;
+
+            const payoutTotalInr = Number(
+                Math.max(0, grossRevenueInr - totalFeesInr - totalVendorCostInr).toFixed(2)
+            );
+            const payoutStatus = String(rawEvent?.generatedRevenuePayout?.status || '').trim().toUpperCase();
+            const payoutPaidInr = payoutStatus === 'SUCCESS'
+                ? toInrFromPaise(rawEvent?.generatedRevenuePayout?.amountPaise)
+                : 0;
+            const outstandingDueInr = Number(Math.max(0, payoutTotalInr - payoutPaidInr).toFixed(2));
+
+            const lineItems = [
+                {
+                    id: 'generated-revenue',
+                    serviceName: 'Generated Ticket Revenue',
+                    businessName: 'Total collected from ticket sales',
+                    amountInr: grossRevenueInr,
+                },
+                {
+                    id: 'total-fees',
+                    serviceName: 'Total Platform Fees',
+                    businessName: 'Platform fee + service charge',
+                    amountInr: totalFeesInr,
+                },
+                ...(isPublicPlanningEvent
+                    ? [{
+                        id: 'vendor-cost',
+                        serviceName: 'Vendor Cost',
+                        businessName: 'Locked vendor commitments',
+                        amountInr: totalVendorCostInr,
+                    }]
+                    : []),
+            ];
+
+            return {
+                enabled: canShow,
+                normalizedStatus: normalizedEventStatus,
+                billingScope: 'promote',
+                summaryText: 'Promote event billing summary with generated revenue, fees, and payout progress.',
+                statusNote: 'Payout is released from generated revenue after fee settlement.',
+                totalAmountInr: payoutTotalInr,
+                paidTotalInr: payoutPaidInr,
+                outstandingDueInr,
+                lineItems,
+                paidBreakdownRows: [
+                    { label: 'Platform Fee', amountInr: platformFeeInr },
+                    { label: 'Service Charge', amountInr: serviceChargeInr },
+                    ...(isPublicPlanningEvent ? [{ label: 'Vendor Cost', amountInr: totalVendorCostInr }] : []),
+                    { label: 'Total Fees', amountInr: totalFeesInr },
+                    { label: 'Payout Released', amountInr: payoutPaidInr },
+                    { label: 'Outstanding Payout', amountInr: outstandingDueInr },
+                ],
+            };
         }
 
         const selectedServices = Array.isArray(vendorSelection?.selectedServices)
@@ -833,6 +1153,15 @@ const ManagerEventDetails = () => {
         return {
             enabled: canShow,
             normalizedStatus: normalizedEventStatus,
+            billingScope: isPublicPlanningEvent ? 'planning-public' : 'planning-private',
+            summaryText: isPublicPlanningEvent
+                ? 'Public event billing summary with outstanding dues and paid milestones.'
+                : 'Private event billing summary with outstanding dues and paid milestones.',
+            statusNote: normalizedEventStatus === 'CONFIRMED'
+                ? (isPublicPlanningEvent
+                    ? 'Billing is visible now for confirmed public events. Remaining collection is completed after event completion.'
+                    : 'Billing is visible now for confirmed private events. Remaining collection is completed after event completion.')
+                : null,
             totalAmountInr,
             paidTotalInr,
             outstandingDueInr,
@@ -840,16 +1169,27 @@ const ManagerEventDetails = () => {
             vendorConfirmationPaidInr,
             remainingPaymentPaidInr,
             lineItems,
+            paidBreakdownRows: [
+                { label: 'Deposit Fee', amountInr: depositPaidInr },
+                { label: 'Vendor Confirmation', amountInr: vendorConfirmationPaidInr },
+                { label: 'Remaining Payment', amountInr: remainingPaymentPaidInr },
+                { label: 'Total Paid', amountInr: paidTotalInr },
+            ],
         };
     }, [
         eventType,
         event?.listingType,
         event?.status,
+        event?.ticketSalesStats,
+        event?.platformFee,
         rawEvent?.selectedServices,
         rawEvent?.totalAmount,
         rawEvent?.depositPaidAmountPaise,
         rawEvent?.vendorConfirmationPaidAmountPaise,
         rawEvent?.remainingPaymentPaidAmountPaise,
+        rawEvent?.generatedRevenuePayout?.status,
+        rawEvent?.generatedRevenuePayout?.amountPaise,
+        eventTransactions?.orders,
         vendorSelection?.selectedServices,
         vendorSelection?.vendors,
         vendorSelection?.vendorProfiles,
@@ -857,8 +1197,27 @@ const ManagerEventDetails = () => {
     ]);
 
     const handlePayGeneratedRevenue = async () => {
+        if (!canUseRestrictedManagerActions) {
+            toast.error('This action is not available for your assigned role.');
+            return;
+        }
+
         if (!event || !generatedRevenuePayout.isSupported) {
             toast('Generated revenue payout is available only for planning public and promote events.', { icon: 'ℹ️' });
+            return;
+        }
+
+        if (generatedRevenuePayout.requiresCompletionFirst && !generatedRevenuePayout.completionMarked) {
+            toast.error('Mark the event as complete before releasing generated revenue payout.');
+            return;
+        }
+
+        if (generatedRevenuePayout.requiresRemainingPaymentFirst && !generatedRevenuePayout.remainingPaymentSettled) {
+            toast.error(
+                `Remaining event payment is pending${generatedRevenuePayout.remainingPaymentDueInr > 0
+                    ? ` (${formatMoneyShort(generatedRevenuePayout.remainingPaymentDueInr)} due)`
+                    : ''}. Ask user to pay the remaining amount first.`
+            );
             return;
         }
 
@@ -907,8 +1266,13 @@ const ManagerEventDetails = () => {
     const handleMarkAsComplete = async () => {
         if (!event) return;
 
-        if (!isPrivatePlanning) {
-            toast('Mark as complete is currently available only for private planning events.', { icon: 'ℹ️' });
+        if (!canUseRestrictedManagerActions) {
+            toast.error('This action is not available for your assigned role.');
+            return;
+        }
+
+        if (!canManagerCompletePlanning) {
+            toast('Mark as complete is available only for planning events.', { icon: 'ℹ️' });
             return;
         }
 
@@ -1069,26 +1433,28 @@ const ManagerEventDetails = () => {
                                 <Printer className="w-5 h-5" />
                             </button>
                             <div className="flex flex-col gap-2">
-                                <button
-                                    onClick={handleMarkAsComplete}
-                                    disabled={!event || markingComplete || !canMarkAsComplete}
-                                    title={!event
-                                        ? 'Event details are loading.'
-                                        : markingComplete
-                                            ? 'Marking event as completed...'
-                                            : !isPrivatePlanning
-                                                ? 'Available only for private planning events.'
-                                                : normalizedStatus === 'COMPLETED'
-                                                    ? 'Event is already completed.'
-                                                    : normalizedStatus !== 'CONFIRMED'
-                                                        ? 'Only CONFIRMED events can be marked as complete.'
-                                                        : !hasEventDateReached
-                                                            ? 'Available on the event date.'
-                                                            : 'Mark this event as complete.'}
-                                    className="px-6 py-2.5 bg-teal-600 text-white hover:bg-teal-700 rounded-xl font-bold transition-colors shadow-lg shadow-black/10 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-                                >
-                                    <CheckCircle className="w-4 h-4" /> {markingComplete ? 'Marking…' : 'Mark as Complete'}
-                                </button>
+                                {canUseRestrictedManagerActions ? (
+                                    <button
+                                        onClick={handleMarkAsComplete}
+                                        disabled={!event || markingComplete || !canMarkAsComplete}
+                                        title={!event
+                                            ? 'Event details are loading.'
+                                            : markingComplete
+                                                ? 'Marking event as completed...'
+                                                    : !canManagerCompletePlanning
+                                                        ? 'Available only for planning events.'
+                                                    : normalizedStatus === 'COMPLETED'
+                                                        ? 'Event is already completed.'
+                                                        : normalizedStatus !== 'CONFIRMED'
+                                                            ? 'Only CONFIRMED events can be marked as complete.'
+                                                            : !hasEventDateReached
+                                                                ? 'Available on the event date.'
+                                                                : 'Mark this event as complete.'}
+                                        className="px-6 py-2.5 bg-teal-600 text-white hover:bg-teal-700 rounded-xl font-bold transition-colors shadow-lg shadow-black/10 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                        <CheckCircle className="w-4 h-4" /> {markingComplete ? 'Marking…' : 'Mark as Complete'}
+                                    </button>
+                                ) : null}
                                 <button
                                     onClick={() => setIsEditModalOpen(true)}
                                     disabled={!event}
@@ -1138,12 +1504,22 @@ const ManagerEventDetails = () => {
                             </nav>
                         </div>
 
-                        {event && generatedRevenuePayout.isSupported ? (
+                        {canUseRestrictedManagerActions && event && generatedRevenuePayout.isSupported ? (
                             <button
                                 onClick={handlePayGeneratedRevenue}
-                                disabled={payingGeneratedRevenue || generatedRevenuePayout.alreadyPaid || generatedRevenuePayout.payoutAmountInr <= 0}
+                                disabled={payingGeneratedRevenue
+                                    || generatedRevenuePayout.alreadyPaid
+                                    || generatedRevenuePayout.payoutAmountInr <= 0
+                                    || (generatedRevenuePayout.requiresCompletionFirst && !generatedRevenuePayout.completionMarked)
+                                    || (generatedRevenuePayout.requiresRemainingPaymentFirst && !generatedRevenuePayout.remainingPaymentSettled)}
                                 title={generatedRevenuePayout.alreadyPaid
                                     ? 'Generated revenue payout already sent to user.'
+                                    : (generatedRevenuePayout.requiresCompletionFirst && !generatedRevenuePayout.completionMarked)
+                                        ? 'Mark this event as complete first.'
+                                    : (generatedRevenuePayout.requiresRemainingPaymentFirst && !generatedRevenuePayout.remainingPaymentSettled)
+                                        ? `Waiting for user remaining payment${generatedRevenuePayout.remainingPaymentDueInr > 0
+                                            ? ` (${formatMoneyShort(generatedRevenuePayout.remainingPaymentDueInr)} due)`
+                                            : ''}.`
                                     : generatedRevenuePayout.payoutAmountInr <= 0
                                         ? 'No payable generated revenue for this event.'
                                         : `Pay ${formatMoneyShort(generatedRevenuePayout.payoutAmountInr)} to user using ${vendorPayoutMode} mode.`}
@@ -1164,7 +1540,7 @@ const ManagerEventDetails = () => {
             {/* 3. Main Content Area */}
             <div className="max-w-[1920px] mx-auto px-6 pt-6">
                 <AnimatePresence mode="wait">
-                    <motion.div
+                    <MotionDiv
                         key={activeTab}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -1182,6 +1558,7 @@ const ManagerEventDetails = () => {
                                     onPromotionAction={handlePromotionAction}
                                     promotionActionLoadingKey={promotionActionLoadingKey}
                                     privateBilling={privateBilling}
+                                    generatedRevenuePayout={generatedRevenuePayout}
                                 />
                             ) : (
                                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
@@ -1198,7 +1575,15 @@ const ManagerEventDetails = () => {
                             />
                         )}
                         {activeTab === 'vendors' && eventType !== 'promote' && <VendorsTab />}
-                        {activeTab === 'chat' && <ChatTab eventId={id} client={client} teamMembers={selectedTeamMembers} />}
+                        {activeTab === 'chat' && (
+                            <ChatTab
+                                eventId={id}
+                                client={client}
+                                teamMembers={selectedTeamMembers}
+                                assignedManager={assignedManager}
+                                onUnreadCountChange={setUnreadChatCount}
+                            />
+                        )}
                         {activeTab === 'todo' && <ToDoTab />}
                         {activeTab === 'financials' && event && (
                             <FinancialsTab
@@ -1207,7 +1592,7 @@ const ManagerEventDetails = () => {
                             />
                         )}
                         {activeTab === 'documents' && eventType === 'promote' && <DocumentsTab eventType={eventType} eventData={rawEvent} />}
-                    </motion.div>
+                    </MotionDiv>
                 </AnimatePresence>
             </div>
         </div>

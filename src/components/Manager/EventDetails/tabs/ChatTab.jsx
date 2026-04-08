@@ -11,6 +11,7 @@ import { refreshAccessToken, selectUser } from '../../../../store/slices/authSli
 import { fetchWithAuth } from '../../../../utils/apiHandler';
 import {
     ensureEventDmConversation,
+    fetchStaffChatContacts,
     fetchConversationMessages,
     sendConversationMessage,
     markConversationRead,
@@ -23,6 +24,10 @@ import { fetchPlanningByEventId, fetchPlanningVendorSelectionByEventId, selectPl
 import { computeMoneyRangeFromBase, derivePricingDemandFromEvent } from '../../../../utils/pricing';
 
 const EVENTS_API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+const PRIVILEGED_ASSIGNED_ROLES = new Set(['JUNIOR MANAGER', 'SENIOR EVENT MANAGER']);
+const COORDINATOR_ASSIGNED_ROLES = new Set(['EVENT COORDINATOR', 'COORDINATOR']);
+
+const normalizeAssignedRole = (value) => String(value || '').trim().toUpperCase().replace(/[_-]/g, ' ').replace(/\s+/g, ' ');
 
 const formatMoneyShort = (value) => {
     const n = Number(value || 0);
@@ -54,11 +59,20 @@ const resolveAuthId = ({ user, accessToken }) => {
     return fromToken;
 };
 
-const ChatTab = ({ eventId, client, teamMembers = [] }) => {
+const ChatTab = ({ eventId, client, teamMembers = [], assignedManager = null, onUnreadCountChange }) => {
     const dispatch = useDispatch();
     const user = useSelector(selectUser);
     const accessToken = useSelector((state) => state.auth.accessToken) || localStorage.getItem('accessToken');
     const currentUserId = resolveAuthId({ user, accessToken });
+    const isPrivilegedAssignedRole = useMemo(
+        () => PRIVILEGED_ASSIGNED_ROLES.has(normalizeAssignedRole(user?.assignedRole)),
+        [user?.assignedRole]
+    );
+    const isCoordinatorAssignedRole = useMemo(
+        () => COORDINATOR_ASSIGNED_ROLES.has(normalizeAssignedRole(user?.assignedRole)),
+        [user?.assignedRole]
+    );
+    const canViewManagerCoordinatorSection = isPrivilegedAssignedRole || isCoordinatorAssignedRole;
 
     const planningVendorSelection = useSelector((state) => selectPlanningVendorSelectionByEventId(state, eventId));
 
@@ -123,11 +137,88 @@ const ChatTab = ({ eventId, client, teamMembers = [] }) => {
             .filter(Boolean);
     }, [teamMembers]);
 
+    const [staffAdminContacts, setStaffAdminContacts] = useState([]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadStaffAdmins = async () => {
+            if (!accessToken) {
+                if (!cancelled) setStaffAdminContacts([]);
+                return;
+            }
+
+            try {
+                const groups = await fetchStaffChatContacts({
+                    dispatch,
+                    refreshAction: refreshAccessToken,
+                });
+
+                if (cancelled) return;
+
+                const adminsByAuthId = new Map();
+
+                for (const group of (Array.isArray(groups) ? groups : [])) {
+                    const groupKey = String(group?.key || '').trim().toUpperCase();
+                    const contacts = Array.isArray(group?.contacts) ? group.contacts : [];
+
+                    for (const contact of contacts) {
+                        const authId = String(contact?.authId || '').trim();
+                        if (!authId || authId === currentUserId || adminsByAuthId.has(authId)) continue;
+
+                        const role = String(contact?.role || '').trim();
+                        const roleUpper = role.toUpperCase();
+                        const isAdmin = groupKey.includes('ADMIN') || roleUpper === 'ADMIN' || roleUpper.includes('ADMIN');
+                        if (!isAdmin) continue;
+
+                        adminsByAuthId.set(authId, {
+                            id: authId,
+                            name: contact?.name || contact?.fullName || 'Admin',
+                            type: 'admin',
+                            role: role || 'Admin',
+                            online: false,
+                            lastSeen: '',
+                        });
+                    }
+                }
+
+                setStaffAdminContacts(Array.from(adminsByAuthId.values()));
+            } catch {
+                if (!cancelled) setStaffAdminContacts([]);
+            }
+        };
+
+        loadStaffAdmins();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [accessToken, currentUserId, dispatch]);
+
     const contacts = useMemo(() => {
         const clientAuthId = client?.authId != null ? String(client.authId).trim() : '';
+        const includeClientContact = isPrivilegedAssignedRole;
         const list = [];
 
-        if (clientAuthId) {
+        for (const admin of (Array.isArray(staffAdminContacts) ? staffAdminContacts : [])) {
+            if (!admin?.id) continue;
+            if (list.some((c) => c.id === admin.id)) continue;
+            list.push(admin);
+        }
+
+        const assignedManagerAuthId = String(assignedManager?.authId || '').trim();
+        if (assignedManagerAuthId && assignedManagerAuthId !== String(currentUserId || '').trim()) {
+            list.push({
+                id: assignedManagerAuthId,
+                name: assignedManager?.name || assignedManager?.fullName || 'Assigned Manager',
+                type: 'team',
+                role: String(assignedManager?.assignedRole || 'Assigned Manager').trim() || 'Assigned Manager',
+                online: false,
+                lastSeen: '',
+            });
+        }
+
+        if (includeClientContact && clientAuthId) {
             list.push({
                 id: clientAuthId,
                 name: client?.name || client?.fullName || 'Client',
@@ -152,12 +243,13 @@ const ChatTab = ({ eventId, client, teamMembers = [] }) => {
         }
 
         return list;
-    }, [client, vendorContacts, teamContacts]);
+    }, [assignedManager, client, currentUserId, isPrivilegedAssignedRole, staffAdminContacts, vendorContacts, teamContacts]);
 
     const [activeChannel, setActiveChannel] = useState(null);
     const [chatInput, setChatInput] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [messages, setMessages] = useState([]);
+    const [unreadCountByContact, setUnreadCountByContact] = useState({});
     const [conversationId, setConversationId] = useState(null);
     const socketRef = useRef(null);
     const [socketConnected, setSocketConnected] = useState(false);
@@ -215,6 +307,25 @@ const ChatTab = ({ eventId, client, teamMembers = [] }) => {
     const [lockedAltByService, setLockedAltByService] = useState({});
     const [lockedAltServiceIdByService, setLockedAltServiceIdByService] = useState({});
     const [lockedAltMessageIdByService, setLockedAltMessageIdByService] = useState({});
+
+    const pushUnreadTotals = (nextMap) => {
+        const total = Object.values(nextMap || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+        if (typeof onUnreadCountChange === 'function') {
+            onUnreadCountChange(total);
+        }
+    };
+
+    const clearUnreadForContact = (contactAuthId) => {
+        const key = String(contactAuthId || '').trim();
+        if (!key) return;
+
+        setUnreadCountByContact((prev) => {
+            if (!prev || Number(prev[key] || 0) <= 0) return prev;
+            const next = { ...prev, [key]: 0 };
+            pushUnreadTotals(next);
+            return next;
+        });
+    };
 
     useEffect(() => {
         const list = Array.isArray(planningVendorSelection?.vendors) ? planningVendorSelection.vendors : [];
@@ -363,6 +474,100 @@ const ChatTab = ({ eventId, client, teamMembers = [] }) => {
     }, [activeChannel, contacts]);
 
     useEffect(() => {
+        const allowed = new Set((contacts || []).map((c) => String(c?.id || '').trim()).filter(Boolean));
+        setUnreadCountByContact((prev) => {
+            const next = {};
+            for (const [key, value] of Object.entries(prev || {})) {
+                if (allowed.has(String(key || '').trim())) {
+                    next[key] = Number(value || 0);
+                }
+            }
+            const changed = JSON.stringify(next) !== JSON.stringify(prev || {});
+            if (changed) {
+                pushUnreadTotals(next);
+                return next;
+            }
+            return prev;
+        });
+    }, [contacts]);
+
+    useEffect(() => {
+        const eventIdValue = String(eventId || '').trim();
+        const managerAuthId = String(currentUserId || '').trim();
+        const contactAuthIds = (contacts || []).map((c) => String(c?.id || '').trim()).filter(Boolean);
+
+        if (!eventIdValue || !managerAuthId || contactAuthIds.length === 0) {
+            setUnreadCountByContact({});
+            pushUnreadTotals({});
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadUnreadCounts = async () => {
+            try {
+                const results = await Promise.all(contactAuthIds.map(async (otherAuthId) => {
+                    try {
+                        const convo = await ensureEventDmConversation({
+                            eventId: eventIdValue,
+                            otherAuthId,
+                            dispatch,
+                            refreshAction: refreshAccessToken,
+                        });
+
+                        const convoId = String(convo?._id || convo?.id || '').trim();
+                        if (!convoId) return [otherAuthId, 0];
+
+                        const rows = await fetchConversationMessages({
+                            conversationId: convoId,
+                            limit: 200,
+                            dispatch,
+                            refreshAction: refreshAccessToken,
+                        });
+
+                        const unread = (Array.isArray(rows) ? rows : []).filter((msg) => {
+                            const sender = String(msg?.senderAuthId || msg?.senderId || '').trim();
+                            if (!sender || sender === managerAuthId) return false;
+                            const readBy = Array.isArray(msg?.readBy) ? msg.readBy.map((v) => String(v || '').trim()) : [];
+                            return !readBy.includes(managerAuthId);
+                        }).length;
+
+                        return [otherAuthId, unread];
+                    } catch {
+                        return [otherAuthId, 0];
+                    }
+                }));
+
+                if (cancelled) return;
+                const next = Object.fromEntries(results);
+                setUnreadCountByContact(next);
+                pushUnreadTotals(next);
+            } catch {
+                if (!cancelled) {
+                    setUnreadCountByContact({});
+                    pushUnreadTotals({});
+                }
+            }
+        };
+
+        loadUnreadCounts();
+        const timer = setInterval(loadUnreadCounts, 20000);
+
+        return () => {
+            cancelled = true;
+            clearInterval(timer);
+        };
+    }, [contacts, currentUserId, dispatch, eventId, onUnreadCountChange]);
+
+    useEffect(() => {
+        if (!activeChannel) return;
+        const exists = contacts.some((c) => String(c?.id || '') === String(activeChannel));
+        if (!exists) {
+            setActiveChannel(contacts[0]?.id || null);
+        }
+    }, [activeChannel, contacts]);
+
+    useEffect(() => {
         if (!eventId) return;
         dispatch(fetchPlanningVendorSelectionByEventId(eventId));
     }, [dispatch, eventId]);
@@ -400,6 +605,7 @@ const ChatTab = ({ eventId, client, teamMembers = [] }) => {
 
                 // best-effort mark-as-read when opening
                 markConversationRead({ conversationId: convoId, dispatch, refreshAction: refreshAccessToken }).catch(() => {});
+                clearUnreadForContact(activeChannel);
             } catch (e) {
                 toast.error(e?.message || 'Failed to load chat');
             }
@@ -470,6 +676,7 @@ const ChatTab = ({ eventId, client, teamMembers = [] }) => {
             if (String(msg?.senderAuthId || '') !== currentUserId) {
                 socket.emit('messages:read', { conversationId });
                 markConversationRead({ conversationId, dispatch, refreshAction: refreshAccessToken }).catch(() => {});
+                clearUnreadForContact(activeChannel);
             }
         });
 
@@ -577,9 +784,23 @@ const ChatTab = ({ eventId, client, teamMembers = [] }) => {
     // Filter contacts safely
     const filteredContacts = contacts.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
     
+    const hasManagerOrCoordinatorRole = (roleValue) => {
+        const normalized = String(roleValue || '').trim().toUpperCase();
+        return normalized.includes('MANAGER') || normalized.includes('COORDINATOR');
+    };
+
     const admins = filteredContacts.filter(c => c.type === 'admin');
     const clients = filteredContacts.filter(c => c.type === 'client');
-    const team = filteredContacts.filter(c => c.type === 'team');
+    const managerCoordinatorContacts = canViewManagerCoordinatorSection
+        ? filteredContacts.filter((c) => c.type === 'team'
+            && String(c?.id || '') !== String(currentUserId || '')
+            && hasManagerOrCoordinatorRole(c?.role))
+        : [];
+    const team = isPrivilegedAssignedRole
+        ? filteredContacts.filter((c) => c.type === 'team'
+            && String(c?.id || '') !== String(currentUserId || '')
+            && !hasManagerOrCoordinatorRole(c?.role))
+        : [];
     const vendors = filteredContacts.filter(c => c.type === 'vendor');
 
     // Get current active chat context
@@ -1144,8 +1365,7 @@ const ChatTab = ({ eventId, client, teamMembers = [] }) => {
 
     const renderSidebarItem = (contact, Icon) => {
         const isActive = activeChannel === contact.id;
-        // Unread messages logic could go here based on API status
-        const unreadCount = 0; 
+        const unreadCount = Number(unreadCountByContact?.[String(contact.id)] || 0);
         const isOnline = Boolean(presenceByAuthId?.[String(contact.id)]);
 
         return (
@@ -1162,7 +1382,11 @@ const ChatTab = ({ eventId, client, teamMembers = [] }) => {
                 <div className="flex-1 text-left min-w-0">
                     <div className="flex justify-between items-center">
                         <p className={`text-sm font-bold truncate ${isActive ? 'text-teal-900' : 'text-gray-700'}`}>{contact.name}</p>
-                        {unreadCount > 0 && <div className="w-2 h-2 bg-green-500 rounded-full shrink-0 shadow-sm animate-pulse"></div>}
+                        {unreadCount > 0 && (
+                            <span className="ml-2 min-w-5 h-5 px-1.5 rounded-full bg-teal-600 text-white text-[10px] font-bold leading-5 text-center shrink-0">
+                                {unreadCount > 99 ? '99+' : unreadCount}
+                            </span>
+                        )}
                     </div>
                     <p className={`text-xs truncate ${isActive ? 'text-teal-600 font-medium' : 'text-gray-400'}`}>
                         {contact.role || contact.lastSeen}
@@ -1206,7 +1430,20 @@ const ChatTab = ({ eventId, client, teamMembers = [] }) => {
                     )}
 
                     {/* Client */}
-                    {clients.length > 0 && (
+                    {canViewManagerCoordinatorSection && managerCoordinatorContacts.length > 0 && (
+                        <div>
+                            <div className="flex justify-between items-center px-3 mb-2">
+                                <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Assigned Manager & Coordinator</h4>
+                                <Users size={12} className="text-gray-300" />
+                            </div>
+                            <div className="space-y-1">
+                                {managerCoordinatorContacts.map(c => renderSidebarItem(c, null))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Client */}
+                    {isPrivilegedAssignedRole && clients.length > 0 && (
                         <div>
                             <div className="flex justify-between items-center px-3 mb-2">
                                 <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Client</h4>
@@ -1219,7 +1456,7 @@ const ChatTab = ({ eventId, client, teamMembers = [] }) => {
                     )}
 
                     {/* Internal Team */}
-                    {team.length > 0 && (
+                    {isPrivilegedAssignedRole && team.length > 0 && (
                         <div>
                             <button
                                 onClick={() => setIsInternalOpen(!isInternalOpen)}

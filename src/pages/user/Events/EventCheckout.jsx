@@ -205,6 +205,13 @@ const EventCheckout = () => {
             }
 
             const { razorpayOrderId: rzpOrderId, amount, currency, keyId: rzpKeyId } = orderResult.payload || {};
+            const normalizedOrderId = String(rzpOrderId || '').trim();
+            const normalizedKeyId = String(rzpKeyId || '').trim();
+            const normalizedAmount = Number(amount);
+
+            if (!normalizedOrderId || !normalizedKeyId || !Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+                throw new Error('Invalid payment order response. Please retry. If issue persists, contact support.');
+            }
 
             const sdkLoaded = await loadRazorpayScript();
             if (!sdkLoaded) {
@@ -213,12 +220,12 @@ const EventCheckout = () => {
 
             await new Promise((resolve) => {
                 const options = {
-                    key: rzpKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
-                    amount,
+                    key: normalizedKeyId,
+                    amount: normalizedAmount,
                     currency: currency || 'INR',
                     name: 'Okkazo',
                     description: `Ticket Purchase - ${event?.title || 'Event'}`,
-                    order_id: rzpOrderId,
+                    order_id: normalizedOrderId,
                     modal: {
                         ondismiss: () => {
                             toast.error('Payment was cancelled. You can try again.');
@@ -251,7 +258,21 @@ const EventCheckout = () => {
                 };
 
                 try {
+                    if (!window.Razorpay) {
+                        toast.error('Payment gateway is unavailable. Refresh and try again.');
+                        resolve();
+                        return;
+                    }
                     const rzp = new window.Razorpay(options);
+
+                    if (typeof rzp?.on === 'function') {
+                        rzp.on('payment.failed', (err) => {
+                            const desc = err?.error?.description || err?.error?.reason || 'Payment failed. Please try again.';
+                            toast.error(desc);
+                            resolve();
+                        });
+                    }
+
                     rzp.open();
                 } catch (error) {
                     toast.error(error?.message || 'Failed to open payment gateway. Please try again.');

@@ -145,7 +145,9 @@ const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaym
         : null;
 
     const tax = isExistingPayment ? 0 : computedTax;
-    const finalTotal = isExistingPayment ? (amountOverride ?? computedFinalTotal) : computedFinalTotal;
+    const finalTotal = isExistingPayment
+        ? (amountOverride ?? computedFinalTotal)
+        : computedFinalTotal;
 
     // ─── Main payment orchestration ───────────────────────────────────────────
     const handleTransact = useCallback(async () => {
@@ -177,7 +179,7 @@ const PaymentConfirmation = ({ formData, platformFee, setCurrentStep, handlePaym
         setActiveStep('order');
         const orderResult = await dispatch(createPromoteOrder({
             eventId: eventIdToUse,
-            amount: finalTotal, // ₹ amount; backend converts to paise and returns paise
+            amount: finalTotal, // INR amount; backend converts to paise
         }));
         if (createPromoteOrder.rejected.match(orderResult)) {
             setFlowError(orderResult.payload || 'Failed to create payment order. Please try again.');
