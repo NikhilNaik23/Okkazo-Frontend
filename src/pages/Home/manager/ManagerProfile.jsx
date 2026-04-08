@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    User, Mail, Lock, Bell, Shield, Save, LogOut, ChevronRight
+    User, Mail, Lock, Bell, Shield, Save, LogOut, ChevronRight, Building2, Briefcase
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -63,6 +63,16 @@ const ManagerProfile = () => {
 
     const displayEmail = useMemo(
         () => user?.email || 'manager@okkazo.com',
+        [user]
+    );
+
+    const displayDepartment = useMemo(
+        () => user?.department || 'Not assigned',
+        [user]
+    );
+
+    const displayAssignedRole = useMemo(
+        () => user?.assignedRole || 'Not assigned',
         [user]
     );
 
@@ -218,6 +228,34 @@ const ManagerProfile = () => {
                                                 />
                                             </div>
                                             <p className="text-xs text-gray-400">Email is managed by account authentication settings.</p>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Department</label>
+                                            <div className="relative">
+                                                <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                <input
+                                                    type="text"
+                                                    name="department"
+                                                    value={displayDepartment}
+                                                    readOnly
+                                                    className="w-full bg-gray-100 border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 font-medium text-gray-500 outline-none"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Assigned Role</label>
+                                            <div className="relative">
+                                                <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                <input
+                                                    type="text"
+                                                    name="assignedRole"
+                                                    value={displayAssignedRole}
+                                                    readOnly
+                                                    className="w-full bg-gray-100 border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 font-medium text-gray-500 outline-none"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

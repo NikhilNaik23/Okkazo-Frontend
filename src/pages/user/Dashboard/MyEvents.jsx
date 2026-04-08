@@ -84,9 +84,48 @@ const normalizePromoteStatus = (value) =>
         .replace(/\s+/g, '-')
         .replace(/_+/g, '-');
 
-const mapPromoteToCampaign = (promote, idx) => {
+const normalizePromotionToken = (value) =>
+    String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ');
+
+const buildPromotionFeeMap = (packages) => {
+    const map = {};
+    const rows = Array.isArray(packages) ? packages : [];
+    for (const row of rows) {
+        if (!row || row.active === false) continue;
+        const key = normalizePromotionToken(row.value);
+        if (!key) continue;
+        const fee = Number(row.fee);
+        map[key] = Number.isFinite(fee) && fee > 0 ? fee : 0;
+    }
+    return map;
+};
+
+const computePromoteSettlementInr = (promote, promotionFeeMap = {}) => {
+    const basePlatformFee = Number(promote?.platformFee);
+    const platformFee = Number.isFinite(basePlatformFee) && basePlatformFee > 0 ? basePlatformFee : 0;
+
+    const selectedPromotions = Array.isArray(promote?.promotion) ? promote.promotion : [];
+    const marketingFee = selectedPromotions.reduce((sum, item) => {
+        const token = normalizePromotionToken(item);
+        const fee = Number(promotionFeeMap[token] || 0);
+        return sum + (Number.isFinite(fee) && fee > 0 ? fee : 0);
+    }, 0);
+
+    const subtotal = platformFee + marketingFee;
+    if (!(subtotal > 0)) return null;
+
+    const tax = subtotal * 0.05;
+    return Number((subtotal + tax).toFixed(2));
+};
+
+const mapPromoteToCampaign = (promote, idx, { promotionFeeMap = {}, pendingOrderAmountByEventId = {} } = {}) => {
     const raw = String(promote?.eventStatus || '').trim();
     const normalized = normalizePromoteStatus(raw);
+    const eventId = String(promote?.eventId || '').trim();
 
     const statusLabel = (() => {
         if (normalized === 'payment-required') return 'Payment Required';
@@ -122,20 +161,40 @@ const mapPromoteToCampaign = (promote, idx) => {
 
     const isPayRequired = normalized === 'payment-required';
 
-    const shownAmount = isPayRequired ? platformFee : totalAmount;
-    const revenueLabel = isPayRequired ? 'Platform Fee Due' : 'Total Amount';
+    const backendPendingAmount = Number(pendingOrderAmountByEventId[eventId]);
+    const fallbackSettlementAmount = computePromoteSettlementInr(promote, promotionFeeMap);
+    const hasBackendPendingAmount = Number.isFinite(backendPendingAmount) && backendPendingAmount > 0;
+    const hasComputedSettlementAmount = Number.isFinite(fallbackSettlementAmount) && fallbackSettlementAmount > 0;
+    const backendLooksLikeLegacyPlatformOnly = hasBackendPendingAmount
+        && platformFee > 0
+        && Math.abs(backendPendingAmount - platformFee) < 0.01
+        && hasComputedSettlementAmount
+        && fallbackSettlementAmount > platformFee;
+
+    const settlementAmount = hasComputedSettlementAmount
+        ? (backendLooksLikeLegacyPlatformOnly
+            ? fallbackSettlementAmount
+            : (hasBackendPendingAmount ? backendPendingAmount : fallbackSettlementAmount))
+        : (hasBackendPendingAmount ? backendPendingAmount : null);
+
+    const shownAmount = isPayRequired ? settlementAmount : totalAmount;
+    const revenueLabel = isPayRequired ? 'Settlement Fee Due' : 'Total Amount';
     const revenue = shownAmount != null
-        ? `₹${shownAmount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+        ? `₹${shownAmount.toLocaleString(undefined, {
+            minimumFractionDigits: isPayRequired ? 2 : 0,
+            maximumFractionDigits: isPayRequired ? 2 : 0,
+        })}`
         : '—';
 
     return {
-        id: promote?.eventId,
+        id: eventId || promote?.eventId,
         title: promote?.eventTitle || 'Untitled Campaign',
         subtitle: String(promote?.eventCategory || 'PROMOTION').toUpperCase(),
         status: statusLabel,
         eventStatus: normalized,
         totalAmount,
         platformFee,
+        settlementAmount,
         revenueLabel,
         revenue,
         centerText,
@@ -279,7 +338,7 @@ const MyEvents = () => {
                     payForEvent: {
                         eventId,
                         eventTitle: camp?.title,
-                        amount: camp?.platformFee,
+                        amount: camp?.settlementAmount ?? camp?.platformFee,
                     },
                 },
             });
@@ -356,9 +415,52 @@ const MyEvents = () => {
                 const promotesResult = await dispatch(fetchMyPromotes());
                 if (promotesResult.meta?.requestStatus === 'fulfilled') {
                     const promotes = promotesResult.payload?.promotes || [];
+
+                    let promotionFeeMap = {};
+                    try {
+                        const configResp = await fetchWithAuth(
+                            `${API_BASE_URL}/api/events/config/promotions`,
+                            { method: 'GET' },
+                            { dispatch, refreshAction: refreshAccessToken }
+                        );
+                        const configData = await safeJson(configResp);
+                        if (configResp.ok && configData?.success) {
+                            promotionFeeMap = buildPromotionFeeMap(configData?.data?.promotePackages);
+                        }
+                    } catch {
+                        promotionFeeMap = {};
+                    }
+
+                    const pendingPromotes = promotes.filter((p) => normalizePromoteStatus(p?.eventStatus) === 'payment-required' && p?.eventId);
+                    const pendingOrderAmountByEventId = {};
+
+                    await Promise.all(
+                        pendingPromotes.map(async (p) => {
+                            const eventId = String(p?.eventId || '').trim();
+                            if (!eventId) return;
+
+                            try {
+                                const orderResp = await fetchWithAuth(
+                                    `${API_BASE_URL}/api/orders/${encodeURIComponent(eventId)}`,
+                                    { method: 'GET' },
+                                    { dispatch, refreshAction: refreshAccessToken }
+                                );
+                                const orderData = await safeJson(orderResp);
+                                if (!orderResp.ok || !orderData?.success) return;
+
+                                const amountPaise = Number(orderData?.data?.amount);
+                                if (Number.isFinite(amountPaise) && amountPaise > 0) {
+                                    pendingOrderAmountByEventId[eventId] = Number((amountPaise / 100).toFixed(2));
+                                }
+                            } catch {
+                                // Fallback to computed settlement amount.
+                            }
+                        })
+                    );
+
                     const mapped = promotes
                         .filter((p) => p && p.eventId)
-                        .map((p, idx) => mapPromoteToCampaign(p, idx));
+                        .map((p, idx) => mapPromoteToCampaign(p, idx, { promotionFeeMap, pendingOrderAmountByEventId }));
                     setCampaigns(mapped);
                 } else {
                     // Fallback to static data if API fails

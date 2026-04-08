@@ -38,11 +38,14 @@ const normalizeSelectionLabel = (value) => {
 
 const formatInr = (value) => {
     const n = Number(value || 0);
-    if (!Number.isFinite(n) || n <= 0) return '₹0';
-    return `₹${Math.round(n).toLocaleString('en-IN')}`;
+    if (!Number.isFinite(n) || n <= 0) return '₹0.00';
+    return `₹${new Intl.NumberFormat('en-IN', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(n)}`;
 };
 
-const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, onMessageClient, onPromotionAction, promotionActionLoadingKey, privateBilling }) => {
+const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, onMessageClient, onPromotionAction, promotionActionLoadingKey, privateBilling, generatedRevenuePayout }) => {
     const [addingTeam, setAddingTeam] = useState(false);
     const [pickedStaffKey, setPickedStaffKey] = useState('');
     const [savingTeam, setSavingTeam] = useState(false);
@@ -352,7 +355,7 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, 
                                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Billing Overview</p>
                                     <h3 className="text-xl font-bold text-gray-900 mb-1">Bills & Payment</h3>
                                     <p className="text-sm text-gray-600">
-                                        Private event billing summary with outstanding dues and paid milestones.
+                                        {privateBilling?.summaryText || 'Event billing summary with outstanding dues and paid milestones.'}
                                     </p>
                                 </div>
                             </div>
@@ -399,29 +402,68 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, 
                                         Paid Breakdown
                                     </div>
                                     <div className="divide-y divide-gray-100 text-xs">
-                                        <div className="flex items-center justify-between px-4 py-3">
-                                            <p className="font-bold text-gray-900">Deposit Fee</p>
-                                            <p className="font-black text-gray-900">{formatInr(privateBilling.depositPaidInr)}</p>
-                                        </div>
-                                        <div className="flex items-center justify-between px-4 py-3">
-                                            <p className="font-bold text-gray-900">Vendor Confirmation</p>
-                                            <p className="font-black text-gray-900">{formatInr(privateBilling.vendorConfirmationPaidInr)}</p>
-                                        </div>
-                                        <div className="flex items-center justify-between px-4 py-3">
-                                            <p className="font-bold text-gray-900">Remaining Payment</p>
-                                            <p className="font-black text-gray-900">{formatInr(privateBilling.remainingPaymentPaidInr)}</p>
-                                        </div>
-                                        <div className="flex items-center justify-between px-4 py-3 bg-white/70">
-                                            <p className="font-black text-gray-900">Total Paid</p>
-                                            <p className="font-black text-teal-700">{formatInr(privateBilling.paidTotalInr)}</p>
-                                        </div>
+                                        {(Array.isArray(privateBilling?.paidBreakdownRows) ? privateBilling.paidBreakdownRows : []).map((row, idx) => {
+                                            const isTotalPaidRow = String(row?.label || '').trim().toLowerCase() === 'total paid';
+                                            return (
+                                                <div
+                                                    key={`${row?.label || 'row'}:${idx}`}
+                                                    className={`flex items-center justify-between px-4 py-3 ${isTotalPaidRow ? 'bg-white/70' : ''}`}
+                                                >
+                                                    <p className={`font-bold ${isTotalPaidRow ? 'font-black' : ''} text-gray-900`}>{row?.label || 'Amount'}</p>
+                                                    <p className={`font-black ${isTotalPaidRow ? 'text-teal-700' : 'text-gray-900'}`}>{formatInr(row?.amountInr)}</p>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </div>
 
-                            {privateBilling.normalizedStatus === 'CONFIRMED' ? (
+                            {privateBilling?.statusNote ? (
                                 <div className="mt-4 text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-100 rounded-xl px-4 py-3">
-                                    Billing is visible now for confirmed private events. Remaining collection is completed after event completion.
+                                    {privateBilling.statusNote}
+                                </div>
+                            ) : null}
+
+                            {generatedRevenuePayout?.isSupported ? (
+                                <div className="mt-6 bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+                                    <div className="px-4 py-3 bg-white border-b border-gray-100">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Revenue Generation</p>
+                                        <h4 className="text-sm font-black text-gray-900">Generated Revenue Payout Breakdown</h4>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Generated revenue minus platform fees equals user payout.
+                                        </p>
+                                    </div>
+
+                                    <div className="divide-y divide-gray-100 text-xs">
+                                        <div className="flex items-center justify-between px-4 py-3">
+                                            <p className="font-bold text-gray-900">Generated Revenue</p>
+                                            <p className="font-black text-gray-900">{formatInr(generatedRevenuePayout.generatedRevenueInr)}</p>
+                                        </div>
+                                        <div className="flex items-center justify-between px-4 py-3">
+                                            <p className="font-bold text-gray-900">Platform Fee</p>
+                                            <p className="font-black text-gray-900">{formatInr(generatedRevenuePayout.platformFeeInr)}</p>
+                                        </div>
+                                        <div className="flex items-center justify-between px-4 py-3">
+                                            <p className="font-bold text-gray-900">Service Charge</p>
+                                            <p className="font-black text-gray-900">{formatInr(generatedRevenuePayout.serviceChargeInr)}</p>
+                                        </div>
+                                        <div className="flex items-center justify-between px-4 py-3 bg-white/60">
+                                            <p className="font-black text-gray-900">Total Fees</p>
+                                            <p className="font-black text-gray-900">{formatInr(generatedRevenuePayout.totalFeesInr)}</p>
+                                        </div>
+                                        <div className="flex items-center justify-between px-4 py-3 bg-teal-50">
+                                            <p className="font-black text-teal-800">Payable To User</p>
+                                            <p className="font-black text-teal-800">{formatInr(generatedRevenuePayout.payoutAmountInr)}</p>
+                                        </div>
+                                        <div className="flex items-center justify-between px-4 py-3">
+                                            <p className="font-bold text-gray-900">Already Paid To User</p>
+                                            <p className="font-black text-gray-900">{formatInr(generatedRevenuePayout.payoutPaidInr)}</p>
+                                        </div>
+                                        <div className="flex items-center justify-between px-4 py-3 bg-white/60">
+                                            <p className="font-black text-gray-900">Pending Payout</p>
+                                            <p className="font-black text-gray-900">{formatInr(generatedRevenuePayout.payoutPendingInr)}</p>
+                                        </div>
+                                    </div>
                                 </div>
                             ) : null}
                         </section>

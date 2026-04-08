@@ -1,9 +1,9 @@
-import React from "react";
+import React, { useEffect, useMemo } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { managerNavItems, managerFooterItems } from "../../../data/managerData";
 import { motion } from "framer-motion";
-import { useDispatch } from "react-redux";
-import { logout } from "../../../store/slices/authSlice";
+import { useDispatch, useSelector } from "react-redux";
+import { logout, selectUser } from "../../../store/slices/authSlice";
 import { useStaffUnread } from "../../../context/useStaffUnread";
 import useNotificationFeed from "../../../hooks/useNotificationFeed";
 
@@ -11,6 +11,17 @@ const MotionDiv = motion.div;
 
 const NAV_ITEMS = managerNavItems;
 const FOOTER_ITEMS = managerFooterItems;
+const ANALYTICS_DEPARTMENTS = new Set(["PUBLIC EVENT", "PRIVATE EVENT"]);
+const REPORTS_ALLOWED_ASSIGNED_ROLES = new Set(["JUNIOR MANAGER", "SENIOR EVENT MANAGER"]);
+const EVENTS_BLOCKED_ASSIGNED_ROLES = new Set([
+  "REVENUE OPERATIONS SPECIALIST",
+  "REVENUE OPERATION SPECIALIST",
+  "REVENUE OPERATIONS SPECIALISTS",
+  "REVENUE OPERATION SPECIALISTS",
+]);
+
+const normalizeDepartment = (value) => String(value || '').trim().toUpperCase().replace(/[_-]/g, ' ');
+const normalizeAssignedRole = (value) => String(value || '').trim().toUpperCase().replace(/[_-]/g, ' ').replace(/\s+/g, ' ');
 
 const SidebarItem = ({ item, location, onLogout }) => {
   const Icon = item.icon;
@@ -85,6 +96,7 @@ const ManagerSidebarNav = ({ onToggleNotifications }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const user = useSelector(selectUser);
   const { totalUnreadCount: unreadChatCount } = useStaffUnread();
   const { unreadCount } = useNotificationFeed({
     enabled: true,
@@ -92,6 +104,51 @@ const ManagerSidebarNav = ({ onToggleNotifications }) => {
     fetchUnread: true,
   });
   const hasUnreadNotifications = unreadCount > 0;
+
+  const canViewAnalytics = useMemo(() => {
+    const department = normalizeDepartment(user?.department);
+    return ANALYTICS_DEPARTMENTS.has(department);
+  }, [user?.department]);
+
+  const canViewReports = useMemo(() => {
+    const assignedRole = normalizeAssignedRole(user?.assignedRole);
+    return REPORTS_ALLOWED_ASSIGNED_ROLES.has(assignedRole);
+  }, [user?.assignedRole]);
+
+  const canViewEvents = useMemo(() => {
+    const assignedRole = normalizeAssignedRole(user?.assignedRole);
+    return !EVENTS_BLOCKED_ASSIGNED_ROLES.has(assignedRole);
+  }, [user?.assignedRole]);
+
+  useEffect(() => {
+    if (!canViewAnalytics && location.pathname.includes('/manager/analytics')) {
+      navigate('/manager/dashboard', { replace: true });
+    }
+  }, [canViewAnalytics, location.pathname, navigate]);
+
+  useEffect(() => {
+    if (!canViewReports && location.pathname.includes('/manager/reports')) {
+      navigate('/manager/dashboard', { replace: true });
+    }
+  }, [canViewReports, location.pathname, navigate]);
+
+  useEffect(() => {
+    const onEventsRoute =
+      location.pathname === '/manager/events'
+      || location.pathname.startsWith('/manager/events/')
+      || location.pathname.startsWith('/manager/event/');
+    if (!canViewEvents && onEventsRoute) {
+      navigate('/manager/dashboard', { replace: true });
+    }
+  }, [canViewEvents, location.pathname, navigate]);
+
+  const navItems = useMemo(
+    () => NAV_ITEMS
+      .filter((item) => item.key !== 'analytics' || canViewAnalytics)
+      .filter((item) => item.key !== 'events' || canViewEvents)
+      .filter((item) => item.key !== 'reports' || canViewReports),
+    [canViewAnalytics, canViewEvents, canViewReports]
+  );
 
   const enrichItems = (items) =>
     items.map((item) => ({
@@ -101,7 +158,7 @@ const ManagerSidebarNav = ({ onToggleNotifications }) => {
       onAction: item.action === 'toggleNotifications' ? onToggleNotifications : undefined,
     }));
 
-  const NAV_ITEMS_ENRICHED = enrichItems(NAV_ITEMS);
+  const NAV_ITEMS_ENRICHED = enrichItems(navItems);
   const FOOTER_ITEMS_ENRICHED = enrichItems(FOOTER_ITEMS);
 
   const handleLogout = () => {

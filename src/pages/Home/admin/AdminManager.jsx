@@ -8,6 +8,8 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
+import { fetchWithAuth } from "../../../utils/apiHandler";
+import { refreshAccessToken } from "../../../store/slices/authSlice";
 import { createManager, resetCreateManager } from "../../../store/slices/adminSlice";
 
 const AdminManager = () => {
@@ -19,6 +21,18 @@ const AdminManager = () => {
     const [email, setEmail] = useState("");
     const [selectedDepartment, setSelectedDepartment] = useState("");
     const [selectedRole, setSelectedRole] = useState("");
+    const [roleOptions, setRoleOptions] = useState({
+        departments: ["Public Event", "Private Event", "Core Operation"],
+        departmentRoleMap: {
+            "Public Event": ["Senior Event Manager", "Junior Manager"],
+            "Private Event": ["Senior Event Manager", "Junior Manager"],
+            "Core Operation": ["Event Coordinator", "Revenue Operations Specialist"],
+        },
+    });
+
+    const availableRolesForSelectedDepartment = selectedDepartment
+        ? (roleOptions?.departmentRoleMap?.[selectedDepartment] || [])
+        : [];
 
     useEffect(() => {
         return () => {
@@ -39,15 +53,59 @@ const AdminManager = () => {
         }
     }, [submitError]);
 
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadRoleOptions = async () => {
+            try {
+                const response = await fetchWithAuth(
+                    `${import.meta.env.VITE_BACKEND_URL}/api/admin/managers/options`,
+                    { method: "GET" },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+
+                const data = await response.json().catch(() => null);
+                if (cancelled) return;
+
+                if (!response.ok || !data?.success || !data?.data) {
+                    return;
+                }
+
+                const departments = Array.isArray(data.data.departments) ? data.data.departments : [];
+                const departmentRoleMap = data.data.departmentRoleMap && typeof data.data.departmentRoleMap === 'object'
+                    ? data.data.departmentRoleMap
+                    : {};
+
+                if (departments.length > 0 && Object.keys(departmentRoleMap).length > 0) {
+                    setRoleOptions({ departments, departmentRoleMap });
+                }
+            } catch {
+                // Keep fallback options on fetch failure.
+            }
+        };
+
+        loadRoleOptions();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [dispatch]);
+
     const handleDepartmentChange = (e) => {
         const dept = e.target.value;
         setSelectedDepartment(dept);
-        if (dept === "Core Operation") {
-            setSelectedRole("Event Coordinator");
-        } else {
-            setSelectedRole("");
-        }
+
+        const deptRoles = roleOptions?.departmentRoleMap?.[dept] || [];
+        setSelectedRole(deptRoles[0] || "");
     };
+
+    useEffect(() => {
+        if (!selectedDepartment) return;
+        const deptRoles = roleOptions?.departmentRoleMap?.[selectedDepartment] || [];
+        if (!deptRoles.includes(selectedRole)) {
+            setSelectedRole(deptRoles[0] || "");
+        }
+    }, [selectedDepartment, selectedRole, roleOptions]);
 
     const handleAddManager = (e) => {
         e.preventDefault();
@@ -127,9 +185,9 @@ const AdminManager = () => {
                                             onChange={handleDepartmentChange}
                                         >
                                             <option value="" disabled>Select Department</option>
-                                            <option value="Public Event">Public Event</option>
-                                            <option value="Private Event">Private Event</option>
-                                            <option value="Core Operation">Core Operation</option>
+                                            {roleOptions.departments.map((dept) => (
+                                                <option key={dept} value={dept}>{dept}</option>
+                                            ))}
                                         </select>
                                         <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-[#94a3b8] pointer-events-none" />
                                     </div>
@@ -145,21 +203,14 @@ const AdminManager = () => {
                                     </div>
                                     <div className="relative">
                                         <select 
-                                            className={`w-full px-4 py-3 bg-[#f8fafc] border border-transparent rounded-xl text-sm focus:bg-white focus:border-[#28a785]/30 focus:ring-4 focus:ring-[#28a785]/5 focus:outline-none transition-all appearance-none cursor-pointer text-[#1a1c1e] font-medium ${selectedDepartment === "Core Operation" ? "opacity-60 cursor-not-allowed" : ""}`}
+                                            className="w-full px-4 py-3 bg-[#f8fafc] border border-transparent rounded-xl text-sm focus:bg-white focus:border-[#28a785]/30 focus:ring-4 focus:ring-[#28a785]/5 focus:outline-none transition-all appearance-none cursor-pointer text-[#1a1c1e] font-medium"
                                             value={selectedRole}
                                             onChange={(e) => setSelectedRole(e.target.value)}
-                                            disabled={selectedDepartment === "Core Operation"}
                                         >
                                             <option disabled value="">Select Role</option>
-                                            {(selectedDepartment === "Public Event" || selectedDepartment === "Private Event" || !selectedDepartment) && (
-                                                <>
-                                                    <option>Senior Event Manager</option>
-                                                    <option>Junior Manager</option>
-                                                </>
-                                            )}
-                                            {(selectedDepartment === "Core Operation") && (
-                                                <option>Event Coordinator</option>
-                                            )}
+                                            {availableRolesForSelectedDepartment.map((role) => (
+                                                <option key={role}>{role}</option>
+                                            ))}
                                         </select>
                                         <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-[#94a3b8] pointer-events-none" />
                                     </div>

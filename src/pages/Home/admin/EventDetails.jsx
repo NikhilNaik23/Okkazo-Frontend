@@ -28,6 +28,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
 import { eventDetailsData } from "../../../data/eventDetailsData";
+import AdminManagerChatTab from "../../../components/Admin/EventDetails/AdminManagerChatTab";
 import {
     assignPlanningEventManager,
     assignPromoteEventManager,
@@ -179,7 +180,9 @@ const EventDetails = () => {
             .filter((m) => !unavailableSet.has(String(m.id)))
             .map((m, idx) => ({
                 id: m.id,
+                authId: m.authId || null,
                 name: m.name || m.email || 'Manager',
+                assignedRole: m.assignedRole || 'Manager',
                 initial: buildInitials(m.name || m.email),
                 color: MANAGER_BADGE_CLASSES[idx % MANAGER_BADGE_CLASSES.length],
             }));
@@ -205,8 +208,10 @@ const EventDetails = () => {
 
         setAssignedManager({
             id: member.id,
+            authId: member.authId || null,
             name: member.name || member.email || 'Manager',
             email: member.email || null,
+            assignedRole: member.assignedRole || 'Manager',
             initial: buildInitials(member.name || member.email),
             color: MANAGER_BADGE_CLASSES[0],
         });
@@ -373,9 +378,31 @@ const EventDetails = () => {
     }, [selectedEventVendorAlternatives]);
 
     const transactions = useMemo(() => {
-        const orders = selectedEventTransactions?.orders;
-        return Array.isArray(orders) ? orders : [];
+        const orders = Array.isArray(selectedEventTransactions?.orders) ? selectedEventTransactions.orders : [];
+
+        const normalized = orders.map((row) => {
+            const amountPaise = Number(row?.amount);
+            const paidAt = row?.paidAt || null;
+            const createdAt = row?.createdAt || null;
+            return {
+                transactionId: row?.transactionId || row?.razorpayPaymentId || null,
+                orderType: row?.orderType || 'PAYMENT',
+                status: String(row?.status || 'UNKNOWN').toUpperCase(),
+                amountPaise: Number.isFinite(amountPaise) ? amountPaise : 0,
+                paidAt,
+                createdAt,
+                sortTime: new Date(paidAt || createdAt || 0).getTime(),
+            };
+        });
+
+        return normalized.sort((a, b) => (Number(b.sortTime || 0) - Number(a.sortTime || 0)));
     }, [selectedEventTransactions?.orders]);
+
+    const totalDisbursedPaise = useMemo(() => {
+        return transactions
+            .filter((txn) => txn.status === 'PAID')
+            .reduce((sum, txn) => sum + Number(txn.amountPaise || 0), 0);
+    }, [transactions]);
 
     const formatRupees = (amount) => {
         const n = Number(amount);
@@ -433,18 +460,187 @@ const EventDetails = () => {
     const normalizeServiceKey = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
     const privateBilling = useMemo(() => {
-        const isPrivatePlanning = selectedEventRequestType === 'PLANNING'
-            && String(selectedEventRequest?.category || '').trim().toLowerCase() === 'private';
+        const category = String(selectedEventRequest?.category || '').trim().toLowerCase();
+        const isPlanningEvent = selectedEventRequestType === 'PLANNING';
+        const isPrivatePlanning = isPlanningEvent && category === 'private';
+        const isPublicPlanning = isPlanningEvent && category === 'public';
+        const isPromoteEvent = selectedEventRequestType === 'PROMOTE';
+        const isPlanningMilestoneBilling = isPrivatePlanning || isPublicPlanning;
+
         const normalizedPlanningStatus = String(selectedEventRequest?.status || '').trim().toUpperCase().replace(/_/g, ' ');
         const normalizedUiStatus = String(currentStatus || '').trim().toUpperCase().replace(/_/g, ' ');
         const allowedBillingStatuses = ['VERIFIED', 'CONFIRMED', 'COMPLETED', 'VENDOR PAYMENT PENDING'];
-        const canShow = isPrivatePlanning && (
-            allowedBillingStatuses.includes(normalizedPlanningStatus)
-            || allowedBillingStatuses.includes(normalizedUiStatus)
-        );
+        const canShow = isPlanningMilestoneBilling
+            ? (allowedBillingStatuses.includes(normalizedPlanningStatus) || allowedBillingStatuses.includes(normalizedUiStatus))
+            : isPromoteEvent;
 
-        if (!isPrivatePlanning) {
+        if (!isPlanningMilestoneBilling && !isPromoteEvent) {
             return { enabled: false };
+        }
+
+        const toNonNegative = (value) => {
+            const n = Number(value || 0);
+            return Number.isFinite(n) && n > 0 ? n : 0;
+        };
+
+        const toInrFromPaise = (value) => {
+            const n = Number(value || 0);
+            if (!Number.isFinite(n) || n <= 0) return 0;
+            return Number((n / 100).toFixed(2));
+        };
+
+        if (isPromoteEvent) {
+            const promoteOrders = (Array.isArray(selectedEventTransactions?.orders) ? selectedEventTransactions.orders : [])
+                .map((row) => ({
+                    status: String(row?.status || '').trim().toUpperCase(),
+                    orderType: String(row?.orderType || '').trim().toUpperCase(),
+                    amountPaise: Number(row?.amount || 0),
+                    createdAt: row?.createdAt || null,
+                    paidAt: row?.paidAt || null,
+                }))
+                .filter((row) => row.orderType === 'PROMOTE EVENT')
+                .filter((row) => Number.isFinite(row.amountPaise) && row.amountPaise > 0)
+                .sort((a, b) => {
+                    const at = new Date(a?.createdAt || 0).getTime();
+                    const bt = new Date(b?.createdAt || 0).getTime();
+                    return bt - at;
+                });
+
+            const latestPromoteOrder = promoteOrders[0] || null;
+            const latestPaidPromoteOrder = [...promoteOrders]
+                .filter((row) => row.status === 'PAID')
+                .sort((a, b) => {
+                    const at = new Date(a?.paidAt || a?.createdAt || 0).getTime();
+                    const bt = new Date(b?.paidAt || b?.createdAt || 0).getTime();
+                    return bt - at;
+                })[0] || null;
+
+            const promotePaidTotalInrRaw = Number(
+                (
+                    promoteOrders
+                        .filter((row) => row.status === 'PAID')
+                        .reduce((sum, row) => sum + Number(row.amountPaise || 0), 0)
+                ) / 100
+            );
+
+            const settlementAmountInr = latestPaidPromoteOrder
+                ? toInrFromPaise(latestPaidPromoteOrder.amountPaise)
+                : (latestPromoteOrder ? toInrFromPaise(latestPromoteOrder.amountPaise) : 0);
+
+            const promotePaidTotalInr = settlementAmountInr > 0
+                ? Number(Math.min(settlementAmountInr, promotePaidTotalInrRaw || 0).toFixed(2))
+                : Number((promotePaidTotalInrRaw || 0).toFixed(2));
+
+            const settlementOutstandingInr = Number(
+                Math.max(0, settlementAmountInr - promotePaidTotalInr).toFixed(2)
+            );
+
+            const hasSettlementOrders = settlementAmountInr > 0 || promotePaidTotalInr > 0;
+
+            if (hasSettlementOrders) {
+                const hasPendingCreatedOrder = promoteOrders.some((row) => row.status === 'CREATED');
+
+                return {
+                    enabled: canShow,
+                    normalizedStatus: normalizedPlanningStatus,
+                    billingScope: 'promote',
+                    summaryText: 'Promote settlement summary for activation billing.',
+                    statusNote: promotePaidTotalInr > 0
+                        ? (hasPendingCreatedOrder
+                            ? 'Payment is completed. Additional CREATED entries are pending retries and do not increase due amount.'
+                            : 'Payment is completed for this promote event.')
+                        : 'Settlement payment is pending for this promote event.',
+                    totalAmountInr: settlementAmountInr,
+                    paidTotalInr: promotePaidTotalInr,
+                    outstandingDueInr: settlementOutstandingInr,
+                    lineItems: [
+                        {
+                            id: 'promote-settlement',
+                            serviceName: 'Promote Settlement Fee',
+                            businessName: 'Platform + marketing + tax billing',
+                            amountInr: settlementAmountInr,
+                        },
+                    ],
+                    paidBreakdownRows: [
+                        { label: 'Settlement Total', amountInr: settlementAmountInr },
+                        { label: 'Settlement Paid', amountInr: promotePaidTotalInr },
+                        { label: 'Outstanding Due', amountInr: settlementOutstandingInr },
+                    ],
+                };
+            }
+
+            const grossRevenueInr = toNonNegative(selectedEventRequest?.ticketSalesStats?.grossRevenueInr);
+            const platformFeeInr = toNonNegative(
+                selectedEventRequest?.ticketSalesStats?.platformFeeInr
+                ?? selectedEventRequest?.platformFee
+            );
+            const serviceChargeInr = toNonNegative(selectedEventRequest?.ticketSalesStats?.serviceChargeInr);
+            const totalFeesInr = toNonNegative(
+                selectedEventRequest?.ticketSalesStats?.totalFeesInr
+                ?? (platformFeeInr + serviceChargeInr)
+            );
+
+            const totalVendorCostInr = isPublicPlanning
+                ? (Array.isArray(selectedEventVendorSelection?.vendors) ? selectedEventVendorSelection.vendors : []).reduce((sum, row) => {
+                    const lockedPrice = toNonNegative(row?.vendorQuotedPrice);
+                    const commissionAmount = toNonNegative(row?.commissionAmount);
+                    const isLocked = Boolean(row?.priceLocked) && lockedPrice > 0;
+                    if (!isLocked) return sum;
+                    return sum + Math.max(0, lockedPrice - commissionAmount);
+                }, 0)
+                : 0;
+
+            const payoutTotalInr = Number(
+                Math.max(0, grossRevenueInr - totalFeesInr - totalVendorCostInr).toFixed(2)
+            );
+            const payoutStatus = String(selectedEventRequest?.generatedRevenuePayout?.status || '').trim().toUpperCase();
+            const payoutPaidInr = payoutStatus === 'SUCCESS'
+                ? toInrFromPaise(selectedEventRequest?.generatedRevenuePayout?.amountPaise)
+                : 0;
+            const outstandingDueInr = Number(Math.max(0, payoutTotalInr - payoutPaidInr).toFixed(2));
+
+            const lineItems = [
+                {
+                    id: 'generated-revenue',
+                    serviceName: 'Generated Ticket Revenue',
+                    businessName: 'Total collected from ticket sales',
+                    amountInr: grossRevenueInr,
+                },
+                {
+                    id: 'total-fees',
+                    serviceName: 'Total Platform Fees',
+                    businessName: 'Platform fee + service charge',
+                    amountInr: totalFeesInr,
+                },
+                ...(isPublicPlanning
+                    ? [{
+                        id: 'vendor-cost',
+                        serviceName: 'Vendor Cost',
+                        businessName: 'Locked vendor commitments',
+                        amountInr: totalVendorCostInr,
+                    }]
+                    : []),
+            ];
+
+            return {
+                enabled: canShow,
+                normalizedStatus: normalizedPlanningStatus,
+                billingScope: 'promote',
+                summaryText: 'Promote event billing summary with generated revenue, fees, and payout progress.',
+                statusNote: 'Payout is released from generated revenue after fee settlement.',
+                totalAmountInr: payoutTotalInr,
+                paidTotalInr: payoutPaidInr,
+                outstandingDueInr,
+                lineItems,
+                paidBreakdownRows: [
+                    { label: 'Platform Fee', amountInr: platformFeeInr },
+                    { label: 'Service Charge', amountInr: serviceChargeInr },
+                    ...(isPublicPlanning ? [{ label: 'Vendor Cost', amountInr: totalVendorCostInr }] : []),
+                    { label: 'Total Fees', amountInr: totalFeesInr },
+                    { label: 'Payout Released', amountInr: payoutPaidInr },
+                    { label: 'Outstanding Payout', amountInr: outstandingDueInr },
+                ],
+            };
         }
 
         const vendors = Array.isArray(selectedEventVendorSelection?.vendors) ? selectedEventVendorSelection.vendors : [];
@@ -486,12 +682,6 @@ const EventDetails = () => {
             })
             .filter((item) => item.amountInr > 0 || item.businessName);
 
-        const toInrFromPaise = (value) => {
-            const n = Number(value || 0);
-            if (!Number.isFinite(n) || n <= 0) return 0;
-            return Number((n / 100).toFixed(2));
-        };
-
         const lineItemsTotalInr = lineItems.reduce((sum, item) => sum + Number(item?.amountInr || 0), 0);
         const lockedTotalInr = vendors.reduce((sum, row) => {
             const amount = Number(row?.vendorQuotedPrice || 0);
@@ -511,6 +701,15 @@ const EventDetails = () => {
         return {
             enabled: canShow,
             normalizedStatus: normalizedPlanningStatus,
+            billingScope: isPublicPlanning ? 'planning-public' : 'planning-private',
+            summaryText: isPublicPlanning
+                ? 'Public event billing summary with current outstanding dues and paid milestones.'
+                : 'Private event billing summary with current outstanding dues.',
+            statusNote: normalizedPlanningStatus === 'CONFIRMED'
+                ? (isPublicPlanning
+                    ? 'Billing is now visible for confirmed public events.'
+                    : 'Billing is now visible for confirmed private events.')
+                : null,
             totalAmountInr,
             paidTotalInr,
             outstandingDueInr,
@@ -518,11 +717,22 @@ const EventDetails = () => {
             vendorConfirmationPaidInr,
             remainingPaymentPaidInr,
             lineItems,
+            paidBreakdownRows: [
+                { label: 'Deposit Fee', amountInr: depositPaidInr },
+                { label: 'Vendor Confirmation', amountInr: vendorConfirmationPaidInr },
+                { label: 'Remaining Payment', amountInr: remainingPaymentPaidInr },
+                { label: 'Total Paid', amountInr: paidTotalInr },
+            ],
         };
     }, [
         selectedEventRequestType,
         selectedEventRequest?.category,
         selectedEventRequest?.status,
+        selectedEventRequest?.platformFee,
+        selectedEventRequest?.ticketSalesStats,
+        selectedEventRequest?.generatedRevenuePayout?.status,
+        selectedEventRequest?.generatedRevenuePayout?.amountPaise,
+        selectedEventTransactions?.orders,
         selectedEventRequest?.totalAmount,
         selectedEventRequest?.depositPaidAmountPaise,
         selectedEventRequest?.vendorConfirmationPaidAmountPaise,
@@ -532,6 +742,56 @@ const EventDetails = () => {
         selectedEventVendorSelection?.totalMaxAmount,
         selectedServices,
         currentStatus,
+    ]);
+
+    const planningPublicRevenueBreakdown = useMemo(() => {
+        const isPlanningPublic = selectedEventRequestType === 'PLANNING'
+            && String(selectedEventRequest?.category || '').trim().toLowerCase() === 'public';
+
+        if (!isPlanningPublic) {
+            return { enabled: false };
+        }
+
+        const toNonNegative = (value) => {
+            const n = Number(value || 0);
+            return Number.isFinite(n) && n > 0 ? n : 0;
+        };
+
+        const grossRevenueInr = toNonNegative(selectedEventRequest?.ticketSalesStats?.grossRevenueInr);
+        const platformFeeInr = toNonNegative(
+            selectedEventRequest?.ticketSalesStats?.platformFeeInr
+            ?? selectedEventRequest?.platformFee
+        );
+        const serviceChargeInr = toNonNegative(selectedEventRequest?.ticketSalesStats?.serviceChargeInr);
+        const totalFeesInr = toNonNegative(
+            selectedEventRequest?.ticketSalesStats?.totalFeesInr
+            ?? (platformFeeInr + serviceChargeInr)
+        );
+
+        const payoutAmountInr = Number(Math.max(0, grossRevenueInr - totalFeesInr).toFixed(2));
+        const payoutStatus = String(selectedEventRequest?.generatedRevenuePayout?.status || '').trim().toUpperCase();
+        const payoutPaidInr = payoutStatus === 'SUCCESS'
+            ? Number((Number(selectedEventRequest?.generatedRevenuePayout?.amountPaise || 0) / 100).toFixed(2))
+            : 0;
+        const payoutPendingInr = Number(Math.max(0, payoutAmountInr - payoutPaidInr).toFixed(2));
+
+        return {
+            enabled: true,
+            grossRevenueInr,
+            platformFeeInr,
+            serviceChargeInr,
+            totalFeesInr,
+            payoutAmountInr,
+            payoutPaidInr,
+            payoutPendingInr,
+        };
+    }, [
+        selectedEventRequestType,
+        selectedEventRequest?.category,
+        selectedEventRequest?.platformFee,
+        selectedEventRequest?.ticketSalesStats,
+        selectedEventRequest?.generatedRevenuePayout?.status,
+        selectedEventRequest?.generatedRevenuePayout?.amountPaise,
     ]);
 
     const eventWorkflowStatusLabel = useMemo(() => {
@@ -794,7 +1054,7 @@ const EventDetails = () => {
                                         <div>
                                             <p className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8] mb-2">Billing Overview</p>
                                             <h3 className="text-lg font-bold text-[#0b2d49]">Bills & Payment</h3>
-                                            <p className="text-sm text-[#708aa0]">Private event billing summary with current outstanding dues.</p>
+                                            <p className="text-sm text-[#708aa0]">{privateBilling?.summaryText || 'Event billing summary with current outstanding dues.'}</p>
                                         </div>
                                     </div>
 
@@ -840,31 +1100,68 @@ const EventDetails = () => {
                                                 Paid Breakdown
                                             </div>
                                             <div className="divide-y divide-[#e9eff1] text-xs">
-                                                <div className="flex items-center justify-between px-4 py-3">
-                                                    <p className="font-bold text-[#0b2d49]">Deposit Fee</p>
-                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(privateBilling.depositPaidInr)}</p>
-                                                </div>
-                                                <div className="flex items-center justify-between px-4 py-3">
-                                                    <p className="font-bold text-[#0b2d49]">Vendor Confirmation</p>
-                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(privateBilling.vendorConfirmationPaidInr)}</p>
-                                                </div>
-                                                <div className="flex items-center justify-between px-4 py-3">
-                                                    <p className="font-bold text-[#0b2d49]">Remaining Payment</p>
-                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(privateBilling.remainingPaymentPaidInr)}</p>
-                                                </div>
-                                                <div className="flex items-center justify-between px-4 py-3 bg-white/70">
-                                                    <p className="font-black text-[#0b2d49]">Total Paid</p>
-                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(privateBilling.paidTotalInr)}</p>
-                                                </div>
+                                                {(Array.isArray(privateBilling?.paidBreakdownRows) ? privateBilling.paidBreakdownRows : []).map((row, idx) => {
+                                                    const isTotalPaidRow = String(row?.label || '').trim().toLowerCase() === 'total paid';
+                                                    return (
+                                                        <div
+                                                            key={`${row?.label || 'row'}:${idx}`}
+                                                            className={`flex items-center justify-between px-4 py-3 ${isTotalPaidRow ? 'bg-white/70' : ''}`}
+                                                        >
+                                                            <p className={`font-bold ${isTotalPaidRow ? 'font-black' : ''} text-[#0b2d49]`}>{row?.label || 'Amount'}</p>
+                                                            <p className="font-black text-[#0b2d49]">₹{formatInr(row?.amountInr)}</p>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     </div>
 
-                                    {privateBilling.normalizedStatus === 'CONFIRMED' && (
+                                    {privateBilling?.statusNote && (
                                         <div className="mt-4 text-[11px] font-bold text-[#0b2d49] bg-[#f8fafc] border border-[#e9eff1] rounded-xl px-4 py-3">
-                                            Billing is now visible for confirmed private events.
+                                            {privateBilling.statusNote}
                                         </div>
                                     )}
+
+                                    {privateBilling?.billingScope === 'planning-public' && planningPublicRevenueBreakdown?.enabled ? (
+                                        <div className="mt-5 bg-[#f8fafc] rounded-2xl border border-[#e9eff1] overflow-hidden">
+                                            <div className="px-4 py-3 bg-white border-b border-[#e9eff1]">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8] mb-1">Revenue Generation</p>
+                                                <h4 className="text-lg font-bold text-[#0b2d49]">Generated Revenue Payout Breakdown</h4>
+                                                <p className="text-sm text-[#708aa0] mt-1">Generated revenue minus platform fees equals user payout.</p>
+                                            </div>
+
+                                            <div className="divide-y divide-[#e9eff1] text-xs">
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <p className="font-bold text-[#0b2d49]">Generated Revenue</p>
+                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(planningPublicRevenueBreakdown.grossRevenueInr)}</p>
+                                                </div>
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <p className="font-bold text-[#0b2d49]">Platform Fee</p>
+                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(planningPublicRevenueBreakdown.platformFeeInr)}</p>
+                                                </div>
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <p className="font-bold text-[#0b2d49]">Service Charge</p>
+                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(planningPublicRevenueBreakdown.serviceChargeInr)}</p>
+                                                </div>
+                                                <div className="flex items-center justify-between px-4 py-3 bg-white/60">
+                                                    <p className="font-black text-[#0b2d49]">Total Fees</p>
+                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(planningPublicRevenueBreakdown.totalFeesInr)}</p>
+                                                </div>
+                                                <div className="flex items-center justify-between px-4 py-3 bg-[#e8f4f1]">
+                                                    <p className="font-black text-[#0b2d49]">Payable To User</p>
+                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(planningPublicRevenueBreakdown.payoutAmountInr)}</p>
+                                                </div>
+                                                <div className="flex items-center justify-between px-4 py-3">
+                                                    <p className="font-bold text-[#0b2d49]">Already Paid To User</p>
+                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(planningPublicRevenueBreakdown.payoutPaidInr)}</p>
+                                                </div>
+                                                <div className="flex items-center justify-between px-4 py-3 bg-white/60">
+                                                    <p className="font-black text-[#0b2d49]">Pending Payout</p>
+                                                    <p className="font-black text-[#0b2d49]">₹{formatInr(planningPublicRevenueBreakdown.payoutPendingInr)}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : null}
                                 </div>
                             )}
 
@@ -894,10 +1191,10 @@ const EventDetails = () => {
                                                 </tr>
                                             ) : (
                                                 transactions.slice(0, 2).map((txn) => (
-                                                    <tr key={txn.transactionId || txn.razorpayPaymentId || txn.createdAt} className="border-b border-[#e9eff1] last:border-0">
-                                                        <td className="py-4 pl-4 text-sm font-semibold text-[#0b2d49]">{txn.transactionId || txn.razorpayPaymentId || '—'}</td>
+                                                    <tr key={txn.transactionId || txn.createdAt || txn.orderType} className="border-b border-[#e9eff1] last:border-0">
+                                                        <td className="py-4 pl-4 text-sm font-semibold text-[#0b2d49]">{txn.transactionId || '—'}</td>
                                                         <td className="py-4 text-sm text-[#5a5b44]">{formatTxnDate(txn.paidAt || txn.createdAt)}</td>
-                                                        <td className="py-4 text-sm font-bold text-[#0b2d49]">₹{formatRupees(txn.amount)}</td>
+                                                        <td className="py-4 text-sm font-bold text-[#0b2d49]">₹{formatRupees(txn.amountPaise)}</td>
                                                         <td className="py-4 pr-4 text-right">
                                                             <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase ${
                                                                 String(txn.status || '').toUpperCase() === 'PAID' ? 'bg-[#0b2d49]/10 text-[#0b2d49]' : 'bg-[#f3ddb1]/50 text-[#d7a444]'
@@ -914,56 +1211,14 @@ const EventDetails = () => {
                             </div>
                         </>
                     ) : activeTab === "Chat" ? (
-                        <div className="bg-white rounded-3xl shadow-sm border border-[#e9eff1] h-[600px] flex flex-col overflow-hidden">
-                            <div className="p-6 border-b border-[#e9eff1] flex items-center justify-between bg-white">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-2xl bg-[#0b2d49]/10 flex items-center justify-center">
-                                        <Users className="text-[#0b2d49]" size={24} />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-lg font-bold text-[#0b2d49]">Event Coordination Chat</h3>
-                                        <p className="text-xs text-[#28a785] font-bold uppercase tracking-wider">● 4 Members Active</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#f8fafc]/30">
-                                <div className="flex flex-col items-center mb-4">
-                                    <span className="px-4 py-1.5 bg-white border border-[#e9eff1] rounded-full text-[10px] font-bold text-[#708aa0] uppercase tracking-widest shadow-sm">Yesterday</span>
-                                </div>
-                                <div className="flex gap-4">
-                                    <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-sm shrink-0">LC</div>
-                                    <div className="max-w-[70%] space-y-2">
-                                        <div className="bg-white p-4 rounded-2xl rounded-tl-none border border-[#e9eff1] shadow-sm">
-                                            <p className="text-xs font-black text-[#d7a444] uppercase mb-1">Luxe Catering Co.</p>
-                                            <p className="text-sm text-[#5a5b44] leading-relaxed">The revised menu has been uploaded. Please check the "Documents" tab for the pricing details.</p>
-                                        </div>
-                                        <span className="text-[10px] font-bold text-[#94a3b8] ml-1 uppercase">10:45 AM</span>
-                                    </div>
-                                </div>
-                                <div className="flex gap-4 justify-end">
-                                    <div className="max-w-[70%] space-y-2">
-                                        <div className="bg-[#0b2d49] p-4 rounded-2xl rounded-tr-none shadow-lg shadow-[#0b2d49]/10">
-                                            <p className="text-sm text-white leading-relaxed font-medium">Understood. I will review it with the finance team today.</p>
-                                        </div>
-                                        <div className="flex justify-end pr-1">
-                                            <span className="text-[10px] font-bold text-[#94a3b8] uppercase">11:02 AM • Read</span>
-                                        </div>
-                                    </div>
-                                    <div className="w-10 h-10 rounded-xl bg-[#0b2d49]/10 text-[#0b2d49] flex items-center justify-center font-bold text-sm shrink-0">MA</div>
-                                </div>
-                            </div>
-                            <div className="p-4 bg-white border-t border-[#e9eff1]">
-                                <div className="relative flex items-center gap-3">
-                                    <input 
-                                        placeholder="Type a message..." 
-                                        className="w-full bg-[#f8fafc]/80 border border-[#e9eff1] rounded-2xl py-3.5 pl-6 pr-12 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#d7a444]/20 focus:border-[#d7a444] transition-all"
-                                    />
-                                    <button className="absolute right-2 p-2.5 bg-[#d7a444] text-white rounded-xl shadow-lg shadow-[#d7a444]/30 hover:bg-[#0b2d49] transition-all">
-                                        <MessageSquare size={18} />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                        <AdminManagerChatTab
+                            eventId={id}
+                            manager={assignedManager ? {
+                                authId: assignedManager.authId,
+                                name: assignedManager.name,
+                                role: assignedManager.assignedRole || 'Manager',
+                            } : null}
+                        />
                     ) : activeTab === "Financial" ? (
                         <div className="space-y-6">
                              <div className="bg-white p-6 rounded-3xl shadow-sm border border-[#e9eff1]">
@@ -1001,7 +1256,7 @@ const EventDetails = () => {
                                                     const status = String(txn.status || 'UNKNOWN').toUpperCase();
                                                     const isPaid = status === 'PAID';
                                                     return (
-                                                        <tr key={txn.transactionId || txn.razorpayPaymentId || txn.createdAt} className="group hover:bg-[#f8fafc]/50 transition-all cursor-pointer">
+                                                        <tr key={txn.transactionId || txn.createdAt || txn.orderType} className="group hover:bg-[#f8fafc]/50 transition-all cursor-pointer">
                                                             <td className="py-5 pl-4">
                                                                 <div className="flex flex-col">
                                                                     <span className="text-sm font-bold text-[#0b2d49]">{String(txn.orderType || 'PAYMENT').toUpperCase()}</span>
@@ -1009,10 +1264,10 @@ const EventDetails = () => {
                                                                 </div>
                                                             </td>
                                                             <td className="py-5">
-                                                                <span className="text-xs font-mono font-bold text-[#5a5b44]">{txn.transactionId || txn.razorpayPaymentId || '—'}</span>
+                                                                <span className="text-xs font-mono font-bold text-[#5a5b44]">{txn.transactionId || '—'}</span>
                                                             </td>
                                                             <td className="py-5 text-right">
-                                                                <span className="text-base font-black text-[#0b2d49]">₹{formatRupees(txn.amount)}</span>
+                                                                <span className="text-base font-black text-[#0b2d49]">₹{formatRupees(txn.amountPaise)}</span>
                                                             </td>
                                                             <td className="py-5 pr-4 text-right">
                                                                 <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
@@ -1030,7 +1285,7 @@ const EventDetails = () => {
                                         <tfoot className="bg-[#f8fafc]/50">
                                             <tr>
                                                 <td colSpan="2" className="py-5 pl-4 text-sm font-bold text-[#708aa0]">TOTAL DISBURSED</td>
-                                                <td className="py-5 text-right text-lg font-black text-[#0b2d49]">₹16,900.00</td>
+                                                <td className="py-5 text-right text-lg font-black text-[#0b2d49]">₹{formatRupees(totalDisbursedPaise)}</td>
                                                 <td></td>
                                             </tr>
                                         </tfoot>

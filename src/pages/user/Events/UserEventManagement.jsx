@@ -1853,6 +1853,15 @@ const UserEventManagement = () => {
         }
 
         const { razorpayOrderId: rzpOrderId, amount, currency, keyId: rzpKeyId } = orderResult.payload;
+        const normalizedOrderId = String(rzpOrderId || '').trim();
+        const normalizedKeyId = String(rzpKeyId || '').trim();
+        const normalizedAmount = Number(amount);
+
+        if (!normalizedOrderId || !normalizedKeyId || !Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+            setConfirmFlowError('Invalid payment order response. Please retry. If issue persists, contact support.');
+            setConfirmFlowActive(false);
+            return;
+        }
 
         const sdkLoaded = await loadRazorpayScript();
         if (!sdkLoaded) {
@@ -1863,12 +1872,12 @@ const UserEventManagement = () => {
 
         await new Promise((resolve) => {
             const options = {
-                key: rzpKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
-                amount,
+                key: normalizedKeyId,
+                amount: normalizedAmount,
                 currency: currency || 'INR',
                 name: 'Okkazo',
                 description: `Vendor Confirmation – ${event?.title || 'Event'}`,
-                order_id: rzpOrderId,
+                order_id: normalizedOrderId,
                 modal: {
                     ondismiss: () => {
                         setConfirmFlowError('Payment was cancelled. You can try again.');
@@ -1903,7 +1912,23 @@ const UserEventManagement = () => {
             };
 
             try {
+                if (!window.Razorpay) {
+                    setConfirmFlowError('Payment gateway is unavailable. Refresh and try again.');
+                    setConfirmFlowActive(false);
+                    resolve();
+                    return;
+                }
                 const rzp = new window.Razorpay(options);
+
+                if (typeof rzp?.on === 'function') {
+                    rzp.on('payment.failed', (err) => {
+                        const desc = err?.error?.description || err?.error?.reason || 'Payment failed. Please try again.';
+                        setConfirmFlowError(desc);
+                        setConfirmFlowActive(false);
+                        resolve();
+                    });
+                }
+
                 rzp.open();
             } catch (e) {
                 setConfirmFlowError(e?.message || 'Failed to open payment gateway. Please try again.');
@@ -1933,6 +1958,15 @@ const UserEventManagement = () => {
         }
 
         const { razorpayOrderId: rzpOrderId, amount, currency, keyId: rzpKeyId } = orderResult.payload;
+        const normalizedOrderId = String(rzpOrderId || '').trim();
+        const normalizedKeyId = String(rzpKeyId || '').trim();
+        const normalizedAmount = Number(amount);
+
+        if (!normalizedOrderId || !normalizedKeyId || !Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+            setRemainingFlowError('Invalid payment order response. Please retry. If issue persists, contact support.');
+            setRemainingFlowActive(false);
+            return;
+        }
 
         const sdkLoaded = await loadRazorpayScript();
         if (!sdkLoaded) {
@@ -1943,12 +1977,12 @@ const UserEventManagement = () => {
 
         await new Promise((resolve) => {
             const options = {
-                key: rzpKeyId || import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
-                amount,
+                key: normalizedKeyId,
+                amount: normalizedAmount,
                 currency: currency || 'INR',
                 name: 'Okkazo',
                 description: `Remaining Payment - ${event?.title || 'Event'}`,
-                order_id: rzpOrderId,
+                order_id: normalizedOrderId,
                 modal: {
                     ondismiss: () => {
                         setRemainingFlowError('Payment was cancelled. You can try again.');
@@ -1991,7 +2025,23 @@ const UserEventManagement = () => {
             };
 
             try {
+                if (!window.Razorpay) {
+                    setRemainingFlowError('Payment gateway is unavailable. Refresh and try again.');
+                    setRemainingFlowActive(false);
+                    resolve();
+                    return;
+                }
                 const rzp = new window.Razorpay(options);
+
+                if (typeof rzp?.on === 'function') {
+                    rzp.on('payment.failed', (err) => {
+                        const desc = err?.error?.description || err?.error?.reason || 'Payment failed. Please try again.';
+                        setRemainingFlowError(desc);
+                        setRemainingFlowActive(false);
+                        resolve();
+                    });
+                }
+
                 rzp.open();
             } catch (e) {
                 setRemainingFlowError(e?.message || 'Failed to open payment gateway. Please try again.');
