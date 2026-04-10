@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Download, Eye, FileText, MapPin, DollarSign, Calendar, ShieldCheck } from 'lucide-react';
+import { Download, Eye, FileText, MapPin, DollarSign, Calendar, ShieldCheck } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { documents, documentCategories } from '../../../../data/managerEventDetailsData';
 
@@ -46,9 +46,6 @@ const DocumentsTab = ({ eventType, eventData }) => {
                             : 'Contracts, invoices, floor plans, and shared files'}
                     </p>
                 </div>
-                <button onClick={() => toast.success("Upload dialog opened!")} className="px-4 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-bold hover:bg-teal-700 shadow-lg shadow-teal-900/20 flex items-center gap-2">
-                    <Upload className="w-4 h-4" /> Upload File
-                </button>
             </div>
 
             {/* Category Filter */}

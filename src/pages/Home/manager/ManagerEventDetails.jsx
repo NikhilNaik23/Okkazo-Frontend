@@ -17,7 +17,7 @@ import {
 import { Badge } from '../../../components/Manager/EventDetails/ui';
 
 // Modal Components
-import { EditEventModal, AddGuestModal } from '../../../components/Manager/EventDetails/modals';
+import { EditEventModal } from '../../../components/Manager/EventDetails/modals';
 
 // Tab Components
 import {
@@ -142,7 +142,6 @@ const ManagerEventDetails = () => {
 
     // Modal States
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-    const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
 
     const [eventType, setEventType] = useState(null); // 'planning' | 'promote'
     const [rawEvent, setRawEvent] = useState(null);
@@ -161,6 +160,8 @@ const ManagerEventDetails = () => {
     const [promotionActionLoadingKey, setPromotionActionLoadingKey] = useState('');
     const [vendorPayoutMode, setVendorPayoutMode] = useState('DEMO');
     const [eventTransactions, setEventTransactions] = useState(null);
+    const [guestExportTrigger, setGuestExportTrigger] = useState(0);
+    const [guestNotifyTrigger, setGuestNotifyTrigger] = useState(0);
 
     // Scroll listener for sticky header
     useEffect(() => {
@@ -675,6 +676,13 @@ const ManagerEventDetails = () => {
         [user?.assignedRole]
     );
 
+    const canNotifyGuests = useMemo(() => {
+        const assignedManagerAuthId = String(assignedManager?.authId || '').trim();
+        const actorAuthId = String(currentUserAuthId || '').trim();
+        if (!assignedManagerAuthId || !actorAuthId) return false;
+        return assignedManagerAuthId === actorAuthId;
+    }, [assignedManager?.authId, currentUserAuthId]);
+
     const chatContactAuthIds = useMemo(() => {
         const ids = new Set();
 
@@ -831,6 +839,57 @@ const ManagerEventDetails = () => {
     const handlePrint = () => {
         toast("Preparing print view...", { icon: '🖨️' });
         setTimeout(() => window.print(), 1000);
+    };
+
+    const handleQuickSendAnnouncement = () => {
+        setActiveTab('guests');
+        setGuestNotifyTrigger((v) => v + 1);
+    };
+
+    const handleQuickDownloadAttendeeList = () => {
+        setActiveTab('guests');
+        setGuestExportTrigger((v) => v + 1);
+    };
+
+    const handleQuickContactVenue = () => {
+        if (eventType !== 'planning') return;
+
+        if (!canUseRestrictedManagerActions) {
+            toast.error('Vendor contacts are available only for assigned manager roles.');
+            return;
+        }
+
+        setActiveTab('vendors');
+        toast('Open accepted vendor cards to view venue/vendor details.', { icon: 'ℹ️' });
+    };
+
+    const handleQuickSendQuoteToClient = async () => {
+        if (eventType !== 'planning') return;
+
+        if (!canUseRestrictedManagerActions) {
+            toast.error('Sending quotation mail is available only for assigned manager roles.');
+            return;
+        }
+
+        try {
+            const res = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(id))}/quote/send-email`,
+                {
+                    method: 'POST',
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const json = await safeJson(res);
+            if (!res.ok || !json?.success) {
+                throw new Error(json?.message || 'Failed to send quotation email');
+            }
+
+            setActiveTab('vendors');
+            toast.success(json?.message || 'Quotation email sent to client.');
+        } catch (error) {
+            toast.error(error?.message || 'Failed to send quotation email');
+        }
     };
 
     const normalizedStatus = String(event?.status || '').trim().toUpperCase();
@@ -1388,7 +1447,6 @@ const ManagerEventDetails = () => {
                     onSave={handleSaveEdits}
                 />
             ) : null}
-            <AddGuestModal isOpen={isGuestModalOpen} onClose={() => setIsGuestModalOpen(false)} />
 
             {/* 1. Immersive Hero Section */}
             <div className="relative h-[240px] lg:h-[320px] bg-gray-900 overflow-hidden">
@@ -1566,6 +1624,11 @@ const ManagerEventDetails = () => {
                                     promotionActionLoadingKey={promotionActionLoadingKey}
                                     privateBilling={privateBilling}
                                     generatedRevenuePayout={generatedRevenuePayout}
+                                    onQuickSendAnnouncement={handleQuickSendAnnouncement}
+                                    onQuickDownloadAttendeeList={handleQuickDownloadAttendeeList}
+                                    onQuickContactVenue={handleQuickContactVenue}
+                                    onQuickSendQuoteToClient={handleQuickSendQuoteToClient}
+                                    enablePlanningVendorQuickActions={canUseRestrictedManagerActions}
                                 />
                             ) : (
                                 <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
@@ -1577,8 +1640,11 @@ const ManagerEventDetails = () => {
                         )}
                         {activeTab === 'guests' && (
                             <GuestsTab
-                                onAddClick={() => setIsGuestModalOpen(true)}
                                 onGuestCountChange={setGuestCount}
+                                canNotifyGuests={canNotifyGuests}
+                                eventTitle={event?.title || rawEvent?.eventTitle || 'Event'}
+                                triggerExportSignal={guestExportTrigger}
+                                triggerNotifySignal={guestNotifyTrigger}
                             />
                         )}
                         {activeTab === 'vendors' && eventType !== 'promote' && <VendorsTab />}

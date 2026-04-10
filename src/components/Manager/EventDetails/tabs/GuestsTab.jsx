@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useParams } from 'react-router-dom';
-import { Search, Filter, Plus, Download, Check, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Search, Filter, Download, Bell, Check, CheckCircle, AlertCircle, Loader2, X } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { Badge } from '../ui';
 import { fetchWithAuth } from '../../../../utils/apiHandler';
@@ -51,7 +51,46 @@ const getStatusBadgeConfig = (status) => {
     return { color: 'amber', icon: AlertCircle };
 };
 
-const GuestsTab = ({ onAddClick, onGuestCountChange }) => {
+const getFilenameFromContentDisposition = (headerValue, fallback = 'guest-list.csv') => {
+    const header = String(headerValue || '').trim();
+    if (!header) return fallback;
+
+    const utfMatch = header.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utfMatch?.[1]) {
+        try {
+            return decodeURIComponent(String(utfMatch[1]).trim());
+        } catch {
+            return String(utfMatch[1]).trim();
+        }
+    }
+
+    const basicMatch = header.match(/filename="?([^";]+)"?/i);
+    if (basicMatch?.[1]) {
+        return String(basicMatch[1]).trim();
+    }
+
+    return fallback;
+};
+
+const downloadBlob = ({ blob, filename }) => {
+    const safeFilename = String(filename || '').trim() || 'guest-list.csv';
+    const objectUrl = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = safeFilename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(objectUrl);
+};
+
+const GuestsTab = ({
+    onGuestCountChange,
+    canNotifyGuests = false,
+    eventTitle = 'Event',
+    triggerExportSignal = 0,
+    triggerNotifySignal = 0,
+}) => {
     const dispatch = useDispatch();
     const { id: eventId } = useParams();
 
@@ -62,6 +101,21 @@ const GuestsTab = ({ onAddClick, onGuestCountChange }) => {
     const [debouncedQuery, setDebouncedQuery] = useState('');
     const [page, setPage] = useState(1);
     const [pagination, setPagination] = useState({ total: 0, limit: 20, totalPages: 0 });
+    const [exporting, setExporting] = useState(false);
+    const [notifyModalOpen, setNotifyModalOpen] = useState(false);
+    const [notifySubmitting, setNotifySubmitting] = useState(false);
+    const [notifyForm, setNotifyForm] = useState({
+        title: `Update for ${String(eventTitle || '').trim() || 'your event'}`,
+        message: '',
+        actionUrl: '',
+    });
+
+    useEffect(() => {
+        setNotifyForm((prev) => ({
+            ...prev,
+            title: prev.title || `Update for ${String(eventTitle || '').trim() || 'your event'}`,
+        }));
+    }, [eventTitle]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -145,6 +199,133 @@ const GuestsTab = ({ onAddClick, onGuestCountChange }) => {
         return `Showing ${start}-${end} of ${total}`;
     }, [page, pagination.total, pagination.limit, guests.length]);
 
+    const handleExportGuests = async () => {
+        if (!eventId) {
+            toast.error('Event ID is missing');
+            return;
+        }
+
+        setExporting(true);
+        try {
+            const params = new URLSearchParams();
+            if (debouncedQuery) params.set('query', debouncedQuery);
+
+            const endpoint = `${API_BASE_URL}/api/events/tickets/events/${encodeURIComponent(String(eventId))}/guests/export${params.toString() ? `?${params.toString()}` : ''}`;
+
+            const res = await fetchWithAuth(
+                endpoint,
+                { method: 'GET' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            if (!res.ok) {
+                const json = await safeJson(res);
+                throw new Error(json?.message || 'Failed to export guest list');
+            }
+
+            const blob = await res.blob();
+            const fallback = `guest-list-${String(eventTitle || 'event').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'event'}.csv`;
+            const filename = getFilenameFromContentDisposition(res.headers.get('content-disposition'), fallback);
+
+            downloadBlob({ blob, filename });
+            toast.success('Guest list exported successfully');
+        } catch (error) {
+            toast.error(error?.message || 'Failed to export guest list');
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    const handleOpenNotifyModal = () => {
+        if (!canNotifyGuests) return;
+
+        setNotifyForm({
+            title: `Update for ${String(eventTitle || '').trim() || 'your event'}`,
+            message: '',
+            actionUrl: '',
+        });
+        setNotifyModalOpen(true);
+    };
+
+    const handleNotifyGuests = async (event) => {
+        event.preventDefault();
+
+        if (!eventId) {
+            toast.error('Event ID is missing');
+            return;
+        }
+
+        const title = String(notifyForm.title || '').trim();
+        const message = String(notifyForm.message || '').trim();
+        const actionUrl = String(notifyForm.actionUrl || '').trim();
+
+        if (!title || !message) {
+            toast.error('Title and message are required');
+            return;
+        }
+
+        setNotifySubmitting(true);
+        try {
+            const res = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/tickets/events/${encodeURIComponent(String(eventId))}/guests/notify`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        title,
+                        message,
+                        actionUrl: actionUrl || undefined,
+                    }),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const json = await safeJson(res);
+            if (!res.ok || !json?.success) {
+                throw new Error(json?.message || 'Failed to notify guests');
+            }
+
+            const delivered = Number(json?.data?.delivered || 0);
+            const failed = Number(json?.data?.failed || 0);
+            const targeted = Number(json?.data?.targetedGuests || 0);
+
+            if (targeted === 0) {
+                toast('No confirmed guests found for this event.', { icon: 'ℹ️' });
+            } else if (failed > 0) {
+                toast.success(`Notification sent to ${delivered} guests (${failed} failed).`);
+            } else {
+                toast.success(`Notification sent to ${delivered} guests.`);
+            }
+
+            setNotifyModalOpen(false);
+        } catch (error) {
+            toast.error(error?.message || 'Failed to notify guests');
+        } finally {
+            setNotifySubmitting(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!triggerExportSignal) return;
+        handleExportGuests();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [triggerExportSignal]);
+
+    useEffect(() => {
+        if (!triggerNotifySignal) return;
+
+        if (!canNotifyGuests) {
+            toast.error('Only assigned manager can notify guests for this event.');
+            return;
+        }
+
+        setNotifyForm({
+            title: `Update for ${String(eventTitle || '').trim() || 'your event'}`,
+            message: '',
+            actionUrl: '',
+        });
+        setNotifyModalOpen(true);
+    }, [triggerNotifySignal, canNotifyGuests, eventTitle]);
+
     return (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             {/* Toolbar */}
@@ -165,12 +346,22 @@ const GuestsTab = ({ onAddClick, onGuestCountChange }) => {
                     </button>
                 </div>
                 <div className="flex gap-2 w-full md:w-auto justify-end">
-                    <button onClick={() => toast.success("Exporting guest list to CSV...")} className="px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 flex items-center gap-2 shadow-sm">
-                        <Download className="w-4 h-4" /> Export
+                    <button
+                        onClick={handleExportGuests}
+                        disabled={exporting || loading}
+                        className="px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 flex items-center gap-2 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                        <Download className="w-4 h-4" /> {exporting ? 'Exporting...' : 'Export Excel'}
                     </button>
-                    <button onClick={onAddClick} className="px-4 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-bold hover:bg-teal-700 shadow-lg shadow-teal-900/20 flex items-center gap-2">
-                        <Plus className="w-4 h-4" /> Add Guest
-                    </button>
+                    {canNotifyGuests ? (
+                        <button
+                            onClick={handleOpenNotifyModal}
+                            disabled={notifySubmitting || loading}
+                            className="px-4 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-bold hover:bg-teal-700 shadow-lg shadow-teal-900/20 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                            <Bell className="w-4 h-4" /> Notify Guests
+                        </button>
+                    ) : null}
                 </div>
             </div>
 
@@ -229,7 +420,7 @@ const GuestsTab = ({ onAddClick, onGuestCountChange }) => {
                                 </td>
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center font-bold text-gray-600 text-xs border border-white shadow-sm">
+                                        <div className="w-10 h-10 rounded-full bg-linear-to-br from-gray-100 to-gray-200 flex items-center justify-center font-bold text-gray-600 text-xs border border-white shadow-sm">
                                             {getInitials(name)}
                                         </div>
                                         <div>
@@ -284,6 +475,83 @@ const GuestsTab = ({ onAddClick, onGuestCountChange }) => {
                     </button>
                 </div>
             </div>
+
+            {notifyModalOpen ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/40 backdrop-blur-sm">
+                    <div className="w-full max-w-lg rounded-2xl bg-white border border-gray-100 shadow-2xl">
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                            <h3 className="text-lg font-bold text-gray-900">Notify Guests</h3>
+                            <button
+                                type="button"
+                                onClick={() => setNotifyModalOpen(false)}
+                                className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                                disabled={notifySubmitting}
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleNotifyGuests} className="p-5 space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Title</label>
+                                <input
+                                    type="text"
+                                    value={notifyForm.title}
+                                    onChange={(e) => setNotifyForm((prev) => ({ ...prev, title: e.target.value }))}
+                                    placeholder="Enter notification title"
+                                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                                    maxLength={120}
+                                    disabled={notifySubmitting}
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Message</label>
+                                <textarea
+                                    value={notifyForm.message}
+                                    onChange={(e) => setNotifyForm((prev) => ({ ...prev, message: e.target.value }))}
+                                    placeholder="Write the message guests should receive"
+                                    className="w-full min-h-28 px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 resize-y"
+                                    maxLength={1200}
+                                    disabled={notifySubmitting}
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Action URL (optional)</label>
+                                <input
+                                    type="url"
+                                    value={notifyForm.actionUrl}
+                                    onChange={(e) => setNotifyForm((prev) => ({ ...prev, actionUrl: e.target.value }))}
+                                    placeholder="https://..."
+                                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500"
+                                    disabled={notifySubmitting}
+                                />
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setNotifyModalOpen(false)}
+                                    className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50"
+                                    disabled={notifySubmitting}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={notifySubmitting}
+                                    className="px-4 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-bold hover:bg-teal-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    {notifySubmitting ? 'Sending...' : 'Send Notification'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            ) : null}
         </div>
     );
 };
