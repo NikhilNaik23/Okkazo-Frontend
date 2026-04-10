@@ -204,7 +204,7 @@ const EventDetails = () => {
         const fallbackCategories = Array.isArray(event?.categories) ? event.categories : [];
 
         if (!activeDayAllocation || !Array.isArray(activeDayAllocation?.tierBreakdown) || activeDayAllocation.tierBreakdown.length === 0) {
-            return fallbackCategories.map((cat) => ({ ...cat, available: null }));
+            return fallbackCategories.map((cat) => ({ ...cat }));
         }
 
         const priceByTierName = new Map(
@@ -236,6 +236,7 @@ const EventDetails = () => {
         for (const cat of categoriesForSelection) {
             const key = String(cat?.name || '').trim();
             if (!key) continue;
+            if (cat?.available == null || cat?.available === '') continue;
             const availableRaw = Number(cat?.available);
             if (Number.isFinite(availableRaw) && availableRaw >= 0) {
                 out.set(key, Math.floor(availableRaw));

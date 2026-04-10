@@ -100,9 +100,15 @@ const TicketSelector = ({
                     <div className="space-y-3">
                         {renderedCategories.map((cat) => {
                             const qty = ticketSelection[cat.name] || 0;
-                            const maxAvailable = Number.isFinite(Number(cat?.available))
-                                ? Number(cat.available)
-                                : Number(categoryAvailabilityByName?.get?.(cat.name));
+                            const catAvailableRaw = cat?.available;
+                            const catAvailableNumber =
+                                catAvailableRaw == null || catAvailableRaw === ''
+                                    ? Number.NaN
+                                    : Number(catAvailableRaw);
+                            const fallbackAvailable = categoryAvailabilityByName?.get?.(cat.name);
+                            const maxAvailable = Number.isFinite(catAvailableNumber)
+                                ? catAvailableNumber
+                                : (Number.isFinite(fallbackAvailable) ? fallbackAvailable : Number.NaN);
                             const reachedLimit = Number.isFinite(maxAvailable) && maxAvailable >= 0 && qty >= maxAvailable;
                             return (
                                 <div

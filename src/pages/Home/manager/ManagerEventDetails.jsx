@@ -155,6 +155,7 @@ const ManagerEventDetails = () => {
     const [loadError, setLoadError] = useState('');
     const [unreadChatCount, setUnreadChatCount] = useState(0);
     const [guestCount, setGuestCount] = useState(null);
+    const [todoCount, setTodoCount] = useState(null);
     const [markingComplete, setMarkingComplete] = useState(false);
     const [payingGeneratedRevenue, setPayingGeneratedRevenue] = useState(false);
     const [promotionActionLoadingKey, setPromotionActionLoadingKey] = useState('');
@@ -223,6 +224,10 @@ const ManagerEventDetails = () => {
 
     useEffect(() => {
         setGuestCount(null);
+    }, [id]);
+
+    useEffect(() => {
+        setTodoCount(null);
     }, [id]);
 
     useEffect(() => {
@@ -789,6 +794,8 @@ const ManagerEventDetails = () => {
                     ? (guestCount ?? tab.count)
                 : tab.id === 'chat'
                     ? unreadChatCount
+                : tab.id === 'todo'
+                    ? (todoCount ?? tab.count)
                 : tab.id === 'documents' && eventType === 'promote'
                     ? promoteProofCount
                     : tab.count,
@@ -1584,7 +1591,7 @@ const ManagerEventDetails = () => {
                                 onUnreadCountChange={setUnreadChatCount}
                             />
                         )}
-                        {activeTab === 'todo' && <ToDoTab />}
+                        {activeTab === 'todo' && <ToDoTab eventId={id} onTaskCountChange={setTodoCount} />}
                         {activeTab === 'financials' && event && (
                             <FinancialsTab
                                 event={event}
