@@ -135,6 +135,21 @@ const EventDetails = () => {
         ? String(selected.managerProfile.authId).trim()
         : String(selected?.assignedManagerId || '').trim();
 
+    const chatParticipantAuthIds = React.useMemo(() => {
+        const ids = new Set();
+
+        const managerId = String(managerAuthId || '').trim();
+        if (managerId) ids.add(managerId);
+
+        const coordinatorProfiles = Array.isArray(selected?.coreStaffProfiles) ? selected.coreStaffProfiles : [];
+        for (const profile of coordinatorProfiles) {
+            const authId = String(profile?.authId || '').trim();
+            if (authId) ids.add(authId);
+        }
+
+        return Array.from(ids);
+    }, [managerAuthId, selected?.coreStaffProfiles]);
+
     React.useEffect(() => {
         if (id) {
             dispatch(fetchVendorEventRequestDetails({ eventId: id }));
@@ -180,9 +195,11 @@ const EventDetails = () => {
     React.useEffect(() => {
         const eventId = String(id || '').trim();
         const viewerAuthId = String(currentUserAuthId || '').trim();
-        const managerId = String(managerAuthId || '').trim();
+        const participantIds = Array.isArray(chatParticipantAuthIds)
+            ? chatParticipantAuthIds.map((value) => String(value || '').trim()).filter(Boolean)
+            : [];
 
-        if (!eventId || !viewerAuthId || !managerId || selected?.summary?.summaryStatus !== 'ACCEPTED') {
+        if (!eventId || !viewerAuthId || participantIds.length === 0 || selected?.summary?.summaryStatus !== 'ACCEPTED') {
             setVendorChatUnreadCount(0);
             return;
         }
@@ -196,36 +213,40 @@ const EventDetails = () => {
 
         const loadUnread = async () => {
             try {
-                const convo = await ensureEventDmConversation({
-                    eventId,
-                    otherAuthId: managerId,
-                    dispatch,
-                    refreshAction: refreshAccessToken,
-                });
+                const unreadCounts = await Promise.all(participantIds.map(async (participantAuthId) => {
+                    try {
+                        const convo = await ensureEventDmConversation({
+                            eventId,
+                            otherAuthId: participantAuthId,
+                            dispatch,
+                            refreshAction: refreshAccessToken,
+                        });
 
-                const convoId = String(convo?._id || convo?.id || '').trim();
-                if (!convoId) {
-                    if (!cancelled) setVendorChatUnreadCount(0);
-                    return;
-                }
+                        const convoId = String(convo?._id || convo?.id || '').trim();
+                        if (!convoId) return 0;
 
-                const msgs = await fetchConversationMessages({
-                    conversationId: convoId,
-                    limit: 200,
-                    dispatch,
-                    refreshAction: refreshAccessToken,
-                });
+                        const msgs = await fetchConversationMessages({
+                            conversationId: convoId,
+                            limit: 200,
+                            dispatch,
+                            refreshAction: refreshAccessToken,
+                        });
+
+                        return (Array.isArray(msgs) ? msgs : []).filter((m) => {
+                            const sender = String(m?.senderAuthId || m?.senderId || '').trim();
+                            if (!sender || sender === viewerAuthId) return false;
+                            if (sender !== participantAuthId) return false;
+                            const readBy = Array.isArray(m?.readBy) ? m.readBy.map((v) => String(v || '').trim()) : [];
+                            return !readBy.includes(viewerAuthId);
+                        }).length;
+                    } catch {
+                        return 0;
+                    }
+                }));
 
                 if (cancelled) return;
 
-                const unread = (Array.isArray(msgs) ? msgs : []).filter((m) => {
-                    const sender = String(m?.senderAuthId || m?.senderId || '').trim();
-                    if (!sender || sender === viewerAuthId) return false;
-                    if (sender !== managerId) return false;
-                    const readBy = Array.isArray(m?.readBy) ? m.readBy.map((v) => String(v || '').trim()) : [];
-                    return !readBy.includes(viewerAuthId);
-                }).length;
-
+                const unread = unreadCounts.reduce((sum, value) => sum + Number(value || 0), 0);
                 setVendorChatUnreadCount(unread);
             } catch {
                 if (!cancelled) setVendorChatUnreadCount(0);
@@ -239,7 +260,7 @@ const EventDetails = () => {
             cancelled = true;
             clearInterval(timer);
         };
-    }, [id, currentUserAuthId, managerAuthId, activeSubTab, dispatch, selected?.summary?.summaryStatus]);
+    }, [id, currentUserAuthId, chatParticipantAuthIds, activeSubTab, dispatch, selected?.summary?.summaryStatus]);
 
     const handleShareInvoice = () => {
         setActiveChannel("internal");

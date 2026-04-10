@@ -138,6 +138,7 @@ const EventCommandCenter = () => {
         const isRejected = adminDecisionStatus === 'REJECTED';
         const isManagerUnassigned = eventStatus === 'MANAGER_UNASSIGNED';
         const isInReview = eventStatus === 'IN_REVIEW';
+        const isConfirmed = eventStatus === 'CONFIRMED';
         const isLive = eventStatus === 'LIVE';
         const isCompleted = eventStatus === 'COMPLETED' || eventStatus === 'COMPLETE';
         const isFinal = isLive || isCompleted;
@@ -148,6 +149,8 @@ const EventCommandCenter = () => {
                 ? 'Application Received'
                 : isInReview
                     ? 'Application in Review'
+                    : isConfirmed
+                        ? 'Confirmed'
                     : isLive
                         ? 'Live'
                         : isCompleted
@@ -168,13 +171,13 @@ const EventCommandCenter = () => {
                     label: 'Manager Assigned',
                     status: isRejected
                         ? (promote?.managerAssignment?.assignedAt ? 'completed' : 'pending')
-                        : (isInReview || isFinal ? 'completed' : 'pending'),
+                        : (isInReview || isConfirmed || isFinal ? 'completed' : 'pending'),
                     date: toDateLabel(promote?.managerAssignment?.assignedAt),
                 },
                 {
                     step: 3,
-                    label: isRejected ? 'Application Rejected' : 'Application In Review',
-                    status: isRejected ? 'rejected' : isInReview ? 'in_progress' : isFinal ? 'completed' : 'pending',
+                    label: isRejected ? 'Application Rejected' : isConfirmed ? 'Application Approved' : 'Application In Review',
+                    status: isRejected ? 'rejected' : isInReview ? 'in_progress' : (isConfirmed || isFinal ? 'completed' : 'pending'),
                     date: isRejected
                         ? toDateLabel(promote?.adminDecision?.decidedAt)
                         : isInReview

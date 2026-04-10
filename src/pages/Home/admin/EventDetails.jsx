@@ -99,6 +99,8 @@ const deriveUiStatus = (request, requestType) => {
 
     const decision = request?.adminDecision?.status;
     if (decision === "REJECTED") return "REJECTED";
+    const promoteStatus = String(request?.eventStatus || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (['CONFIRMED', 'LIVE', 'COMPLETE', 'COMPLETED', 'CLOSED'].includes(promoteStatus)) return 'VERIFIED';
     if (request?.assignedManagerId) return "VERIFIED";
     if (decision === "APPROVED") {
         const decidedAt = request?.adminDecision?.decidedAt;

@@ -72,6 +72,7 @@ const VendorEventChatTab = () => {
     }, [selected]);
 
     const managerName = selected?.managerProfile?.name || selected?.managerProfile?.fullName || 'Event Manager';
+    const managerAssignedRole = String(selected?.managerProfile?.assignedRole || '').trim();
 
     const [activeChannel, setActiveChannel] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -115,17 +116,36 @@ const VendorEventChatTab = () => {
     };
 
     const contacts = useMemo(() => {
-        if (!managerAuthId) return [];
-        return [
-            {
+        const map = new Map();
+
+        if (managerAuthId) {
+            map.set(managerAuthId, {
                 id: managerAuthId,
                 name: managerName,
-                role: 'Manager',
+                role: managerAssignedRole || 'Event Manager',
+                type: 'manager',
                 online: false,
                 lastSeen: 'online',
-            },
-        ];
-    }, [managerAuthId, managerName]);
+            });
+        }
+
+        const teamProfiles = Array.isArray(selected?.coreStaffProfiles) ? selected.coreStaffProfiles : [];
+        for (const profile of teamProfiles) {
+            const authId = String(profile?.authId || '').trim();
+            if (!authId || authId === managerAuthId || authId === currentUserId) continue;
+
+            map.set(authId, {
+                id: authId,
+                name: String(profile?.name || profile?.fullName || profile?.email || 'Coordinator').trim(),
+                role: String(profile?.assignedRole || profile?.departmentRole || 'Coordinator').trim() || 'Coordinator',
+                type: 'coordinator',
+                online: false,
+                lastSeen: 'online',
+            });
+        }
+
+        return Array.from(map.values());
+    }, [currentUserId, managerAssignedRole, managerAuthId, managerName, selected?.coreStaffProfiles]);
 
     const filteredContacts = useMemo(() => {
         const q = String(searchTerm || '').trim().toLowerCase();
@@ -133,8 +153,26 @@ const VendorEventChatTab = () => {
         return contacts.filter((c) => String(c?.name || '').toLowerCase().includes(q));
     }, [contacts, searchTerm]);
 
+    const managerContacts = useMemo(
+        () => filteredContacts.filter((contact) => String(contact?.type || '').trim() === 'manager'),
+        [filteredContacts]
+    );
+
+    const coordinatorContacts = useMemo(
+        () => filteredContacts.filter((contact) => String(contact?.type || '').trim() === 'coordinator'),
+        [filteredContacts]
+    );
+
     useEffect(() => {
-        if (!activeChannel && contacts.length) setActiveChannel(contacts[0].id);
+        if (!contacts.length) {
+            setActiveChannel(null);
+            return;
+        }
+
+        const hasActive = contacts.some((contact) => String(contact?.id || '').trim() === String(activeChannel || '').trim());
+        if (!hasActive) {
+            setActiveChannel(contacts[0].id);
+        }
     }, [activeChannel, contacts]);
 
     useEffect(() => {
@@ -593,10 +631,10 @@ const VendorEventChatTab = () => {
 
     const currentContact = contacts.find((c) => c.id === activeChannel) || contacts[0] || null;
 
-    if (!managerAuthId) {
+    if (contacts.length === 0) {
         return (
             <div className="p-8 bg-white rounded-3xl border border-[#708aa0]/10 shadow-sm">
-                <div className="text-sm font-bold text-[#708aa0]">Manager is not assigned yet for this event.</div>
+                <div className="text-sm font-bold text-[#708aa0]">No manager or coordinators are assigned to this event yet.</div>
             </div>
         );
     }
@@ -618,33 +656,73 @@ const VendorEventChatTab = () => {
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
-                    <div className="px-3 mb-2 flex items-center justify-between">
-                        <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Manager</h4>
-                        <Users size={12} className="text-gray-300" />
-                    </div>
-                    <div className="space-y-1">
-                        {filteredContacts.map((contact) => {
-                            const isActive = activeChannel === contact.id;
-                            return (
-                                <button
-                                    key={contact.id}
-                                    onClick={() => setActiveChannel(contact.id)}
-                                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${isActive ? 'bg-[#e7f7f5] border-l-4 border-teal-500 shadow-sm' : 'hover:bg-gray-50 border-l-4 border-transparent'}`}
-                                >
-                                    <div
-                                        className={`relative w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-white text-teal-600' : 'bg-gray-100 text-gray-500'}`}
-                                    >
-                                        <span className="text-xs font-bold">{String(contact.name || 'M').substring(0, 2).toUpperCase()}</span>
-                                        <div className={`absolute bottom-0 right-0 w-2.5 h-2.5 border-2 border-white rounded-full ${presenceByAuthId?.[String(contact.id)] ? 'bg-green-500' : 'bg-gray-300'}`} />
-                                    </div>
-                                    <div className="flex-1 text-left min-w-0">
-                                        <p className={`text-sm font-bold truncate ${isActive ? 'text-teal-900' : 'text-gray-700'}`}>{contact.name}</p>
-                                        <p className={`text-xs truncate ${isActive ? 'text-teal-600 font-medium' : 'text-gray-400'}`}>{contact.role}</p>
-                                    </div>
-                                </button>
-                            );
-                        })}
-                    </div>
+                    {managerContacts.length > 0 && (
+                        <>
+                            <div className="px-3 mb-2 flex items-center justify-between">
+                                <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Manager</h4>
+                                <Users size={12} className="text-gray-300" />
+                            </div>
+                            <div className="space-y-1 mb-4">
+                                {managerContacts.map((contact) => {
+                                    const isActive = activeChannel === contact.id;
+                                    return (
+                                        <button
+                                            key={contact.id}
+                                            onClick={() => setActiveChannel(contact.id)}
+                                            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${isActive ? 'bg-[#e7f7f5] border-l-4 border-teal-500 shadow-sm' : 'hover:bg-gray-50 border-l-4 border-transparent'}`}
+                                        >
+                                            <div
+                                                className={`relative w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-white text-teal-600' : 'bg-gray-100 text-gray-500'}`}
+                                            >
+                                                <span className="text-xs font-bold">{String(contact.name || 'M').substring(0, 2).toUpperCase()}</span>
+                                                <div className={`absolute bottom-0 right-0 w-2.5 h-2.5 border-2 border-white rounded-full ${presenceByAuthId?.[String(contact.id)] ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                            </div>
+                                            <div className="flex-1 text-left min-w-0">
+                                                <p className={`text-sm font-bold truncate ${isActive ? 'text-teal-900' : 'text-gray-700'}`}>{contact.name}</p>
+                                                <p className={`text-xs truncate ${isActive ? 'text-teal-600 font-medium' : 'text-gray-400'}`}>{contact.role}</p>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </>
+                    )}
+
+                    {coordinatorContacts.length > 0 && (
+                        <>
+                            <div className="px-3 mb-2 flex items-center justify-between">
+                                <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Assigned Team Member &amp; Coordinator</h4>
+                                <Users size={12} className="text-gray-300" />
+                            </div>
+                            <div className="space-y-1">
+                                {coordinatorContacts.map((contact) => {
+                                    const isActive = activeChannel === contact.id;
+                                    return (
+                                        <button
+                                            key={contact.id}
+                                            onClick={() => setActiveChannel(contact.id)}
+                                            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${isActive ? 'bg-[#e7f7f5] border-l-4 border-teal-500 shadow-sm' : 'hover:bg-gray-50 border-l-4 border-transparent'}`}
+                                        >
+                                            <div
+                                                className={`relative w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-white text-teal-600' : 'bg-gray-100 text-gray-500'}`}
+                                            >
+                                                <span className="text-xs font-bold">{String(contact.name || 'C').substring(0, 2).toUpperCase()}</span>
+                                                <div className={`absolute bottom-0 right-0 w-2.5 h-2.5 border-2 border-white rounded-full ${presenceByAuthId?.[String(contact.id)] ? 'bg-green-500' : 'bg-gray-300'}`} />
+                                            </div>
+                                            <div className="flex-1 text-left min-w-0">
+                                                <p className={`text-sm font-bold truncate ${isActive ? 'text-teal-900' : 'text-gray-700'}`}>{contact.name}</p>
+                                                <p className={`text-xs truncate ${isActive ? 'text-teal-600 font-medium' : 'text-gray-400'}`}>{contact.role}</p>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </>
+                    )}
+
+                    {managerContacts.length === 0 && coordinatorContacts.length === 0 && (
+                        <div className="px-3 py-4 text-xs font-semibold text-gray-400">No chat contacts match your search.</div>
+                    )}
                 </div>
             </div>
 
