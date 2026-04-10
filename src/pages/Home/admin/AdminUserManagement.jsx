@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { 
     Users, Activity, Store, ShieldCheck, Search, ChevronDown, 
-    MoreVertical, Mail, UserRound, RefreshCw, KeyRound, Ban
+    MoreVertical, BellRing, Ban
 } from 'lucide-react';
 import { fetchWithNgrok } from '../../../utils/apiHandler';
+import toast from 'react-hot-toast';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 const roleOptions = ['ALL', 'USER', 'VENDOR', 'MANAGER', 'ADMIN'];
+const notificationGroupOptions = ['ALL', 'USER', 'VENDOR', 'MANAGER', 'ADMIN'];
 
 const formatDate = (value) => {
     if (!value) return 'N/A';
@@ -63,6 +65,18 @@ const AdminUserManagement = () => {
     const [openDropdownId, setOpenDropdownId] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
     const [searchQuery, setSearchQuery] = useState("");
+    const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+    const [selectedUserForNotification, setSelectedUserForNotification] = useState(null);
+    const [notificationTargetMode, setNotificationTargetMode] = useState('USER');
+    const [notificationForm, setNotificationForm] = useState({
+        title: '',
+        message: '',
+        type: 'SYSTEM_ANNOUNCEMENT',
+        category: 'SYSTEM',
+        groupRole: 'ALL',
+    });
+    const [isSendingNotification, setIsSendingNotification] = useState(false);
+    const [isUpdatingBlockState, setIsUpdatingBlockState] = useState(false);
 
     const [roleFilter, setRoleFilter] = useState('ALL');
     const [isRoleOpen, setIsRoleOpen] = useState(false);
@@ -82,6 +96,173 @@ const AdminUserManagement = () => {
         totalUsers: 0,
         limit: usersPerPage,
     });
+
+    const closeNotificationModal = () => {
+        setIsNotificationModalOpen(false);
+        setSelectedUserForNotification(null);
+        setNotificationForm({
+            title: '',
+            message: '',
+            type: 'SYSTEM_ANNOUNCEMENT',
+            category: 'SYSTEM',
+            groupRole: 'ALL',
+        });
+        setNotificationTargetMode('USER');
+    };
+
+    const handleOpenNotificationModal = (user) => {
+        setNotificationTargetMode('USER');
+        setSelectedUserForNotification(user);
+        setNotificationForm((prev) => ({
+            ...prev,
+            title: prev.title || 'Important account update',
+        }));
+        setIsNotificationModalOpen(true);
+        setOpenDropdownId(null);
+    };
+
+    const handleOpenGroupNotificationModal = () => {
+        const defaultGroupRole = roleFilter && notificationGroupOptions.includes(roleFilter) ? roleFilter : 'ALL';
+        setNotificationTargetMode('GROUP');
+        setSelectedUserForNotification(null);
+        setNotificationForm((prev) => ({
+            ...prev,
+            title: prev.title || 'Platform announcement',
+            groupRole: defaultGroupRole,
+        }));
+        setIsNotificationModalOpen(true);
+        setIsRoleOpen(false);
+        setOpenDropdownId(null);
+    };
+
+    const handleSendNotification = async () => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) throw new Error('No access token found');
+
+            const title = String(notificationForm.title || '').trim();
+            const message = String(notificationForm.message || '').trim();
+
+            if (!title || !message) {
+                throw new Error('Please provide both title and message');
+            }
+
+            setIsSendingNotification(true);
+
+            let response;
+            if (notificationTargetMode === 'GROUP') {
+                const selectedGroupRole = String(notificationForm.groupRole || 'ALL').toUpperCase();
+                response = await fetchWithNgrok(`${API_BASE_URL}/api/notifications/system/broadcast`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${accessToken}`,
+                    },
+                    body: JSON.stringify({
+                        title,
+                        message,
+                        type: notificationForm.type,
+                        category: notificationForm.category,
+                        roles: [selectedGroupRole],
+                        metadata: {
+                            source: 'ADMIN_USER_MANAGEMENT',
+                            target: 'GROUP',
+                        },
+                    }),
+                });
+            } else {
+                const recipientAuthId = String(selectedUserForNotification?.authId || '').trim();
+                const recipientRole = String(selectedUserForNotification?.role || 'USER').toUpperCase();
+
+                if (!recipientAuthId) {
+                    throw new Error('Selected user does not have a valid auth ID');
+                }
+
+                response = await fetchWithNgrok(`${API_BASE_URL}/api/notifications/system/send-to-user`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${accessToken}`,
+                    },
+                    body: JSON.stringify({
+                        recipientAuthId,
+                        recipientRole,
+                        title,
+                        message,
+                        type: notificationForm.type,
+                        category: notificationForm.category,
+                        metadata: {
+                            source: 'ADMIN_USER_MANAGEMENT',
+                            target: 'USER',
+                        },
+                    }),
+                });
+            }
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data?.message || 'Failed to send notification');
+            }
+
+            if (notificationTargetMode === 'GROUP') {
+                const targetedUsers = Number(data?.data?.targetedUsers || 0);
+                toast.success(`${notificationForm.groupRole} notification sent to ${targetedUsers} users`);
+            } else {
+                toast.success('Notification sent successfully');
+            }
+            closeNotificationModal();
+        } catch (notificationError) {
+            toast.error(notificationError?.message || 'Failed to send notification');
+        } finally {
+            setIsSendingNotification(false);
+        }
+    };
+
+    const handleToggleBlockAccount = async (user) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) throw new Error('No access token found');
+
+            const authId = String(user?.authId || '').trim();
+            if (!authId) throw new Error('User auth ID is missing');
+
+            const accountStatus = getAccountStatus(user);
+            const shouldUnblock = accountStatus === 'Blocked';
+            const action = shouldUnblock ? 'unblock' : 'block';
+            const params = new URLSearchParams({ authId });
+
+            setIsUpdatingBlockState(true);
+
+            const response = await fetchWithNgrok(`${API_BASE_URL}/auth/internal/team-access/${action}?${params.toString()}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${accessToken}`,
+                },
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data?.message || `Failed to ${action} account`);
+            }
+
+            setUsers((prevUsers) => prevUsers.map((item) => {
+                if (String(item?.authId || '') !== authId) return item;
+                return {
+                    ...item,
+                    accountStatus: shouldUnblock ? 'ACTIVE' : 'BLOCKED',
+                    isActive: shouldUnblock,
+                };
+            }));
+
+            toast.success(shouldUnblock ? 'Account unblocked successfully' : 'Account blocked successfully');
+            setOpenDropdownId(null);
+        } catch (blockError) {
+            toast.error(blockError?.message || 'Failed to update account status');
+        } finally {
+            setIsUpdatingBlockState(false);
+        }
+    };
 
     useEffect(() => {
         const controller = new AbortController();
@@ -161,7 +342,7 @@ const AdminUserManagement = () => {
 
     return (
         <div className="flex-1 overflow-y-auto p-8 bg-[#f8f9fa] h-full">
-            <div className="max-w-[1400px] mx-auto space-y-8">
+            <div className="max-w-350 mx-auto space-y-8">
                 {/* Header Title & Subtitle Section */}
                 <section className="mb-10">
                     <h2 className="text-3xl font-extrabold text-[#00182d] tracking-tight">Platform Users</h2>
@@ -252,6 +433,14 @@ const AdminUserManagement = () => {
                         </div>
                         
                         <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handleOpenGroupNotificationModal}
+                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-[#0b2d49] text-white text-sm font-semibold hover:brightness-110"
+                            >
+                                <BellRing size={16} />
+                                Notify Group
+                            </button>
                             <label className="text-sm font-medium text-[#6b7280]">Role:</label>
                             <div className="relative flex items-center">
                                 <button 
@@ -286,7 +475,7 @@ const AdminUserManagement = () => {
                     </div>
 
                     {/* Table Shell */}
-                    <div className="overflow-visible relative min-h-[400px]">
+                    <div className="overflow-visible relative min-h-100">
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-[#f3f4f5]/50 text-[#43474d] text-[11px] font-bold uppercase tracking-widest border-b border-[#c3c7ce]/10">
@@ -359,49 +548,24 @@ const AdminUserManagement = () => {
                                                 {openDropdownId === userKey && (
                                                     <>
                                                         <div className="fixed inset-0 z-50 cursor-default" onClick={() => setOpenDropdownId(null)}></div>
-                                                        <div className="absolute right-8 top-12 w-64 bg-white rounded-xl shadow-[0_10px_40px_rgba(0,24,45,0.15)] border border-[#c3c7ce]/20 z-[60] py-2 animate-in fade-in zoom-in duration-200 origin-top-right">
+                                                        <div className="absolute right-8 top-12 w-64 bg-white rounded-xl shadow-[0_10px_40px_rgba(0,24,45,0.15)] border border-[#c3c7ce]/20 z-60 py-2 animate-in fade-in zoom-in duration-200 origin-top-right">
                                                             <button 
                                                                 className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-[#f3f4f5] transition-colors"
-                                                                onClick={() => setOpenDropdownId(null)}
+                                                                onClick={() => handleOpenNotificationModal(user)}
                                                             >
-                                                                <Mail size={18} className="text-blue-500" />
-                                                                <span className="text-sm font-medium text-[#00182d]">Send Message</span>
+                                                                <BellRing size={18} className="text-blue-500" />
+                                                                <span className="text-sm font-medium text-[#00182d]">Send Notification</span>
                                                             </button>
-                                                            
-                                                            <button 
-                                                                className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-[#f3f4f5] transition-colors"
-                                                                onClick={() => setOpenDropdownId(null)}
-                                                            >
-                                                                <UserRound size={18} className="text-slate-500" />
-                                                                <span className="text-sm font-medium text-[#00182d]">View Full Profile</span>
-                                                            </button>
-                                                            
-                                                            <div className="h-px bg-[#c3c7ce]/10 my-1"></div>
-                                                            
-                                                            <button 
-                                                                className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-[#f3f4f5] transition-colors"
-                                                                onClick={() => setOpenDropdownId(null)}
-                                                            >
-                                                                <RefreshCw size={18} className="text-amber-500" />
-                                                                <span className="text-sm font-medium text-[#00182d]">Reset Rate Limit</span>
-                                                            </button>
-                                                            
-                                                            <button 
-                                                                className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-[#f3f4f5] transition-colors"
-                                                                onClick={() => setOpenDropdownId(null)}
-                                                            >
-                                                                <KeyRound size={18} className="text-purple-500" />
-                                                                <span className="text-sm font-medium text-[#00182d]">Force Password Reset</span>
-                                                            </button>
-                                                            
-                                                            <div className="h-px bg-[#c3c7ce]/10 my-1"></div>
-                                                            
+
                                                             <button 
                                                                 className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-red-50 transition-colors"
-                                                                onClick={() => setOpenDropdownId(null)}
+                                                                onClick={() => handleToggleBlockAccount(user)}
+                                                                disabled={isUpdatingBlockState}
                                                             >
                                                                 <Ban size={18} className="text-[#ba1a1a]" />
-                                                                <span className="text-sm font-bold text-[#ba1a1a]">Suspend Account</span>
+                                                                <span className="text-sm font-bold text-[#ba1a1a]">
+                                                                    {getAccountStatus(user) === 'Blocked' ? 'Unblock Account' : 'Block Account'}
+                                                                </span>
                                                             </button>
                                                         </div>
                                                     </>
@@ -471,6 +635,88 @@ const AdminUserManagement = () => {
                     </div>
                 </div>
             </div>
+
+            {isNotificationModalOpen && (
+                <div className="fixed inset-0 z-120 flex items-center justify-center p-4">
+                    <button
+                        type="button"
+                        className="absolute inset-0 bg-black/50"
+                        onClick={closeNotificationModal}
+                        aria-label="Close notification modal overlay"
+                    ></button>
+                    <div className="relative z-121 w-full max-w-lg rounded-2xl border border-[#dbe2ea] bg-white shadow-[0_24px_80px_rgba(0,24,45,0.28)]">
+                        <div className="px-6 py-5 border-b border-[#eef2f7]">
+                            <h3 className="text-xl font-extrabold text-[#00182d]">
+                                {notificationTargetMode === 'GROUP' ? 'Send Group Notification' : 'Send Notification'}
+                            </h3>
+                            <p className="text-sm text-[#5f6b78] mt-1">
+                                {notificationTargetMode === 'GROUP'
+                                    ? `To group: ${notificationForm.groupRole}`
+                                    : `To: ${selectedUserForNotification?.name || selectedUserForNotification?.username || selectedUserForNotification?.email || 'Selected user'}`}
+                            </p>
+                        </div>
+
+                        <div className="px-6 py-5 space-y-4">
+                            {notificationTargetMode === 'GROUP' && (
+                                <div>
+                                    <label className="block text-xs font-bold uppercase tracking-wider text-[#5f6b78] mb-2">Recipient Group</label>
+                                    <select
+                                        className="w-full rounded-lg border border-[#d1d5db] px-3 py-2 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#0b2d49]/20 bg-white"
+                                        value={notificationForm.groupRole}
+                                        onChange={(e) => setNotificationForm((prev) => ({ ...prev, groupRole: e.target.value }))}
+                                    >
+                                        {notificationGroupOptions.map((option) => (
+                                            <option key={option} value={option}>
+                                                {option}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-[#5f6b78] mb-2">Title</label>
+                                <input
+                                    type="text"
+                                    className="w-full rounded-lg border border-[#d1d5db] px-3 py-2 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#0b2d49]/20"
+                                    placeholder="Enter notification title"
+                                    value={notificationForm.title}
+                                    onChange={(e) => setNotificationForm((prev) => ({ ...prev, title: e.target.value }))}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-[#5f6b78] mb-2">Message</label>
+                                <textarea
+                                    className="w-full rounded-lg border border-[#d1d5db] px-3 py-2 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#0b2d49]/20 min-h-30"
+                                    placeholder="Write your notification message"
+                                    value={notificationForm.message}
+                                    onChange={(e) => setNotificationForm((prev) => ({ ...prev, message: e.target.value }))}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-4 border-t border-[#eef2f7] flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                className="px-4 py-2 rounded-lg border border-[#d1d5db] text-sm font-semibold text-[#334155] hover:bg-[#f8fafc]"
+                                onClick={closeNotificationModal}
+                                disabled={isSendingNotification}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="px-4 py-2 rounded-lg bg-[#0b2d49] text-sm font-semibold text-white hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
+                                onClick={handleSendNotification}
+                                disabled={isSendingNotification}
+                            >
+                                {isSendingNotification ? 'Sending...' : 'Send Notification'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

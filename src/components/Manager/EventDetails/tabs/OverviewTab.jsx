@@ -45,7 +45,22 @@ const formatInr = (value) => {
     }).format(n)}`;
 };
 
-const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, onMessageClient, onPromotionAction, promotionActionLoadingKey, privateBilling, generatedRevenuePayout }) => {
+const OverviewTab = ({
+    event,
+    onAddTeamMember,
+    onRemoveTeamMember,
+    getInitials,
+    onMessageClient,
+    onPromotionAction,
+    promotionActionLoadingKey,
+    privateBilling,
+    generatedRevenuePayout,
+    onQuickSendAnnouncement,
+    onQuickDownloadAttendeeList,
+    onQuickContactVenue,
+    onQuickSendQuoteToClient,
+    enablePlanningVendorQuickActions = true,
+}) => {
     const [addingTeam, setAddingTeam] = useState(false);
     const [pickedStaffKey, setPickedStaffKey] = useState('');
     const [savingTeam, setSavingTeam] = useState(false);
@@ -188,6 +203,8 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, 
             setSavingTeam(false);
         }
     };
+
+    const showPlanningVendorActions = String(event?.type || '').trim().toLowerCase() === 'planning' && enablePlanningVendorQuickActions;
 
     return (
         <div className="space-y-8">
@@ -477,22 +494,62 @@ const OverviewTab = ({ event, onAddTeamMember, onRemoveTeamMember, getInitials, 
                     <div className="bg-gradient-to-br from-teal-600 to-teal-800 rounded-2xl p-6 text-white shadow-lg shadow-teal-900/20">
                         <h3 className="font-bold text-lg mb-4">Quick Actions</h3>
                         <div className="space-y-2">
-                            <button onClick={() => toast.success("Announcement sent to 2,450 attendees!")} className="w-full flex items-center justify-between p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-colors border border-white/10 group">
+                            <button
+                                onClick={() => {
+                                    if (typeof onQuickSendAnnouncement === 'function') {
+                                        onQuickSendAnnouncement();
+                                        return;
+                                    }
+                                    toast.success('Open Guest List to send announcement.');
+                                }}
+                                className="w-full flex items-center justify-between p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-colors border border-white/10 group"
+                            >
                                 <span className="font-bold text-sm">Send Announcement</span>
                                 <Mail className="w-4 h-4 opacity-70 group-hover:opacity-100" />
                             </button>
-                            <button onClick={() => toast.success("Downloading Attendee CSV...")} className="w-full flex items-center justify-between p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-colors border border-white/10 group">
+                            <button
+                                onClick={() => {
+                                    if (typeof onQuickDownloadAttendeeList === 'function') {
+                                        onQuickDownloadAttendeeList();
+                                        return;
+                                    }
+                                    toast.success('Open Guest List to export attendee list.');
+                                }}
+                                className="w-full flex items-center justify-between p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-colors border border-white/10 group"
+                            >
                                 <span className="font-bold text-sm">Download Attendee List</span>
                                 <Download className="w-4 h-4 opacity-70 group-hover:opacity-100" />
                             </button>
-                            <button onClick={() => toast.success("Venue contacted via email.")} className="w-full flex items-center justify-between p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-colors border border-white/10 group">
-                                <span className="font-bold text-sm">Contact Venue</span>
-                                <Phone className="w-4 h-4 opacity-70 group-hover:opacity-100" />
-                            </button>
-                            <button onClick={() => toast.success("Quote sent to client!")} className="w-full flex items-center justify-between p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-colors border border-white/10 group">
-                                <span className="font-bold text-sm">Send Quote to Client</span>
-                                <Send className="w-4 h-4 opacity-70 group-hover:opacity-100" />
-                            </button>
+                            {showPlanningVendorActions ? (
+                                <button
+                                    onClick={() => {
+                                        if (typeof onQuickContactVenue === 'function') {
+                                            onQuickContactVenue();
+                                            return;
+                                        }
+                                        toast.success('Open Vendors tab to contact venue/vendor.');
+                                    }}
+                                    className="w-full flex items-center justify-between p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-colors border border-white/10 group"
+                                >
+                                    <span className="font-bold text-sm">Contact Venue</span>
+                                    <Phone className="w-4 h-4 opacity-70 group-hover:opacity-100" />
+                                </button>
+                            ) : null}
+                            {showPlanningVendorActions ? (
+                                <button
+                                    onClick={() => {
+                                        if (typeof onQuickSendQuoteToClient === 'function') {
+                                            onQuickSendQuoteToClient();
+                                            return;
+                                        }
+                                        toast.success('Open Vendors tab to send quotation mail.');
+                                    }}
+                                    className="w-full flex items-center justify-between p-3 bg-white/10 hover:bg-white/20 rounded-xl transition-colors border border-white/10 group"
+                                >
+                                    <span className="font-bold text-sm">Send Quote to Client</span>
+                                    <Send className="w-4 h-4 opacity-70 group-hover:opacity-100" />
+                                </button>
+                            ) : null}
                         </div>
                     </div>
 
