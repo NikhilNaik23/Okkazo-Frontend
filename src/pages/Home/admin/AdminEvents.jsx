@@ -4,18 +4,18 @@ import { useDispatch, useSelector } from "react-redux";
 import { fetchAdminEventDashboard, fetchManagerAutoAssignConfig, setManagerAutoAssignEnabled } from "../../../store/slices/adminSlice";
 
 import InternalEventCard from "../../../components/Global/cards/InternalEventCard";
-import { 
-  ChevronDown,
-  Filter,
-  Search,
-  CheckSquare,
-  Square,
-  FileText,
-  X,
-  ArrowRight,
-  Clock,
-  CheckCircle,
-  FileSearch
+import {
+    ChevronDown,
+    Filter,
+    Search,
+    CheckSquare,
+    Square,
+    FileText,
+    X,
+    ArrowRight,
+    Clock,
+    CheckCircle,
+    FileSearch
 } from "lucide-react";
 
 const formatEventDate = (iso) => {
@@ -193,7 +193,7 @@ const AdminEvents = () => {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
 
-    const { eventDashboard, managerAutoAssignConfig, managerAutoAssignLoading, managerAutoAssignUpdating } = useSelector((state) => state.admin);
+    const { eventDashboard, eventDashboardLoading, managerAutoAssignConfig, managerAutoAssignLoading, managerAutoAssignUpdating } = useSelector((state) => state.admin);
 
     useEffect(() => {
         dispatch(fetchAdminEventDashboard());
@@ -225,6 +225,7 @@ const AdminEvents = () => {
             .map(mapRequestToUiEvent),
         [eventDashboard]
     );
+    const showEventsSkeleton = eventDashboardLoading && !eventDashboard;
 
     const filteredEvents = useMemo(() => {
         const list = activeTab === 'Rejected' ? rejectedEvents : assignedEvents;
@@ -268,31 +269,31 @@ const AdminEvents = () => {
                         </h2>
                         <p className="text-[#5a5b44]">Review and verify events before they go live on the platform.</p>
                     </div>
-                        <div className="flex gap-2">
-                            <button 
-                                onClick={() => setShowApplicationsModal(true)}
-                                className="flex items-center gap-2 px-5 py-2.5 bg-[#0b2d49] text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md shadow-[#0b2d49]/10 hover:bg-[#d7a444] transition-all whitespace-nowrap active:scale-95"
-                            >
-                                <FileText size={14} />
-                                Applications
-                                {pendingApplications.length > 0 && (
-                                    <span className="ml-1 px-1.5 py-0.5 bg-[#d7a444] text-white rounded-md text-[8px]">{pendingApplications.length}</span>
-                                )}
-                            </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setShowApplicationsModal(true)}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-[#0b2d49] text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md shadow-[#0b2d49]/10 hover:bg-[#d7a444] transition-all whitespace-nowrap active:scale-95"
+                        >
+                            <FileText size={14} />
+                            Applications
+                            {pendingApplications.length > 0 && (
+                                <span className="ml-1 px-1.5 py-0.5 bg-[#d7a444] text-white rounded-md text-[8px]">{pendingApplications.length}</span>
+                            )}
+                        </button>
 
-                            <button
-                                onClick={toggleAutoAssign}
-                                disabled={managerAutoAssignLoading || managerAutoAssignUpdating || autoAssignEnabled === null}
-                                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md transition-all whitespace-nowrap active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed
+                        <button
+                            onClick={toggleAutoAssign}
+                            disabled={managerAutoAssignLoading || managerAutoAssignUpdating || autoAssignEnabled === null}
+                            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md transition-all whitespace-nowrap active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed
                                 ${autoAssignEnabled ? 'bg-[#d7a444] text-white shadow-[#d7a444]/10 hover:bg-[#0b2d49]' : 'bg-[#0b2d49] text-white shadow-[#0b2d49]/10 hover:bg-[#d7a444]'}`}
-                            >
-                                <Clock size={14} />
-                                Auto Assign
-                                {autoAssignEnabled !== null && (
-                                    <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[8px] ${autoAssignEnabled ? 'bg-white/20 text-white' : 'bg-[#d7a444] text-white'}`}>{autoAssignEnabled ? 'ON' : 'OFF'}</span>
-                                )}
-                            </button>
-                        </div>
+                        >
+                            <Clock size={14} />
+                            Auto Assign
+                            {autoAssignEnabled !== null && (
+                                <span className={`ml-1 px-1.5 py-0.5 rounded-md text-[8px] ${autoAssignEnabled ? 'bg-white/20 text-white' : 'bg-[#d7a444] text-white'}`}>{autoAssignEnabled ? 'ON' : 'OFF'}</span>
+                            )}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Tabs & Search Bar */}
@@ -304,11 +305,10 @@ const AdminEvents = () => {
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab)}
-                                    className={`flex-1 md:flex-none px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 whitespace-nowrap ${
-                                        activeTab === tab 
-                                        ? "bg-white text-[#0b2d49] shadow-sm" 
-                                        : "text-[#5a5b44] hover:text-[#0b2d49] hover:bg-white/50"
-                                    }`}
+                                    className={`flex-1 md:flex-none px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 whitespace-nowrap ${activeTab === tab
+                                            ? "bg-white text-[#0b2d49] shadow-sm"
+                                            : "text-[#5a5b44] hover:text-[#0b2d49] hover:bg-white/50"
+                                        }`}
                                 >
                                     {tab}
                                 </button>
@@ -318,7 +318,7 @@ const AdminEvents = () => {
                         {/* Search */}
                         <div className="relative w-full md:w-100">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#708aa0]" size={20} />
-                            <input 
+                            <input
                                 type="text"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -332,7 +332,11 @@ const AdminEvents = () => {
                 {/* Grid Content */}
                 <>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {filteredEvents.length > 0 ? (
+                        {showEventsSkeleton ? (
+                            Array.from({ length: 8 }).map((_, index) => (
+                                <div key={`admin-event-skeleton-${index}`} className="h-[360px] rounded-3xl bg-white border border-[#e9eff1] animate-pulse" />
+                            ))
+                        ) : filteredEvents.length > 0 ? (
                             paginatedEvents.map((event) => (
                                 <InternalEventCard
                                     key={event.id}
@@ -349,19 +353,19 @@ const AdminEvents = () => {
                             ))
                         ) : (
                             <div className="col-span-full py-12 flex flex-col items-center justify-center text-[#708aa0] border-2 border-dashed border-[#e9eff1] rounded-3xl">
-                                 <Search size={48} className="mb-4 opacity-20" />
-                                 <p className="text-lg font-medium">No requests found matching your criteria</p>
-                                 <button 
-                                    onClick={() => {setSearchQuery(""); setActiveTab("Events");}}
+                                <Search size={48} className="mb-4 opacity-20" />
+                                <p className="text-lg font-medium">No requests found matching your criteria</p>
+                                <button
+                                    onClick={() => { setSearchQuery(""); setActiveTab("Events"); }}
                                     className="mt-4 text-[#d7a444] font-bold hover:underline"
-                                 >
+                                >
                                     Clear all filters
-                                 </button>
+                                </button>
                             </div>
                         )}
                     </div>
 
-                    {filteredEvents.length > 0 && (
+                    {!showEventsSkeleton && filteredEvents.length > 0 && (
                         <div className="mt-6 flex items-center justify-between bg-white border border-[#e9eff1] rounded-2xl px-4 py-3 shadow-sm">
                             <p className="text-xs font-bold text-[#708aa0] uppercase tracking-widest">
                                 Showing {((safePage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(safePage * ITEMS_PER_PAGE, filteredEvents.length)} of {filteredEvents.length}
@@ -393,7 +397,7 @@ const AdminEvents = () => {
             {/* Applications Modal */}
             {showApplicationsModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-                    <div 
+                    <div
                         className="absolute inset-0 bg-[#0b2d49]/40 backdrop-blur-md transition-opacity"
                         onClick={() => setShowApplicationsModal(false)}
                     />
@@ -409,7 +413,7 @@ const AdminEvents = () => {
                                     {pendingApplications.length} Request{pendingApplications.length !== 1 ? 's' : ''} awaiting review
                                 </p>
                             </div>
-                            <button 
+                            <button
                                 onClick={() => setShowApplicationsModal(false)}
                                 className="p-2 hover:bg-[#f8fafc] rounded-xl text-[#708aa0] hover:text-[#0b2d49] transition-all"
                             >
@@ -420,7 +424,7 @@ const AdminEvents = () => {
                         {/* Modal Content */}
                         <div className="flex-1 overflow-y-auto p-4 sm:p-8 custom-scrollbar space-y-4">
                             {pendingApplications.map((v) => (
-                                <div 
+                                <div
                                     key={v.id}
                                     className="group flex flex-col sm:flex-row sm:items-center justify-between p-5 bg-[#f8fafc] hover:bg-white rounded-3xl border border-transparent hover:border-[#e9eff1] transition-all hover:shadow-lg gap-4"
                                 >
@@ -438,15 +442,14 @@ const AdminEvents = () => {
                                                     <Clock size={10} /> {v.submitted}
                                                 </span>
                                                 <div className="w-1 h-1 bg-[#e9eff1] rounded-full"></div>
-                                                <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${
-                                                    v.status === 'URGENT' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
-                                                }`}>
+                                                <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${v.status === 'URGENT' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
+                                                    }`}>
                                                     {v.status}
                                                 </span>
                                             </div>
                                         </div>
                                     </div>
-                                    <button 
+                                    <button
                                         onClick={() => {
                                             setShowApplicationsModal(false);
                                             navigate(`${v.id}`);
@@ -469,7 +472,7 @@ const AdminEvents = () => {
 
                         {/* Modal Footer */}
                         <div className="px-8 py-5 bg-[#f8fafc] border-t border-[#e9eff1] flex justify-end">
-                            <button 
+                            <button
                                 onClick={() => setShowApplicationsModal(false)}
                                 className="px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-[#5a5b44] hover:text-[#0b2d49] transition-colors"
                             >

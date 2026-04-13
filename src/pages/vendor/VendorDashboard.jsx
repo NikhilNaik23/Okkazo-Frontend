@@ -370,6 +370,26 @@ const VendorDashboard = () => {
             });
     }, [todayDayKey, vendorRequests]);
 
+    const showSkeleton = isLoading || (Boolean(loadError) && ledgerRows.length === 0 && vendorRequests.length === 0);
+
+    if (showSkeleton) {
+        return (
+            <div className="animate-pulse space-y-8">
+                <div className="h-10 w-72 rounded-2xl bg-white/80" />
+                <div className="grid grid-cols-12 gap-8">
+                    <div className="col-span-12 grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div className="h-48 rounded-4xl bg-white/80 border border-[#7AB2B2]/15" />
+                        <div className="h-48 rounded-4xl bg-white/80 border border-[#7AB2B2]/15" />
+                        <div className="h-48 rounded-4xl bg-white/80 border border-[#7AB2B2]/15" />
+                    </div>
+                    <div className="col-span-12 lg:col-span-7 h-[420px] rounded-4xl bg-white/80 border border-[#7AB2B2]/15" />
+                    <div className="col-span-12 lg:col-span-5 h-[420px] rounded-4xl bg-white/80 border border-[#7AB2B2]/15" />
+                    <div className="col-span-12 h-[360px] rounded-4xl bg-white/80 border border-[#7AB2B2]/15" />
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h1 className="text-3xl font-black mb-10 tracking-tight">Dashboard Overview</h1>

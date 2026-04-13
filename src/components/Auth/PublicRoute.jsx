@@ -1,7 +1,8 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { selectIsAuthenticated, selectUserRole, selectVendorApplication } from '../../store/slices/authSlice';
+import { selectIsAuthenticated, selectUserRole, selectVendorApplication, selectUser } from '../../store/slices/authSlice';
+import { isUserProfileComplete } from '../../utils/profileCompletion';
 
 /**
  * PublicRoute - Redirects authenticated users away from public pages (login, register)
@@ -13,6 +14,7 @@ const PublicRoute = ({ children, restricted = false }) => {
     const location = useLocation();
     const isAuthenticated = useSelector(selectIsAuthenticated);
     const userRole = useSelector(selectUserRole);
+    const user = useSelector(selectUser);
     const vendorApplication = useSelector(selectVendorApplication);
 
     // If route is restricted and user is authenticated, redirect based on role
@@ -30,6 +32,9 @@ const PublicRoute = ({ children, restricted = false }) => {
         } else if (userRole === 'MANAGER') {
             return <Navigate to="/manager/dashboard" replace />;
         } else if (userRole === 'USER') {
+            if (user && !isUserProfileComplete(user)) {
+                return <Navigate to="/user/edit-profile" replace state={{ forceProfileCompletion: true }} />;
+            }
             return <Navigate to="/user/dashboard" replace />;
         } else if (userRole === 'VENDOR') {
             // For vendors, check their application status

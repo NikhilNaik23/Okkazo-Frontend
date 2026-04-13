@@ -14,7 +14,6 @@ import { planningWizardSteps } from "../../../data/planningWizardData";
 import ManifestPreview from "../../../components/Forms/EventWizard/ManifestPreview";
 import StepCategorySelection from "../../../components/Forms/EventWizard/StepCategorySelection";
 import StepPayment from "../../../components/Forms/EventWizard/StepPayment";
-import { myOrganizedEvents } from "../../../data/myEventsData";
 import StepTickets from "../../../components/Forms/PromoteEvent/Wizard/StepTickets";
 import StepPromote from "../../../components/Forms/PromoteEvent/Wizard/StepPromote";
 import { fetchPlanningByEventId } from "../../../store/slices/planningSlice";
@@ -287,16 +286,7 @@ const PlanningWizard = () => {
                         return;
                     }
 
-                    // 3) Fallback to old mock data
-                    const foundDummy = myOrganizedEvents.find(e => e.id === Number(eventId) || e.id === eventId);
-                    if (foundDummy && foundDummy.formData) {
-                        const dummyData = { ...foundDummy.formData, id: foundDummy.id };
-                        if (foundDummy.status === 'Immediate Action') dummyData.platformFeePaid = true;
-                        handleStepLogic(dummyData);
-                        return;
-                    }
-
-                    // 4) Fetch from backend (new)
+                    // 3) Fetch from backend (new)
                     const result = await dispatch(fetchPlanningByEventId(eventId));
                     if (result.meta?.requestStatus === 'fulfilled') {
                         const p = result.payload;
@@ -622,12 +612,18 @@ const PlanningWizard = () => {
     if (isRestoring) {
         return (
             <div className="flex flex-col flex-1 min-h-screen bg-surface">
-                <div className="flex-1 flex items-center justify-center px-6">
-                    <div className="flex flex-col items-center gap-4">
-                        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                        <p className="text-[10px] font-black tracking-[0.3em] uppercase text-primary/50">
-                            Loading your event…
-                        </p>
+                <div className="flex-1 px-6 py-24">
+                    <div className="max-w-7xl mx-auto space-y-8 animate-pulse">
+                        <div className="h-10 w-72 rounded-2xl bg-primary/10" />
+                        <div className="h-4 w-56 rounded bg-primary/10" />
+                        <div className="rounded-3xl border border-primary/10 bg-white p-8 space-y-6">
+                            <div className="h-12 w-full rounded-2xl bg-primary/10" />
+                            <div className="h-12 w-full rounded-2xl bg-primary/10" />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="h-40 rounded-2xl bg-primary/10" />
+                                <div className="h-40 rounded-2xl bg-primary/10" />
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

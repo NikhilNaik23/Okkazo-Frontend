@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { popularEvents, allEvents } from "../../../data/eventsData";
 import HeroSlider from "../../../components/User/Dashboard/HeroSlider";
 import EventRow from "../../../components/User/Dashboard/EventRow";
 import {
     fetchDashboardData,
+    selectDashboardErrors,
     selectDashboardInterestFields,
     selectDashboardIsLoading,
     selectDashboardMarketplaceEvents,
@@ -292,6 +292,7 @@ const UserDashboard = () => {
     const searchQuery = searchParams.get("search")?.toLowerCase() || "";
     const marketplaceEvents = useSelector(selectDashboardMarketplaceEvents);
     const dashboardInterestFields = useSelector(selectDashboardInterestFields);
+    const dashboardErrors = useSelector(selectDashboardErrors);
     const loading = useSelector(selectDashboardIsLoading);
 
     const [geoLocation, setGeoLocation] = useState(null);
@@ -326,7 +327,7 @@ const UserDashboard = () => {
         [dashboardInterestFields]
     );
 
-    const sourceEvents = liveEvents.length ? liveEvents : allEvents;
+    const sourceEvents = liveEvents;
 
     const filteredAllEvents = useMemo(() => {
         if (!searchQuery) return sourceEvents;
@@ -391,10 +392,12 @@ const UserDashboard = () => {
     const heroEvents = useMemo(() => {
         if (searchQuery) return [];
         if (topTenEvents.length) return topTenEvents.slice(0, 3);
-        return popularEvents;
+        return [];
     }, [searchQuery, topTenEvents]);
 
     const hasResults = filteredAllEvents.length > 0;
+    const hasMarketplaceError = Boolean(dashboardErrors?.marketplaceError);
+    const showSkeleton = loading || (hasMarketplaceError && liveEvents.length === 0);
 
     return (
         <div className="bg-[#EBF4F6] pb-20 overflow-x-hidden overflow-y-hidden">
@@ -409,18 +412,27 @@ const UserDashboard = () => {
                             Search Results for "{searchQuery}"
                         </h2>
                         <p className="text-sm text-[#09637E]/60 uppercase tracking-widest mt-2">
-                            Found {filteredAllEvents.length} events
+                            {showSkeleton ? 'Loading events...' : `Found ${filteredAllEvents.length} events`}
                         </p>
                     </div>
                 )}
 
-                {!hasResults && loading && (
-                    <div className="text-center py-20 opacity-60">
-                        <p className="font-serif-premium text-2xl text-[#09637E]">Loading live events...</p>
+                {showSkeleton && (
+                    <div className="space-y-8 animate-pulse">
+                        {[1, 2, 3].map((row) => (
+                            <div key={`dashboard-skeleton-row-${row}`} className="space-y-4">
+                                <div className="h-8 w-64 rounded-xl bg-white/80" />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                                    {[1, 2, 3, 4].map((card) => (
+                                        <div key={`dashboard-skeleton-card-${row}-${card}`} className="h-72 rounded-3xl bg-white/80 border border-[#7AB2B2]/15" />
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
 
-                {hasResults ? (
+                {!showSkeleton && hasResults ? (
                     <>
                         {topTenEvents.length > 0 && <EventRow title={searchQuery ? "Top Matches" : "Top 10 Trending Events Near You"} events={topTenEvents} isTopTen={!searchQuery} />}
                         {musicEvents.length > 0 && <EventRow title="Music & Entertainment" events={musicEvents} />}
@@ -429,12 +441,12 @@ const UserDashboard = () => {
 
                         {recommendedEvents.length > 0 && <EventRow title={searchQuery ? "More Results" : "Recommended for You"} events={recommendedEvents} />}
                     </>
-                ) : (
+                ) : !showSkeleton ? (
                     <div className="text-center py-20 opacity-50">
                         <p className="font-serif-premium text-2xl text-[#09637E]">No events found.</p>
                         <p className="text-sm font-medium mt-2 text-[#09637E]/60">Try adjusting your search terms.</p>
                     </div>
-                )}
+                ) : null}
             </div>
         </div>
     );

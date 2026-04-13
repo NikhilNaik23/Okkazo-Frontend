@@ -10,14 +10,17 @@ import { useGoogleLogin } from "@react-oauth/google";
 import {
   loginUser,
   loginWithGoogle,
+  fetchCurrentUser,
   clearError,
   selectIsLoading,
   selectError,
   selectIsAuthenticated,
+  selectUser,
   selectUserRole,
   selectVendorApplication,
   selectVendorApplicationLoading
 } from "../../../store/slices/authSlice";
+import { isUserProfileComplete } from "../../../utils/profileCompletion";
 
 const GoogleSignInButton = ({ dispatch, isLoading }) => {
   const googleSignIn = useGoogleLogin({
@@ -55,6 +58,7 @@ const Login = () => {
   const isLoading = useSelector(selectIsLoading);
   const error = useSelector(selectError);
   const isAuthenticated = useSelector(selectIsAuthenticated);
+  const authUser = useSelector(selectUser);
   const userRole = useSelector(selectUserRole);
   const vendorApplication = useSelector(selectVendorApplication);
   const vendorApplicationLoading = useSelector(selectVendorApplicationLoading);
@@ -73,15 +77,21 @@ const Login = () => {
     import.meta.env.VITE_GOOGLE_CLIENT_ID ||
     import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID;
 
+  useEffect(() => {
+    if (isAuthenticated && userRole === 'USER' && !authUser) {
+      dispatch(fetchCurrentUser());
+    }
+  }, [dispatch, isAuthenticated, userRole, authUser]);
+
   // Redirect after successful login based on role
   useEffect(() => {
     if (isAuthenticated && userRole && !vendorApplicationLoading) {
-      if (requestedPath) {
-        navigate(requestedPath, { replace: true });
-        return;
-      }
-
       if (userRole === 'VENDOR') {
+        if (requestedPath) {
+          navigate(requestedPath, { replace: true });
+          return;
+        }
+
         // For vendors, check their application status
         if (vendorApplication) {
           const status = vendorApplication.status;
@@ -93,14 +103,34 @@ const Login = () => {
           }
         }
       } else if (userRole === 'ADMIN') {
+        if (requestedPath) {
+          navigate(requestedPath, { replace: true });
+          return;
+        }
         navigate("/admin");
       } else if (userRole === 'MANAGER') {
+        if (requestedPath) {
+          navigate(requestedPath, { replace: true });
+          return;
+        }
         navigate("/manager");
-      } else {
-        navigate("/user/dashboard");
+      } else if (userRole === 'USER') {
+        if (!authUser) return;
+
+        if (!isUserProfileComplete(authUser)) {
+          navigate("/user/edit-profile", { replace: true, state: { forceProfileCompletion: true } });
+          return;
+        }
+
+        if (requestedPath) {
+          navigate(requestedPath, { replace: true });
+          return;
+        }
+
+        navigate("/user/dashboard", { replace: true });
       }
     }
-  }, [isAuthenticated, userRole, vendorApplication, vendorApplicationLoading, navigate, requestedPath]);
+  }, [isAuthenticated, userRole, authUser, vendorApplication, vendorApplicationLoading, navigate, requestedPath]);
 
   // Show error toast when Redux error changes
   useEffect(() => {

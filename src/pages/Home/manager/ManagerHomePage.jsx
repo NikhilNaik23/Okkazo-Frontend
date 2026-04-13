@@ -624,6 +624,27 @@ const ManagerHomePage = () => {
 		},
 	};
 
+	const showDashboardSkeleton = loading
+		&& (planningEvents || []).length === 0
+		&& (promoteEvents || []).length === 0;
+
+	if (showDashboardSkeleton) {
+		return (
+			<div className="px-6 py-8 space-y-8 max-w-480 mx-auto min-h-screen animate-pulse">
+				<div className="h-12 w-80 rounded-2xl bg-white border border-gray-100" />
+				<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+					{Array.from({ length: 4 }).map((_, index) => (
+						<div key={`manager-home-stat-skeleton-${index}`} className="h-32 rounded-2xl bg-white border border-gray-100" />
+					))}
+				</div>
+				<div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+					<div className="xl:col-span-2 h-115 rounded-2xl bg-white border border-gray-100" />
+					<div className="h-115 rounded-2xl bg-white border border-gray-100" />
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="px-6 py-8 space-y-8 max-w-480 mx-auto min-h-screen">
 			<MotionDiv

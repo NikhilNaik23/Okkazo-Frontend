@@ -1126,7 +1126,7 @@ const EventCommandCenter = () => {
         <div className="min-h-screen bg-[#EBF4F6] text-[#09637E] font-sans px-8 pb-8 pt-24 md:px-16 md:pb-16 md:pt-28">
             <div className="max-w-7xl mx-auto">
                 <div className="flex justify-between items-center mb-12">
-                    <Link to="/user/dashboard" className="flex items-center gap-2 text-[#09637E]/60 hover:text-[#09637E] font-bold uppercase tracking-widest text-xs transition-colors">
+                    <Link to="/user/my-events" className="flex items-center gap-2 text-[#09637E]/60 hover:text-[#09637E] font-bold uppercase tracking-widest text-xs transition-colors">
                         <BsArrowLeft /> Back to My Events
                     </Link>
                     <div className="flex gap-4">

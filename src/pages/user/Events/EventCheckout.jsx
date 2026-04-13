@@ -5,7 +5,6 @@ import { BsArrowLeft, BsCheckCircleFill, BsQrCode, BsCalendarEvent } from "react
 import { toast, Toaster } from "react-hot-toast";
 import PaymentMethod from "../../../components/Forms/Checkout/PaymentMethod";
 import CheckoutOrderSummary from "../../../components/Forms/Checkout/CheckoutOrderSummary";
-import { allEvents, popularEvents } from "../../../data/eventsData";
 import { fetchWithAuth } from "../../../utils/apiHandler";
 import { refreshAccessToken } from "../../../store/slices/authSlice";
 import { createOrder, verifyPayment } from "../../../store/slices/planningSlice";
@@ -16,6 +15,7 @@ import {
 } from "../../../store/slices/feesSlice";
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+const DEFAULT_EVENT_IMAGE = "https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?q=80&w=2670&auto=format&fit=crop";
 
 const loadRazorpayScript = () =>
     new Promise((resolve) => {
@@ -39,6 +39,65 @@ const safeJson = async (response) => {
     }
 };
 
+const resolveBannerUrl = (value) => {
+    if (!value) return null;
+
+    if (typeof value === "string") {
+        const s = value.trim();
+        return s || null;
+    }
+
+    if (typeof value === "object") {
+        const candidates = [value.url, value.fileUrl, value.secure_url, value.src, value.image];
+        for (const item of candidates) {
+            if (typeof item === "string" && item.trim()) return item.trim();
+        }
+    }
+
+    return null;
+};
+
+const formatDateBadge = (value) => {
+    if (!value) return "DATE TBA";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "DATE TBA";
+    const day = d.toLocaleDateString(undefined, { weekday: "short" }).toUpperCase();
+    const month = d.toLocaleDateString(undefined, { month: "short" }).toUpperCase();
+    const date = String(d.getDate()).padStart(2, "0");
+    const time = d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }).toUpperCase();
+    return `${day}, ${month} ${date} • ${time}`;
+};
+
+const mapMarketplaceEventToCheckoutEvent = (event) => {
+    const startAt = event?.eventScheduled?.startAt || null;
+    const tiers = Array.isArray(event?.tickets?.tiers) ? event.tickets.tiers : [];
+    const minTierPrice = tiers
+        .map((tier) => Number(tier?.price || tier?.ticketPrice || 0))
+        .filter((n) => Number.isFinite(n) && n >= 0)
+        .sort((a, b) => a - b)[0] || 0;
+
+    return {
+        id: String(event?.eventId || ""),
+        title: event?.eventTitle || "Untitled Event",
+        date: formatDateBadge(startAt),
+        location: event?.venue?.locationName || "Venue TBA",
+        eventLocation: event?.venue?.locationName || "Venue TBA",
+        image: resolveBannerUrl(event?.eventBanner) || DEFAULT_EVENT_IMAGE,
+        price: minTierPrice > 0 ? `₹${minTierPrice.toLocaleString("en-IN")}` : "Free",
+        categories: tiers.length
+            ? tiers.map((tier, idx) => {
+                const name = String(tier?.name || tier?.tierName || `Tier ${idx + 1}`).trim();
+                const priceRaw = Number(tier?.price || tier?.ticketPrice || 0);
+                return {
+                    name,
+                    price: priceRaw > 0 ? `₹${priceRaw.toLocaleString("en-IN")}` : "Free",
+                };
+            })
+            : [{ name: "General", price: minTierPrice > 0 ? `₹${minTierPrice.toLocaleString("en-IN")}` : "Free" }],
+        raw: event,
+    };
+};
+
 const EventCheckout = () => {
     const dispatch = useDispatch();
     const serviceChargePercent = useSelector(selectServiceChargePercent);
@@ -52,6 +111,7 @@ const EventCheckout = () => {
     const selectedTicketDay = String(location?.state?.selectedTicketDay || queryParams.get('day') || '').trim();
 
     const [event, setEvent] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
     const [isSuccess, setIsSuccess] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [ticketId, setTicketId] = useState(null);
@@ -64,31 +124,59 @@ const EventCheckout = () => {
     }, [dispatch, feesStatus]);
 
     useEffect(() => {
-        const stateEvent = location?.state?.event;
-        if (stateEvent && String(stateEvent.id) === String(eventId)) {
-            const normalizedStateEvent = { ...stateEvent };
-            if (normalizedStateEvent.categories && Array.isArray(normalizedStateEvent.categories)) {
-                const cat = normalizedStateEvent.categories.find(c => c.name === selectedCategory);
-                if (cat) normalizedStateEvent.price = cat.price;
-            }
-            setEvent(normalizedStateEvent);
-            return;
-        }
+        let cancelled = false;
 
-        const combinedEvents = [...allEvents, ...popularEvents];
-        const foundEvent = combinedEvents.find(e => String(e.id) === String(eventId));
-        if (foundEvent) {
-            // Update event price if category is selected
-            if (foundEvent.categories) {
-                const cat = foundEvent.categories.find(c => c.name === selectedCategory);
-                if (cat) foundEvent.price = cat.price;
+        const loadEvent = async () => {
+            setIsLoading(true);
+            try {
+                const stateEvent = location?.state?.event;
+                if (stateEvent && String(stateEvent.id) === String(eventId)) {
+                    const normalizedStateEvent = { ...stateEvent };
+                    if (normalizedStateEvent.categories && Array.isArray(normalizedStateEvent.categories)) {
+                        const cat = normalizedStateEvent.categories.find(c => c.name === selectedCategory);
+                        if (cat) normalizedStateEvent.price = cat.price;
+                    }
+                    if (!cancelled) setEvent(normalizedStateEvent);
+                    return;
+                }
+
+                const response = await fetchWithAuth(
+                    `${API_BASE_URL}/api/events/tickets/marketplace/events?limit=300`,
+                    { method: 'GET' },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+                const data = await safeJson(response);
+                const events = response.ok && data?.success && Array.isArray(data?.data?.events)
+                    ? data.data.events
+                    : [];
+
+                const foundEvent = events.find((e) => String(e?.eventId) === String(eventId));
+                if (!foundEvent) {
+                    toast.error("Event not found");
+                    navigate("/user/dashboard");
+                    return;
+                }
+
+                const mapped = mapMarketplaceEventToCheckoutEvent(foundEvent);
+                if (mapped.categories && Array.isArray(mapped.categories)) {
+                    const cat = mapped.categories.find(c => c.name === selectedCategory);
+                    if (cat) mapped.price = cat.price;
+                }
+
+                if (!cancelled) setEvent(mapped);
+            } catch {
+                toast.error("Unable to load event checkout details");
+                navigate("/user/dashboard");
+            } finally {
+                if (!cancelled) setIsLoading(false);
             }
-            setEvent(foundEvent);
-        } else {
-            toast.error("Event not found");
-            navigate("/user/dashboard");
-        }
-    }, [eventId, navigate, selectedCategory]);
+        };
+
+        loadEvent();
+        return () => {
+            cancelled = true;
+        };
+    }, [dispatch, eventId, location, navigate, selectedCategory]);
 
     const getNumericPrice = (p) => {
         if (p === null || p === undefined) return 0;
@@ -309,6 +397,20 @@ const EventCheckout = () => {
             setIsProcessing(false);
         }
     };
+
+    if (isLoading && !isSuccess) {
+        return (
+            <div className="min-h-screen bg-[#EBF4F6] pt-28">
+                <main className="max-w-7xl mx-auto w-full px-6 pb-32 animate-pulse space-y-8">
+                    <div className="h-16 w-96 rounded-2xl bg-white/80 mx-auto" />
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                        <div className="lg:col-span-8 h-[560px] rounded-3xl bg-white/80 border border-[#7AB2B2]/15" />
+                        <div className="lg:col-span-4 h-[460px] rounded-3xl bg-white/80 border border-[#7AB2B2]/15" />
+                    </div>
+                </main>
+            </div>
+        );
+    }
 
     if (!event && !isSuccess) return null;
 

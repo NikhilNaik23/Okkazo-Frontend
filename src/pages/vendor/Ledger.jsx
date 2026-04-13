@@ -40,6 +40,7 @@ const Ledger = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const [summary, setSummary] = useState({
     totalReceived: 0,
     pendingClearance: 0,
@@ -49,6 +50,7 @@ const Ledger = () => {
 
   const loadLedger = useCallback(async () => {
     setIsLoading(true);
+    setLoadError('');
     try {
       const response = await fetchWithAuth(
         `${API_BASE_URL}/api/events/vendor/requests/ledger`,
@@ -75,6 +77,7 @@ const Ledger = () => {
         successfulPayoutCount: successfulRows.length,
       });
     } catch (error) {
+      setLoadError(error?.message || 'Failed to load ledger');
       toast.error(error?.message || 'Failed to load ledger');
     } finally {
       setIsLoading(false);
@@ -114,6 +117,8 @@ const Ledger = () => {
       });
   }, [filter, rows, searchTerm]);
 
+  const showSkeleton = isLoading || (Boolean(loadError) && rows.length === 0);
+
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
       {/* Header */}
@@ -143,6 +148,14 @@ const Ledger = () => {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {showSkeleton ? (
+          <>
+            <div className="h-40 rounded-[2rem] bg-white/80 border border-[#7AB2B2]/15 animate-pulse" />
+            <div className="h-40 rounded-[2rem] bg-white/80 border border-[#7AB2B2]/15 animate-pulse" />
+            <div className="h-40 rounded-[2rem] bg-white/80 border border-[#7AB2B2]/15 animate-pulse" />
+          </>
+        ) : (
+          <>
         <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-[#708aa0]/5">
           <p className="text-sm font-bold text-[#708aa0] mb-2 uppercase tracking-widest leading-none">Amount Received</p>
           <h3 className="text-3xl font-black tracking-tight">{formatInr(summary.totalReceived)}</h3>
@@ -167,6 +180,8 @@ const Ledger = () => {
             Retry failed payout entries
           </div>
         </div>
+          </>
+        )}
       </div>
 
       {/* Transactions Table */}
@@ -214,19 +229,25 @@ const Ledger = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#708aa0]/5">
-              {isLoading && (
+              {showSkeleton && (
                 <tr>
-                  <td colSpan={6} className="px-8 py-8 text-sm font-bold text-[#708aa0]">Loading ledger...</td>
+                  <td colSpan={6} className="px-8 py-8">
+                    <div className="space-y-3 animate-pulse">
+                      <div className="h-8 rounded-xl bg-[#e9eff1]" />
+                      <div className="h-8 rounded-xl bg-[#e9eff1]" />
+                      <div className="h-8 rounded-xl bg-[#e9eff1]" />
+                    </div>
+                  </td>
                 </tr>
               )}
 
-              {!isLoading && filteredRows.length === 0 && (
+              {!showSkeleton && filteredRows.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-8 py-8 text-sm font-bold text-[#708aa0]">No payout ledger rows found.</td>
                 </tr>
               )}
 
-              {!isLoading && filteredRows.map((txn) => {
+              {!showSkeleton && filteredRows.map((txn) => {
                 const status = String(txn?.status || '').trim().toUpperCase();
                 const statusTone = status === 'SUCCESS'
                   ? 'bg-emerald-50 text-emerald-600'

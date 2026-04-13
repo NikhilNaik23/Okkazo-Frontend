@@ -9,6 +9,7 @@ import {
   selectUser,
   selectVendorApplication,
 } from "../../store/slices/authSlice";
+import { isUserProfileComplete } from "../../utils/profileCompletion";
 
 /**
  * ProtectedRoute - Protects routes based on authentication and roles
@@ -103,6 +104,15 @@ const ProtectedRoute = ({
       return <Navigate to="/user/dashboard" replace />;
     } else {
       return <Navigate to="/" replace />;
+    }
+  }
+
+  if (userRole === "USER") {
+    const isOnProfileCompletionPage = location.pathname === "/user/edit-profile";
+    const hasCompletedProfile = isUserProfileComplete(user);
+
+    if (!hasCompletedProfile && !isOnProfileCompletionPage) {
+      return <Navigate to="/user/edit-profile" replace state={{ from: location, forceProfileCompletion: true }} />;
     }
   }
 

@@ -11,7 +11,6 @@ import {
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { BsArrowLeft, BsChatDots, BsCheckCircleFill, BsClock, BsSend, BsFileEarmarkZip, BsDownload, BsCircle, BsTicketPerforated, BsPaperclip, BsThreeDotsVertical, BsStar, BsStarFill, BsExclamationTriangle, BsX } from "react-icons/bs";
-import { myOrganizedEvents } from "../../../data/myEventsData";
 import { toast, Toaster } from "react-hot-toast";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchPromoteByEventId } from "../../../store/slices/promoteSlice";
@@ -825,14 +824,6 @@ const UserEventManagement = () => {
                         if (!cancelled) setEvent(mapped);
                         return;
                     }
-                }
-
-                // 3) Fallback to legacy dummy/local data
-                const parsed = Number.isFinite(Number(eventId)) ? parseInt(eventId, 10) : null;
-                const foundEvent = myOrganizedEvents.find((e) => e.id === parsed || e.id === eventId);
-                if (foundEvent) {
-                    if (!cancelled) setEvent(foundEvent);
-                    return;
                 }
 
                 toast.error("Event not found");
@@ -1734,8 +1725,24 @@ const UserEventManagement = () => {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-surface flex items-center justify-center pt-28">
-                <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <div className="min-h-screen bg-surface pt-28 px-6">
+                <div className="max-w-7xl mx-auto animate-pulse space-y-8">
+                    <div className="h-10 w-64 rounded-2xl bg-primary/10" />
+                    <div className="h-4 w-40 rounded bg-primary/10" />
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2 rounded-3xl bg-white border border-primary/10 p-8 space-y-5">
+                            <div className="h-8 w-1/2 rounded-xl bg-primary/10" />
+                            <div className="h-24 rounded-2xl bg-primary/10" />
+                            <div className="h-24 rounded-2xl bg-primary/10" />
+                        </div>
+                        <div className="rounded-3xl bg-white border border-primary/10 p-8 space-y-5">
+                            <div className="h-6 w-2/3 rounded-xl bg-primary/10" />
+                            <div className="h-16 rounded-2xl bg-primary/10" />
+                            <div className="h-16 rounded-2xl bg-primary/10" />
+                            <div className="h-16 rounded-2xl bg-primary/10" />
+                        </div>
+                    </div>
+                </div>
             </div>
         );
     }

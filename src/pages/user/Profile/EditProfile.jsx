@@ -70,6 +70,7 @@ const EditProfile = () => {
         if (updateSuccess) {
             toast.success("Profile updated successfully!");
             dispatch(clearUpdateSuccess());
+            dispatch(fetchCurrentUser());
             setTimeout(() => navigate("/user/profile"), 800);
         }
         if (error) {
@@ -141,10 +142,46 @@ const EditProfile = () => {
     const handleSubmit = (e) => {
         e.preventDefault();
 
+        const trimmedName = String(formData.name || '').trim();
+        const trimmedEmail = String(formData.email || '').trim();
+        const trimmedPhone = String(formData.phone || '').replace(/\s+/g, '').trim();
+        const trimmedLocation = String(formData.location || '').trim();
+        const selectedInterests = Array.isArray(formData.interests)
+            ? formData.interests.filter((interest) => String(interest || '').trim().length > 0)
+            : [];
+
+        if (!trimmedName) {
+            toast.error("Full name is required.");
+            return;
+        }
+
+        if (!trimmedEmail) {
+            toast.error("Email is required.");
+            return;
+        }
+
+        if (!trimmedPhone || trimmedPhone.length < 8) {
+            toast.error("Contact number is required.");
+            return;
+        }
+
+        if (!trimmedLocation) {
+            toast.error("Current base city is required.");
+            return;
+        }
+
+        if (selectedInterests.length === 0) {
+            toast.error("Please select at least one field of interest.");
+            return;
+        }
+
         // Email is immutable; keep it display-only and never send it.
         const payload = {
             ...formData,
-            interests: Array.isArray(formData.interests) ? formData.interests : [],
+            name: trimmedName,
+            phone: trimmedPhone,
+            location: trimmedLocation,
+            interests: selectedInterests,
         };
         delete payload.email;
 
@@ -250,6 +287,7 @@ const EditProfile = () => {
                                     name="name"
                                     value={formData.name}
                                     onChange={handleChange}
+                                    required
                                     className="w-full bg-transparent border-b border-[#09637E]/20 py-2 font-serif-premium text-xl text-[#09637E] focus:outline-none focus:border-[#09637E] transition-colors placeholder-[#09637E]/20"
                                     placeholder="Alex Morgan"
                                 />
@@ -276,6 +314,10 @@ const EditProfile = () => {
                                         onChange={handlePhoneChange}
                                         enableSearch={true}
                                         disableSearchIcon={true}
+                                        inputProps={{
+                                            required: true,
+                                            name: 'phone',
+                                        }}
                                         inputStyle={{
                                             width: '100%',
                                             height: 'auto',
@@ -340,6 +382,7 @@ const EditProfile = () => {
                                         onChange={handleChange}
                                         onFocus={() => { if (formData.location.length > 2) setShowSuggestions(true); }}
                                         onBlur={() => setTimeout(() => setShowSuggestions(false), 200)} // Delay to allow click
+                                        required
                                         className="w-full bg-transparent border-b border-[#09637E]/20 py-2 font-serif-premium text-xl text-[#09637E] focus:outline-none focus:border-[#09637E] transition-colors placeholder-[#09637E]/20"
                                         placeholder="San Francisco, CA"
                                         autoComplete="off"

@@ -31,14 +31,21 @@ import {
 } from '../../../components/Manager/EventDetails/tabs';
 // import NewChatTab from '../../../components/Manager/EventDetails/tabs/NewChatTab';
 
-// Data
-import { tabs as tabsData } from '../../../data/managerEventDetailsData';
 import { fetchWithAuth } from '../../../utils/apiHandler';
 import { refreshAccessToken, selectUser } from '../../../store/slices/authSlice';
 import { ensureEventDmConversation, fetchConversationMessages } from '../../../utils/chatApi';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 const MotionDiv = motion.div;
+const BASE_TABS = [
+    { id: 'overview', label: 'Overview', icon: 'FileText' },
+    { id: 'guests', label: 'Guest List', icon: 'Users' },
+    { id: 'vendors', label: 'Vendors', icon: 'Briefcase' },
+    { id: 'chat', label: 'Event Chat', icon: 'MessageSquare' },
+    { id: 'todo', label: 'To-Do', icon: 'ListTodo' },
+    { id: 'financials', label: 'Financials', icon: 'DollarSign' },
+    { id: 'documents', label: 'Documents', icon: 'FolderOpen' },
+];
 
 const safeJson = async (response) => {
     try {
@@ -153,8 +160,8 @@ const ManagerEventDetails = () => {
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [unreadChatCount, setUnreadChatCount] = useState(0);
-    const [guestCount, setGuestCount] = useState(null);
-    const [todoCount, setTodoCount] = useState(null);
+    const [guestCount, setGuestCount] = useState(0);
+    const [todoCount, setTodoCount] = useState(0);
     const [markingComplete, setMarkingComplete] = useState(false);
     const [markingClose, setMarkingClose] = useState(false);
     const [payingGeneratedRevenue, setPayingGeneratedRevenue] = useState(false);
@@ -663,14 +670,14 @@ const ManagerEventDetails = () => {
     };
 
     const vendorSlotCount = useMemo(() => {
-        if (!vendorSelection) return null;
+        if (!vendorSelection) return 0;
         if (Array.isArray(vendorSelection?.selectedServices)) return vendorSelection.selectedServices.length;
         if (Array.isArray(vendorSelection?.vendors)) return vendorSelection.vendors.length;
-        return null;
+        return 0;
     }, [vendorSelection]);
 
     const promoteProofCount = useMemo(() => {
-        if (eventType !== 'promote') return null;
+        if (eventType !== 'promote') return 0;
         return Array.isArray(rawEvent?.authenticityProofs) ? rawEvent.authenticityProofs.length : 0;
     }, [eventType, rawEvent?.authenticityProofs]);
 
@@ -806,9 +813,8 @@ const ManagerEventDetails = () => {
         };
     }, [id, currentUserAuthId, activeTab, dispatch, chatContactAuthIds]);
 
-    const tabs = tabsData
+    const tabs = BASE_TABS
         .filter((tab) => {
-            if (tab.id === 'schedule') return false;
             if (!canUseRestrictedManagerActions && tab.id === 'vendors') return false;
             if (eventType === 'promote' && tab.id === 'vendors') return false;
             if (eventType === 'planning' && tab.id === 'documents') return false;
@@ -818,16 +824,16 @@ const ManagerEventDetails = () => {
             ...tab,
             icon: iconMap[tab.icon],
             count: tab.id === 'vendors'
-                ? (vendorSlotCount ?? tab.count)
+                ? vendorSlotCount
                 : tab.id === 'guests'
-                    ? (guestCount ?? tab.count)
+                    ? guestCount
                 : tab.id === 'chat'
                     ? unreadChatCount
                 : tab.id === 'todo'
-                    ? (todoCount ?? tab.count)
+                    ? todoCount
                 : tab.id === 'documents' && eventType === 'promote'
                     ? promoteProofCount
-                    : tab.count,
+                    : undefined,
         }));
 
     useEffect(() => {
@@ -1643,6 +1649,18 @@ const ManagerEventDetails = () => {
             setPromotionActionLoadingKey('');
         }
     };
+
+    if (loading && !event) {
+        return (
+            <div className="min-h-screen bg-gray-50/50 pb-20">
+                <div className="h-60 lg:h-80 bg-gray-900/70 animate-pulse" />
+                <div className="max-w-480 mx-auto px-6 pt-6 animate-pulse space-y-6">
+                    <div className="h-12 rounded-2xl bg-white border border-gray-100" />
+                    <div className="h-105 rounded-2xl bg-white border border-gray-100" />
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-50/50 pb-20">

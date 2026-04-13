@@ -27,7 +27,6 @@ import {
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
-import { eventDetailsData } from "../../../data/eventDetailsData";
 import AdminManagerChatTab from "../../../components/Admin/EventDetails/AdminManagerChatTab";
 import {
     assignPlanningEventManager,
@@ -129,6 +128,7 @@ const EventDetails = () => {
         selectedEventVendorSelection,
         selectedEventVendorAlternatives,
         selectedEventTransactions,
+        eventRequestLoading,
         eventVendorSelectionLoading,
         eventVendorAlternativesLoading,
         eventTransactionsLoading,
@@ -328,18 +328,17 @@ const EventDetails = () => {
           });
   };
 
-    const eventData = eventDetailsData;
-    const headerTitle = selectedEventRequest?.eventTitle || eventData.title;
+    const headerTitle = selectedEventRequest?.eventTitle || (eventRequestLoading ? 'Loading event...' : 'Event Details');
 
     const pageCategoryLabel = useMemo(() => {
         if (selectedEventRequestType === 'PLANNING') return selectedEventRequest?.eventType || 'Planning Event';
-        return selectedEventRequest?.eventCategory || eventData.category;
-    }, [selectedEventRequestType, selectedEventRequest?.eventType, selectedEventRequest?.eventCategory, eventData.category]);
+        return selectedEventRequest?.eventCategory || 'Event';
+    }, [selectedEventRequestType, selectedEventRequest?.eventType, selectedEventRequest?.eventCategory]);
 
     const pageSubCategoryLabel = useMemo(() => {
         if (selectedEventRequestType === 'PLANNING') return selectedEventRequest?.category || 'category';
-        return selectedEventRequest?.eventField || selectedEventRequest?.customCategory || eventData.subCategory;
-    }, [selectedEventRequestType, selectedEventRequest?.category, selectedEventRequest?.eventField, selectedEventRequest?.customCategory, eventData.subCategory]);
+        return selectedEventRequest?.eventField || selectedEventRequest?.customCategory || 'General';
+    }, [selectedEventRequestType, selectedEventRequest?.category, selectedEventRequest?.eventField, selectedEventRequest?.customCategory]);
 
     const authenticityProofs = useMemo(() => {
         if (selectedEventRequestType !== 'PROMOTE') return [];
@@ -470,7 +469,9 @@ const EventDetails = () => {
             };
         }
 
-        const fallback = eventData?.budget || {};
+        const fallback = selectedEventRequest?.budget && typeof selectedEventRequest.budget === 'object'
+            ? selectedEventRequest.budget
+            : {};
         const original = {
             min: fallback.original ?? null,
             max: fallback.final ?? null,
@@ -480,7 +481,7 @@ const EventDetails = () => {
             originalRange: original,
             revisedRange: fallback.revised != null ? { min: fallback.revised, max: fallback.revised } : null,
         };
-    }, [selectedEventRequestType, selectedEventVendorSelection, eventData]);
+    }, [selectedEventRequestType, selectedEventVendorSelection, selectedEventRequest?.budget]);
 
     const normalizeServiceKey = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
@@ -841,6 +842,37 @@ const EventDetails = () => {
     const showMarkAsClosedAction = selectedEventRequestType !== 'PLANNING'
         && ['CANCELLED', 'CANCELED'].includes(promoteLifecycleStatusToken);
 
+    const commLogs = useMemo(() => {
+        const logs = [];
+
+        if (selectedEventRequest?.createdAt) {
+            logs.push({
+                title: 'Request submitted',
+                time: new Date(selectedEventRequest.createdAt).toLocaleString(),
+                type: 'info',
+            });
+        }
+
+        if (assignedManager?.name) {
+            logs.push({
+                title: `Assigned to ${assignedManager.name}`,
+                time: 'Latest update',
+                type: 'success',
+            });
+        }
+
+        if (selectedEventRequest?.adminDecision?.decidedAt) {
+            const decisionLabel = String(selectedEventRequest?.adminDecision?.status || 'updated').toLowerCase();
+            logs.push({
+                title: `Admin decision: ${decisionLabel}`,
+                time: new Date(selectedEventRequest.adminDecision.decidedAt).toLocaleString(),
+                type: decisionLabel === 'rejected' ? 'warning' : 'success',
+            });
+        }
+
+        return logs;
+    }, [selectedEventRequest?.createdAt, selectedEventRequest?.adminDecision?.status, selectedEventRequest?.adminDecision?.decidedAt, assignedManager?.name]);
+
     const iconForService = (serviceName) => {
         const key = String(serviceName || '').trim().toLowerCase();
         if (key.includes('cater')) return Utensils;
@@ -848,6 +880,21 @@ const EventDetails = () => {
         if (key.includes('venue') || key.includes('hall')) return Building2;
         return Settings;
     };
+
+    if (eventRequestLoading && !selectedEventRequest) {
+        return (
+            <div className="flex flex-col h-full bg-transparent px-8 py-6">
+                <div className="animate-pulse space-y-6">
+                    <div className="h-10 w-64 rounded-2xl bg-white border border-[#e9eff1]" />
+                    <div className="h-16 rounded-2xl bg-white border border-[#e9eff1]" />
+                    <div className="grid grid-cols-12 gap-6">
+                        <div className="col-span-12 lg:col-span-8 h-110 rounded-3xl bg-white border border-[#e9eff1]" />
+                        <div className="col-span-12 lg:col-span-4 h-110 rounded-3xl bg-white border border-[#e9eff1]" />
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
   return (
     <div className="flex flex-col h-full bg-transparent">
@@ -1579,7 +1626,11 @@ const EventDetails = () => {
                            {/* Vertical Line */}
                            <div className="absolute left-[3px] top-2 bottom-2 w-[1px] bg-[#e9eff1]"></div>
                            
-                           {eventData.logs.map((log, index) => (
+                           {commLogs.length === 0 ? (
+                               <div className="relative pl-6">
+                                   <p className="text-sm font-medium text-[#708aa0]">No communication logs yet.</p>
+                               </div>
+                           ) : commLogs.map((log, index) => (
                                <div key={index} className="relative pl-6">
                                    {/* Dot */}
                                    <div className={`absolute left-0 top-1.5 w-2 h-2 rounded-full ring-4 ring-white ${

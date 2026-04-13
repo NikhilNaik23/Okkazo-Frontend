@@ -378,62 +378,38 @@ const EventDetails = () => {
         }
     };
 
-    // Mock data for a specific event
     const [event, setEvent] = useState({
-        id: id || 1,
-        title: id === "2" ? "Bangalore Tech Summit 2026" : "The Royal Udaipur Wedding",
-        status: id === "2" ? "CONFIRMED" : "PENDING",
+        id: id || null,
+        title: "Event",
+        status: "PENDING",
         vendorSummaryStatus: 'PENDING',
-        date: "28 Oct, 2024",
-        time: "06:00 PM - 11:30 PM",
-        pax: 200,
-        category: "Wedding",
-        location: "Central Park Plaza, Manhattan, NY",
+        date: "TBD",
+        time: "TBD",
+        pax: 0,
+        category: "Event",
+        location: "—",
         client: {
-            name: "Sarah Jenkins",
-            org: "Individual Booking",
-            email: "sarah.j@example.com",
-            phone: "+1 234-567-8901",
-            avatar: "https://i.pravatar.cc/150?u=sarah"
+            name: "—",
+            org: "—",
+            email: "—",
+            phone: "—",
+            avatar: "https://i.pravatar.cc/150?u=client"
         },
-        requestedServices: [
-            { id: 1, name: "Catering - Veg Menu", details: "Premium Indian buffet with 4 starters, 6 main courses, and 3 desserts.", price: 1500, qty: 200 },
-            { id: 2, name: "Live Counter", details: "Artisan Tandoor & Pasta station for the first 2 hours.", price: 45000, qty: 1 },
-            { id: 3, name: "Beverage Service", details: "Mocktail bar with 5 signature drinks.", price: 350, qty: 200 }
-        ],
-        description: "A high-profile wedding event requiring top-tier catering service. The client has specifically requested a focus on authentic flavors and elegant presentation. The venue has a service elevator and a dedicated kitchen area for vendors.",
-        timeline: [
-            { time: "09:00 AM", task: "Inventory Loading", status: "completed" },
-            { time: "11:30 AM", task: "Staff Briefing", status: "completed" },
-            { time: "02:00 PM", task: "Vendor Arrival & Setup", status: "in-progress" },
-            { time: "05:00 PM", task: "Kitchen Preparation Complete", status: "pending" },
-            { time: "06:00 PM", task: "Welcome Drinks Served", status: "pending" },
-            { time: "08:30 PM", task: "Main Course Buffet Opening", status: "pending" }
-        ],
+        requestedServices: [],
+        description: "",
+        timeline: [],
+        amountReceived: 0,
+        ledger: [],
+        isPublic: false,
+        publicDayCount: 0,
+        publicTicketDayAllocations: [],
         chat: {
-            manager: [
-                { sender: "manager", text: "Hey! Any updates on the inventory for Bangalore?", time: "10:30 AM" },
-                { sender: "you", text: "Yes, loading is 80% complete. Should be there by noon.", time: "10:45 AM" },
-                { sender: "manager", text: "Perfect. Reminder: Client asked for extra Jain options.", time: "11:00 AM" }
-            ],
-            client: [
-                { sender: "client", text: "Hello! Can we increase the pax to 220?", time: "Yesterday" },
-                { sender: "you", text: "Sure, I will update the budget and send it for approval.", time: "Yesterday" }
-            ]
+            manager: [],
+            client: []
         }
     });
 
-    const [todoTasks, setTodoTasks] = useState([
-        { id: 1, title: "Send vendor alternatives to client", priority: "HIGH", owner: "You", date: "Mar 17", completed: false },
-        { id: 2, title: "Finalize catering menu", priority: "MEDIUM", owner: "Priya Sharma", date: "Mar 18", completed: false },
-        { id: 3, title: "Confirm AV setup requirements", priority: "MEDIUM", owner: "Rahul Nair", date: "Mar 19", completed: false },
-        { id: 4, title: "Send final schedule to client", priority: "MEDIUM", owner: "You", date: "Mar 20", completed: false },
-        { id: 5, title: "Collect pending vendor payments", priority: "LOW", owner: "Jessica T.", date: "Mar 21", completed: false },
-        { id: 6, title: "Final walkthrough with venue", priority: "HIGH", owner: "Priya Sharma", date: "Mar 23", completed: false },
-        { id: 7, title: "Confirm venue booking", owner: "Priya Sharma", completed: true },
-        { id: 8, title: "Verify all vendor availability", owner: "You", completed: true },
-        { id: 9, title: "Check event permits with BMC", owner: "Rahul Nair", completed: true },
-    ]);
+    const [todoTasks, setTodoTasks] = useState([]);
 
     const toggleTask = (taskId) => {
         setTodoTasks(prev => prev.map(task =>
@@ -459,8 +435,8 @@ const EventDetails = () => {
         toast.success("New task added!");
     };
 
-    const [services, setServices] = useState(event.requestedServices);
-    const [tempServices, setTempServices] = useState(event.requestedServices);
+    const [services, setServices] = useState([]);
+    const [tempServices, setTempServices] = useState([]);
 
     React.useEffect(() => {
         if (!selected || String(selected.eventId || '') !== String(id || '')) return;
@@ -900,74 +876,33 @@ const EventDetails = () => {
         { id: 'vendors', name: 'All Vendors', count: 15, icon: Volume2, color: 'text-teal-600', bg: 'bg-teal-50' }
     ];
 
-    // Mock Participants Data (Extended for the new design)
-    const chatParticipants = [
-        { name: 'David H. (System Admin)', type: 'admin', online: false },
-        { name: 'Elena Wells (Host)', type: 'client', online: true },
-        { name: 'Marcus', role: 'Setup is starting...', type: 'team', online: true },
-        { name: 'Sarah Jenkins', role: 'Lead Planner', type: 'team', online: true },
-        { name: 'Mike Ross', role: 'Logistics', type: 'team', online: true },
-        { name: 'Gourmet Bites', role: 'Catering', type: 'vendor', online: false },
-        { name: 'Crystal Clear AV', role: 'Audio/Visual', type: 'vendor', online: true },
-        { name: 'Luxe Decor', role: 'Decor', type: 'vendor', online: true },
-    ];
+    const chatParticipants = React.useMemo(() => {
+        const rows = [];
+
+        if (selected?.managerProfile?.name) {
+            rows.push({ name: selected.managerProfile.name, type: 'team', online: true });
+        }
+
+        if (event?.client?.name && event.client.name !== '—') {
+            rows.push({ name: event.client.name, type: 'client', online: true });
+        }
+
+        const coordinators = Array.isArray(selected?.coreStaffProfiles) ? selected.coreStaffProfiles : [];
+        coordinators.forEach((staff) => {
+            const name = String(staff?.name || '').trim();
+            if (!name) return;
+            rows.push({ name, role: staff?.assignedRole || 'Coordinator', type: 'team', online: true });
+        });
+
+        return rows;
+    }, [selected?.managerProfile?.name, selected?.coreStaffProfiles, event?.client?.name]);
 
     const admins = chatParticipants.filter(p => p.type === 'admin');
     const clients = chatParticipants.filter(p => p.type === 'client');
     const team = chatParticipants.filter(p => p.type === 'team');
     const vendors = chatParticipants.filter(p => p.type === 'vendor');
 
-    // Initial Messages
-    const [messages, setMessages] = useState([
-        {
-            id: 1,
-            sender: "Priya Sharma",
-            role: "Team",
-            time: "10:30 AM",
-            text: "Hey everyone, catering menu is confirmed with Gourmet Bites! 🍔",
-            channel: 'internal',
-            isBroadcast: false,
-            badge: 'bg-teal-100 text-teal-700',
-            status: 'read',
-            timestamp: 0
-        },
-        {
-            id: 2,
-            sender: "Manager",
-            role: "You",
-            time: "10:30 AM",
-            text: "Attention all vendors: The loading dock schedule for tomorrow has been updated. Please check the Logistics tab for your new 30-minute time slot. All deliveries must be completed by 10 AM.",
-            channel: 'vendors',
-            isBroadcast: true,
-            badge: 'bg-teal-100 text-teal-700',
-            status: 'read',
-            timestamp: 0
-        },
-        {
-            id: 3,
-            sender: "Elena Wells",
-            role: "Client",
-            time: "11:00 AM",
-            text: "Hi! Can we confirm the timeline for the speeches?",
-            channel: 'client',
-            isBroadcast: false,
-            badge: '',
-            status: 'read',
-            timestamp: 0
-        },
-        {
-            id: 4,
-            sender: "You",
-            role: "Vendor",
-            time: "11:05 AM",
-            text: "Absolutely. I'll send over the updated run of show in a moment.",
-            channel: 'client',
-            isBroadcast: false,
-            badge: 'bg-teal-100 text-teal-700',
-            status: 'read',
-            timestamp: 0
-        }
-    ]);
+    const [messages, setMessages] = useState([]);
 
     const handleSend = () => {
         if (!chatInput.trim()) return;
@@ -1059,6 +994,36 @@ const EventDetails = () => {
     const isConfirmedEventStatus = normalizedEventStatus === 'CONFIRMED';
     const isRejectedEventStatus = normalizedEventStatus === 'REJECTED';
     const canShowPostAcceptTabs = isConfirmedEventStatus || normalizedVendorSummaryStatus === 'ACCEPTED';
+
+    const showSkeleton = (selectedStatus === 'loading' || selectedStatus === 'idle') && !selected;
+    if (showSkeleton) {
+        return (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 min-w-0 overflow-x-hidden p-10 pt-28">
+                <div className="animate-pulse space-y-6">
+                    <div className="h-14 rounded-2xl bg-white border border-[#708aa0]/10" />
+                    <div className="h-130 rounded-3xl bg-white border border-[#708aa0]/10" />
+                </div>
+            </div>
+        );
+    }
+
+    if (selectedStatus === 'failed' && !selected) {
+        return (
+            <div className="p-10 pt-28">
+                <div className="bg-white border border-red-100 rounded-3xl p-8">
+                    <h2 className="text-lg font-black text-red-600 mb-2">Unable to load event details</h2>
+                    <p className="text-sm text-[#708aa0] mb-5">The backend request failed. Please retry.</p>
+                    <button
+                        type="button"
+                        onClick={() => dispatch(fetchVendorEventRequestDetails({ eventId: id }))}
+                        className="px-5 py-2.5 rounded-xl bg-[#0b2d49] text-white text-[10px] font-black uppercase tracking-widest"
+                    >
+                        Retry
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 min-w-0 overflow-x-hidden">

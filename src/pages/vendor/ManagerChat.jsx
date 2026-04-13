@@ -5,17 +5,14 @@ import {
 } from 'lucide-react';
 import { toast } from "react-hot-toast";
 import EmojiPicker from 'emoji-picker-react';
-import { chatContacts, chatMessages as initialMessages } from '../../data/chatData';
 
 const ManagerChat = () => {
-    // Current logged in vendor mock ('v1' represents Gourmet Catering in our mock data)
     const currentUserId = 'v1';
 
-    // The active channel should default to manager 'u1' (or 'manager' in the mock) if available
     const [activeChannel, setActiveChannel] = useState('manager');
     const [chatInput, setChatInput] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
-    const [messages, setMessages] = useState(initialMessages);
+    const [messages, setMessages] = useState([]);
         
     // UI states
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -91,13 +88,7 @@ const ManagerChat = () => {
         });
     };
 
-    // Since this is a vendor, we should filter the contact list to relevant parties 
-    // such as the manager and maybe specific other vendors/teams they work closely with.
-    // For this demo, let's include the manager and the client.
-    
-    // Add the manager to the local contacts list for the vendor since the manager isn't explicitly in the chatContacts array as an ID, 
-    // or we can map them.
-    const vendorContacts = [
+    const baseContacts = [
         {
             id: 'manager',
             name: 'Event Manager',
@@ -105,8 +96,11 @@ const ManagerChat = () => {
             type: 'admin',
             online: true,
             lastSeen: 'online'
-        },
-        ...chatContacts.filter(c => c.id !== currentUserId)
+        }
+    ];
+
+    const vendorContacts = [
+        ...baseContacts
     ].filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
     // Get current active chat context

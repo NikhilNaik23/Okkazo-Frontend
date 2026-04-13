@@ -5,23 +5,25 @@ import { toast, Toaster } from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useDispatch } from "react-redux";
-import { myOrganizedEvents } from "../../../data/myEventsData";
-import { promotedCampaigns } from "../../../data/myEventsDashboardData";
 import { fetchMyPlannings, fetchPlanningByEventId } from "../../../store/slices/planningSlice";
 import { fetchMyPromotes } from "../../../store/slices/promoteSlice";
 import { fetchWithAuth } from "../../../utils/apiHandler";
 import { refreshAccessToken } from "../../../store/slices/authSlice";
 import {
-    OrganizedEventCard,
     CampaignCard,
     TicketCard,
-    SavedEventCard,
-    StrategyLeadCard,
-    TabButton
+    SavedEventCard
 } from "../../../components/User/Dashboard";
 
 const MotionDiv = motion.div;
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+const EVENT_FALLBACK_IMAGES = [
+    "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?w=2069&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1519225421980-715cb0215aed?w=2070&auto=format&fit=crop",
+    "https://images.unsplash.com/photo-1469371670807-013ccf25f16a?w=2070&auto=format&fit=crop",
+];
+
+const pickFallbackImage = (idx = 0) => EVENT_FALLBACK_IMAGES[idx % EVENT_FALLBACK_IMAGES.length];
 
 const safeJson = async (response) => {
     try {
@@ -64,32 +66,12 @@ const mapApiTicketToCard = (ticket, idx) => {
         ? ticket.tickets.tiers.map((tier) => `${tier?.name || 'Tier'} x${Number(tier?.noOfTickets || 0)}`).join(', ')
         : 'General Admission';
 
-    const normalizedTicketStatus = String(ticket?.ticketStatus || '').trim().toUpperCase();
-    const isCancelled = normalizedTicketStatus === 'CANCELED' || normalizedTicketStatus === 'CANCELLED';
-
-    const selectedDayRaw = String(ticket?.selectedDay || ticket?.tickets?.selectedDay || '').trim();
-    const parsedSelectedDay = selectedDayRaw ? new Date(`${selectedDayRaw}T00:00:00+05:30`) : null;
-    const selectedDayLabel = parsedSelectedDay && !Number.isNaN(parsedSelectedDay.getTime())
-        ? parsedSelectedDay.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-        : null;
-
-    const cancelledAtRaw = ticket?.cancellation?.cancelledAt ? new Date(ticket.cancellation.cancelledAt) : null;
-    const cancelledAtLabel = cancelledAtRaw && !Number.isNaN(cancelledAtRaw.getTime())
-        ? cancelledAtRaw.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-        : null;
-
     return {
         id: ticket?.ticketId || `ticket-${idx}`,
         title: ticket?.eventTitle || 'Event Ticket',
         location: ticket?.venue?.locationName || 'TBA',
-        image: resolveBannerUrl(ticket?.eventBanner) || myOrganizedEvents?.[idx % (myOrganizedEvents.length || 1)]?.image,
-        statusTag: isCancelled
-            ? `Cancelled${cancelledAtLabel ? ` on ${cancelledAtLabel}` : ''}`
-            : 'Confirmed Guest',
-        statusNote: isCancelled
-            ? (selectedDayLabel ? `Cancelled ticket date: ${selectedDayLabel}` : 'This ticket is cancelled and invalid for entry.')
-            : (selectedDayLabel ? `Ticket date: ${selectedDayLabel}` : ''),
-        ticketStatus: normalizedTicketStatus || 'PENDING',
+        image: resolveBannerUrl(ticket?.eventBanner) || pickFallbackImage(idx),
+        statusTag: 'Confirmed Guest',
         month,
         day,
         tierText,
@@ -153,31 +135,25 @@ const mapPromoteToCampaign = (promote, idx, { promotionFeeMap = {}, pendingOrder
     const eventId = String(promote?.eventId || '').trim();
 
     const statusLabel = (() => {
-        if (statusToken === 'cancelled' || statusToken === 'canceled') return 'Cancelled';
-        if (statusToken === 'closed') return 'Closed';
-        if (statusToken === 'payment-required') return 'Payment Required';
-        if (statusToken === 'manager-unassigned') return 'Pending Review';
-        if (statusToken === 'in-review') return 'Pending Review';
-        if (statusToken === 'live') return 'Live';
-        if (statusToken === 'complete') return 'Complete';
+        if (normalized === 'payment-required') return 'Payment Required';
+        if (normalized === 'manager-unassigned') return 'Pending Review';
+        if (normalized === 'in-review') return 'Pending Review';
+        if (normalized === 'live') return 'Live';
+        if (normalized === 'complete') return 'Complete';
         return raw ? raw.replace(/_/g, ' ') : 'Pending Review';
     })();
 
     const gradient = (() => {
-        if (statusToken === 'cancelled' || statusToken === 'canceled') return 'bg-gradient-to-b from-[#f4ecec]/90 via-[#dca5a5]/35 to-white/90';
-        if (statusToken === 'closed') return 'bg-gradient-to-b from-[#2f4f6d]/75 via-[#7AB2B2]/15 to-white/90';
-        if (statusToken === 'live') return 'bg-gradient-to-b from-[#7AB2B2]/80 via-[#7AB2B2]/20 to-white/90';
-        if (statusToken === 'payment-required') return 'bg-gradient-to-b from-[#EBF4F6]/80 via-[#d7a444]/20 to-white/90';
-        if (statusToken === 'complete') return 'bg-gradient-to-b from-[#2d5c58]/70 via-[#7AB2B2]/10 to-white/90';
+        if (normalized === 'live') return 'bg-gradient-to-b from-[#7AB2B2]/80 via-[#7AB2B2]/20 to-white/90';
+        if (normalized === 'payment-required') return 'bg-gradient-to-b from-[#EBF4F6]/80 via-[#d7a444]/20 to-white/90';
+        if (normalized === 'complete') return 'bg-gradient-to-b from-[#2d5c58]/70 via-[#7AB2B2]/10 to-white/90';
         return 'bg-gradient-to-b from-[#EBF4F6]/80 via-[#7AB2B2]/20 to-white/90';
     })();
 
     const centerText = (() => {
-        if (statusToken === 'payment-required') return 'Locked';
-        if (statusToken === 'complete') return 'Check';
-        if (statusToken === 'closed') return 'Done';
-        if (statusToken === 'cancelled' || statusToken === 'canceled') return 'Stop';
-        if (statusToken === 'live') return 'LIVE';
+        if (normalized === 'payment-required') return 'Locked';
+        if (normalized === 'complete') return 'Check';
+        if (normalized === 'live') return 'LIVE';
         // Keep short text so it fits the circular badge
         return 'Review';
     })();
@@ -190,7 +166,7 @@ const mapPromoteToCampaign = (promote, idx, { promotionFeeMap = {}, pendingOrder
         ? promote.platformFee
         : null;
 
-    const isPayRequired = statusToken === 'payment-required';
+    const isPayRequired = normalized === 'payment-required';
 
     const backendPendingAmount = Number(pendingOrderAmountByEventId[eventId]);
     const fallbackSettlementAmount = computePromoteSettlementInr(promote, promotionFeeMap);
@@ -209,24 +185,20 @@ const mapPromoteToCampaign = (promote, idx, { promotionFeeMap = {}, pendingOrder
         : (hasBackendPendingAmount ? backendPendingAmount : null);
 
     const shownAmount = isPayRequired ? settlementAmount : totalAmount;
-    const revenueLabel = (statusToken === 'cancelled' || statusToken === 'canceled' || statusToken === 'closed')
-        ? 'Event Status'
-        : (isPayRequired ? 'Settlement Fee Due' : 'Total Amount');
-    const revenue = (statusToken === 'cancelled' || statusToken === 'canceled' || statusToken === 'closed')
-        ? (statusToken === 'closed' ? 'Closed' : 'Cancelled')
-        : (shownAmount != null
-            ? `₹${shownAmount.toLocaleString(undefined, {
-                minimumFractionDigits: isPayRequired ? 2 : 0,
-                maximumFractionDigits: isPayRequired ? 2 : 0,
-            })}`
-            : '—');
+    const revenueLabel = isPayRequired ? 'Settlement Fee Due' : 'Total Amount';
+    const revenue = shownAmount != null
+        ? `₹${shownAmount.toLocaleString(undefined, {
+            minimumFractionDigits: isPayRequired ? 2 : 0,
+            maximumFractionDigits: isPayRequired ? 2 : 0,
+        })}`
+        : '—';
 
     return {
         id: eventId || promote?.eventId,
         title: promote?.eventTitle || 'Untitled Campaign',
         subtitle: String(promote?.eventCategory || 'PROMOTION').toUpperCase(),
         status: statusLabel,
-        eventStatus: statusToken,
+        eventStatus: normalized,
         totalAmount,
         platformFee,
         settlementAmount,
@@ -234,7 +206,7 @@ const mapPromoteToCampaign = (promote, idx, { promotionFeeMap = {}, pendingOrder
         revenue,
         centerText,
         gradient,
-        buttonText: statusToken === 'payment-required' ? 'Pay Now' : 'Manage',
+        buttonText: normalized === 'payment-required' ? 'Pay Now' : 'Manage',
         _idx: idx,
     };
 };
@@ -270,15 +242,8 @@ const formatPlanningDate = (planning) => {
 const mapPlanningToCardEvent = (planning, idx) => {
     const isPublic = planning?.category === 'public';
     const rawStatus = String(planning?.status || '').trim().toUpperCase();
-    const refundRequestStatus = String(planning?.refundRequest?.status || '').trim().toUpperCase();
-    const isCancelledStatus = rawStatus === 'CANCELLED' || rawStatus === 'CANCELED';
-    const isRefundedStatus = rawStatus === 'REFUNDED' || refundRequestStatus === 'REFUNDED';
-    const isRefundPending = refundRequestStatus === 'PENDING_REVIEW' || refundRequestStatus === 'APPROVED';
 
     const status = (() => {
-        if (isRefundedStatus) return 'Refunded';
-        if (isCancelledStatus) return 'Canceled';
-        if (isRefundPending) return 'Refund Pending';
         if (rawStatus === 'PAYMENT PENDING' || rawStatus === 'PAYMENT_PENDING') return 'Payment Pending';
         if (rawStatus === 'IMMEDIATE ACTION') return 'Immediate Action';
         if (rawStatus === 'PENDING APPROVAL') return 'Pending Approval';
@@ -291,15 +256,12 @@ const mapPlanningToCardEvent = (planning, idx) => {
         return rawStatus ? rawStatus[0] + rawStatus.slice(1).toLowerCase() : 'Pending Approval';
     })();
 
-    const fallbackImage = myOrganizedEvents?.[idx % (myOrganizedEvents?.length || 1)]?.image;
+    const fallbackImage = pickFallbackImage(idx);
     const image = resolveBannerUrl(planning?.eventBanner) || fallbackImage;
 
     const sold = (() => {
         if (!isPublic) return '';
         if (status === 'Live') return 'Live now';
-        if (status === 'Refunded') return 'Refunded';
-        if (status === 'Canceled') return 'Canceled';
-        if (status === 'Refund Pending') return 'Refund Pending';
         if (status === 'Completed') return 'Completed';
         if (status === 'Pending Approval') return 'In review';
         if (status === 'Immediate Action') return 'Action required';
@@ -326,6 +288,7 @@ const MyEvents = () => {
     const [organizedEvents, setOrganizedEvents] = useState([]);
     const [draftEvents, setDraftEvents] = useState([]);
     const [myTickets, setMyTickets] = useState([]);
+    const [cancellingTicketId, setCancellingTicketId] = useState(null);
     const [savedEvents, setSavedEvents] = useState([]);
     const [campaigns, setCampaigns] = useState([]); // Campaigns state
     const [searchParams] = useSearchParams();
@@ -440,7 +403,7 @@ const MyEvents = () => {
                         .map((p, idx) => mapPlanningToCardEvent(p, idx));
                     setOrganizedEvents(mapped);
                 } else {
-                    setOrganizedEvents(myOrganizedEvents);
+                    setOrganizedEvents([]);
                 }
 
                 const ticketsResponse = await fetchWithAuth(
@@ -508,16 +471,15 @@ const MyEvents = () => {
                         .map((p, idx) => mapPromoteToCampaign(p, idx, { promotionFeeMap, pendingOrderAmountByEventId }));
                     setCampaigns(mapped);
                 } else {
-                    // Fallback to static data if API fails
-                    setCampaigns(promotedCampaigns);
+                    setCampaigns([]);
                 }
 
                 fetchSaved();
             } catch (error) {
                 console.error("Fetch Data Error:", error);
                 toast.error("Failed to load your events");
-                setOrganizedEvents(myOrganizedEvents);
-                setCampaigns(promotedCampaigns);
+                setOrganizedEvents([]);
+                setCampaigns([]);
             } finally {
                 setIsLoading(false);
             }
@@ -584,14 +546,10 @@ const MyEvents = () => {
 
     const nowMs = Date.now();
     const upcomingTickets = filteredTickets.filter((ticket) => {
-        const ticketStatus = String(ticket?.ticketStatus || '').toUpperCase();
-        if (ticketStatus === 'CANCELED' || ticketStatus === 'CANCELLED') return false;
         if (!ticket?.scheduleStartAt) return true;
         return new Date(ticket.scheduleStartAt).getTime() >= nowMs;
     });
     const pastTickets = filteredTickets.filter((ticket) => {
-        const ticketStatus = String(ticket?.ticketStatus || '').toUpperCase();
-        if (ticketStatus === 'CANCELED' || ticketStatus === 'CANCELLED') return true;
         if (!ticket?.scheduleStartAt) return false;
         return new Date(ticket.scheduleStartAt).getTime() < nowMs;
     });
@@ -605,7 +563,42 @@ const MyEvents = () => {
 
     const [activeMenuId, setActiveMenuId] = useState(null);
 
-    // Handle Deleting a Draft (promotedCampaigns is already defined above)
+    const handleCancelTicket = async (ticketId) => {
+        const id = String(ticketId || '').trim();
+        if (!id) return;
+
+        if (ticketTimeline !== 'upcoming') {
+            toast.error('Ticket cancellation is only available for upcoming events.');
+            return;
+        }
+
+        const ok = window.confirm('Cancel this ticket? This action may be irreversible.');
+        if (!ok) return;
+
+        try {
+            setCancellingTicketId(id);
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/tickets/my/${encodeURIComponent(id)}`,
+                { method: 'DELETE' },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+            const data = await safeJson(response);
+
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.message || 'Failed to cancel ticket');
+            }
+
+            setMyTickets((prev) => prev.filter((t) => String(t?.id) !== id));
+            toast.success('Ticket cancelled successfully.');
+        } catch (e) {
+            console.error('Failed to cancel ticket:', e);
+            toast.error(e?.message || 'Failed to cancel ticket');
+        } finally {
+            setCancellingTicketId(null);
+        }
+    };
+
+    // Handle deleting a local draft
     const handleDeleteDraft = (draftId) => {
         try {
             const drafts = JSON.parse(localStorage.getItem('planningWizardDrafts') || '[]');
@@ -732,9 +725,38 @@ const MyEvents = () => {
 
             <main className="max-w-7xl mx-auto w-full px-6 pb-32">
                 {isLoading ? (
-                    <div className="flex flex-col items-center justify-center py-40">
-                        <div className="w-16 h-16 border-4 border-[#09637E] border-t-transparent rounded-full animate-spin mb-6"></div>
-                        <p className="font-bold text-[#09637E]/40 uppercase tracking-widest text-xs animate-pulse">Loading Experience...</p>
+                    <div className="animate-pulse space-y-8 py-2">
+                        <div className="flex flex-col md:flex-row items-end justify-between gap-8 mb-6">
+                            <div className="space-y-3">
+                                <div className="h-12 w-72 bg-white/80 rounded-2xl" />
+                                <div className="h-4 w-80 bg-white/70 rounded-xl" />
+                            </div>
+                            <div className="h-12 w-48 bg-white/80 rounded-xl" />
+                        </div>
+
+                        {activeTab === 'organized' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                {[1, 2, 3, 4, 5, 6].map((item) => (
+                                    <div key={`organized-skeleton-${item}`} className="h-[500px] rounded-[40px] bg-white/80 border border-[#7AB2B2]/15" />
+                                ))}
+                            </div>
+                        )}
+
+                        {activeTab === 'campaigns' && (
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 min-h-[600px]">
+                                {[1, 2, 3, 4, 5, 6, 7, 8].map((item) => (
+                                    <div key={`campaign-skeleton-${item}`} className="h-56 rounded-3xl bg-white/80 border border-[#7AB2B2]/15" />
+                                ))}
+                            </div>
+                        )}
+
+                        {activeTab === 'tickets' && (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-24">
+                                {[1, 2, 3].map((item) => (
+                                    <div key={`ticket-skeleton-${item}`} className="h-64 rounded-3xl bg-white/80 border border-[#7AB2B2]/15" />
+                                ))}
+                            </div>
+                        )}
                     </div>
                 ) : (
                     <AnimatePresence mode="wait">
@@ -855,8 +877,6 @@ const MyEvents = () => {
                                                                     event.status === 'Draft' ? 'bg-gray-100 text-gray-500 border border-gray-200' :
                                                                         event.status === 'Approved' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
                                                                             event.status === 'Rejected' ? 'bg-red-50 text-red-600 border border-red-100' :
-                                                                                event.status === 'Refunded' ? 'bg-slate-100 text-slate-700 border border-slate-200' :
-                                                                                    event.status === 'Canceled' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
                                                                                 'bg-slate-500/50 backdrop-blur-md text-white'
                                                             }`}>
                                                             {event.status === 'Live' && <span className="w-1.5 h-1.5 bg-[#09637E] rounded-full animate-pulse" />}
@@ -1032,7 +1052,7 @@ const MyEvents = () => {
                                                 <FilterDropdown
                                                     label="Status"
                                                     value={campaignFilterStatus}
-                                                    options={["All", "Payment Required", "Pending Review", "Cancelled", "Closed", "Live", "Complete"]}
+                                                    options={["All", "Payment Required", "Pending Review", "Live", "Complete"]}
                                                     onChange={(val) => {
                                                         setCampaignFilterStatus(val);
                                                         setCampaignPage(1); // Reset to first page on filter change
@@ -1120,7 +1140,14 @@ const MyEvents = () => {
                                 {displayedTickets.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-24">
                                         {displayedTickets.map((ticket, idx) => (
-                                            <TicketCard key={ticket.id} ticket={ticket} idx={idx} />
+                                            <TicketCard
+                                                key={ticket.id}
+                                                ticket={ticket}
+                                                idx={idx}
+                                                onCancel={handleCancelTicket}
+                                                canCancel={ticketTimeline === 'upcoming'}
+                                                isCancelling={String(cancellingTicketId) === String(ticket?.id)}
+                                            />
                                         ))}
                                     </div>
                                 ) : (

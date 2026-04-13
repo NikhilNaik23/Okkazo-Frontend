@@ -12,7 +12,6 @@ import {
     BsShieldCheck
 } from "react-icons/bs";
 import { toast } from "react-hot-toast";
-import { vendorProfileData } from "../../data/vendorProfileData.jsx";
 import VendorAvailabilityCalendar from "../../components/Global/VendorAvailabilityCalendar";
 import { useDispatch, useSelector } from "react-redux";
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -34,6 +33,8 @@ import {
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DEFAULT_PROFILE_IMAGE = "https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&q=80&w=400";
+const DEFAULT_BANNER_IMAGE = "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&q=80&w=1600";
 
 const toDayKey = (value) => {
     if (!value) return null;
@@ -75,7 +76,7 @@ const BusinessProfile = () => {
     const vendorEventRequests = useSelector(selectVendorEventRequests);
 
     const [isEditingAbout, setIsEditingAbout] = useState(false);
-    const [tempAbout, setTempAbout] = useState(vendorProfileData.about);
+    const [tempAbout, setTempAbout] = useState("");
     const [isSavingAbout, setIsSavingAbout] = useState(false);
     const [isUploadingImage, setIsUploadingImage] = useState({ profile: false, banner: false });
     const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
@@ -119,10 +120,10 @@ const BusinessProfile = () => {
 
     useEffect(() => {
         if (isEditingAbout) return;
-        setTempAbout(vendorApplication?.description || vendorProfileData.about);
+        setTempAbout(vendorApplication?.description || '');
     }, [isEditingAbout, vendorApplication]);
 
-    const about = vendorApplication?.description ?? vendorProfileData.about;
+    const about = vendorApplication?.description || "Add your business description to build customer trust.";
 
     const approvedYear = useMemo(() => {
         const raw = vendorApplication?.approvedAt;
@@ -173,27 +174,24 @@ const BusinessProfile = () => {
     }, [todayDayKey, vendorEventRequests]);
 
     const stats = useMemo(() => {
-        const base = Array.isArray(vendorProfileData.stats) ? vendorProfileData.stats : [];
-        const getIcon = (index) => base?.[index]?.icon || null;
-
         return [
             {
-                icon: getIcon(0),
+                icon: <BsShieldCheck size={18} />,
                 label: 'Active Since',
                 value: approvedYear != null ? String(approvedYear) : '—',
             },
             {
-                icon: getIcon(1),
+                icon: <BsCheckCircleFill size={18} />,
                 label: 'Events Served',
                 value: bookingStats.eventsServed.toLocaleString(),
             },
             {
-                icon: getIcon(2),
+                icon: <BsGeoAlt size={18} />,
                 label: 'Upcoming Events',
                 value: bookingStats.upcomingEvents.toLocaleString(),
             },
             {
-                icon: getIcon(3),
+                icon: <BsGlobe size={18} />,
                 label: 'Total Events',
                 value: bookingStats.totalEvents.toLocaleString(),
             },
@@ -202,10 +200,14 @@ const BusinessProfile = () => {
 
     const profileImageUrl = vendorApplication?.images?.profile?.fileUrl || null;
     const bannerImageUrl = vendorApplication?.images?.banner?.fileUrl || null;
-    const businessName = vendorApplication?.businessName || vendorProfileData.name;
-    const location = vendorApplication?.location || vendorProfileData.location;
+    const businessName = vendorApplication?.businessName || 'Your Business';
+    const location = vendorApplication?.location || 'Location not set';
     const latitude = vendorApplication?.latitude;
     const longitude = vendorApplication?.longitude;
+    const ratingValue = Number(vendorApplication?.ratingAverage ?? vendorApplication?.rating ?? 0);
+    const reviewsCount = Number(vendorApplication?.reviewCount ?? vendorApplication?.reviewsCount ?? 0);
+    const ratingLabel = Number.isFinite(ratingValue) && ratingValue > 0 ? ratingValue.toFixed(1) : '—';
+    const reviewsLabel = Number.isFinite(reviewsCount) && reviewsCount >= 0 ? reviewsCount.toLocaleString() : '0';
 
     const hasCoords = useMemo(() => {
         const lat = Number(latitude);
@@ -433,6 +435,19 @@ const BusinessProfile = () => {
         }
     };
 
+    if (vendorApplicationLoading && !vendorApplication) {
+        return (
+            <div className="pb-20 animate-pulse space-y-8">
+                <div className="h-10 w-72 rounded-2xl bg-white/80" />
+                <div className="h-80 w-full rounded-[3rem] bg-white/80 border border-[#7AB2B2]/15" />
+                <div className="grid grid-cols-12 gap-8">
+                    <div className="col-span-12 lg:col-span-8 h-[520px] rounded-[3rem] bg-white/80 border border-[#7AB2B2]/15" />
+                    <div className="col-span-12 lg:col-span-4 h-[520px] rounded-[3rem] bg-white/80 border border-[#7AB2B2]/15" />
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
             <div className="mb-10">
@@ -466,7 +481,7 @@ const BusinessProfile = () => {
 
                 <div className="h-80 w-full rounded-[3rem] bg-[#e9eff1] overflow-hidden group border border-white">
                     <img
-                        src={bannerImageUrl || "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&q=80&w=1600"}
+                        src={bannerImageUrl || DEFAULT_BANNER_IMAGE}
                         className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-700"
                         alt="Cover"
                     />
@@ -484,7 +499,7 @@ const BusinessProfile = () => {
                     <div className="relative group">
                         <div className="w-40 h-40 rounded-[2.5rem] bg-linear-to-br from-[#d7a444] to-[#f3ddb1] p-1 shadow-2xl border-4 border-white">
                             <img
-                                src={profileImageUrl || "https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&q=80&w=400"}
+                                src={profileImageUrl || DEFAULT_PROFILE_IMAGE}
                                 className="w-full h-full object-cover rounded-[2.2rem]"
                                 alt="Profile"
                             />
@@ -501,7 +516,7 @@ const BusinessProfile = () => {
                         <h2 className="text-4xl font-black text-[#0b2d49] tracking-tight mb-2">{businessName}</h2>
                         <div className="flex items-center gap-6">
                             <div className="flex items-center gap-2 text-[#d7a444] font-black text-sm">
-                                <BsStarFill /> {vendorProfileData.rating} <span className="text-[#708aa0] font-bold">({vendorProfileData.reviews} reviews)</span>
+                                <BsStarFill /> {ratingLabel} <span className="text-[#708aa0] font-bold">({reviewsLabel} reviews)</span>
                             </div>
                             <div className="flex items-center gap-2 text-[#5a5b44] font-bold text-sm">
                                 <BsGeoAlt className="text-[#708aa0]" /> {location}
