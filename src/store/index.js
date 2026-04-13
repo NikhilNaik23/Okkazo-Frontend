@@ -10,6 +10,7 @@ import managerEventsReducer from './slices/managerEventsSlice';
 import promotionsConfigReducer from './slices/promotionsConfigSlice';
 import dashboardReducer from './slices/dashboardSlice';
 import notificationsReducer from './slices/notificationsSlice';
+import managerRefundsReducer from './slices/managerRefundsSlice';
 
 export const store = configureStore({
     reducer: {
@@ -22,6 +23,7 @@ export const store = configureStore({
         fees: feesReducer,
         promotionsConfig: promotionsConfigReducer,
         managerEvents: managerEventsReducer,
+        managerRefunds: managerRefundsReducer,
         dashboard: dashboardReducer,
         notifications: notificationsReducer,
     },

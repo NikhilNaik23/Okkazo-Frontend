@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { BsArrowLeft, BsCalendarEvent, BsGeoAlt, BsDownload, BsShare, BsClock } from 'react-icons/bs';
-import { motion } from 'framer-motion';
+import { BsArrowLeft, BsCalendarEvent, BsGeoAlt, BsDownload, BsShare, BsClock, BsX } from 'react-icons/bs';
+import { motion, AnimatePresence } from 'framer-motion';
+import toast from 'react-hot-toast';
+import Modal from '../../../components/Global/Modal';
 import { fetchWithAuth } from '../../../utils/apiHandler';
 import { refreshAccessToken } from '../../../store/slices/authSlice';
 
@@ -38,11 +40,91 @@ const formatTimeRange = (startAt, endAt) => {
     return `${startText} - ${endText}`;
 };
 
+const mapTicketForView = (raw) => {
+    const tierLabel = Array.isArray(raw?.tickets?.tiers) && raw.tickets.tiers.length > 0
+        ? raw.tickets.tiers.map((tier) => `${tier.name} x${tier.noOfTickets}`).join(', ')
+        : 'General Admission';
+
+    const qrPayload = raw?.qrToken || raw?.qrPayload || JSON.stringify({
+        ticketId: raw?.ticketId,
+        eventId: raw?.eventId,
+        eventTitle: raw?.eventTitle,
+    });
+
+    return {
+        id: raw?.ticketId,
+        title: raw?.eventTitle || 'Event Ticket',
+        date: formatDate(raw?.schedule?.startAt),
+        time: formatTimeRange(raw?.schedule?.startAt, raw?.schedule?.endAt),
+        location: raw?.venue?.locationName || 'Venue TBA',
+        image: raw?.eventBanner?.url || 'https://images.unsplash.com/photo-1459749411177-3c2ea04d1a52?q=80&w=2070&auto=format&fit=crop',
+        ticketType: tierLabel,
+        price: `₹${Number(raw?.tickets?.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        orderId: raw?.ticketId,
+        attendeeName: 'Ticket Holder',
+        lat: Number(raw?.venue?.latitude),
+        lng: Number(raw?.venue?.longitude),
+        qrPayload,
+        quantity: Number(raw?.tickets?.noOfTickets || 0),
+        ticketStatus: String(raw?.ticketStatus || '').trim().toUpperCase() || 'PENDING',
+        cancellation: raw?.cancellation || null,
+    };
+};
+
 const TicketDetails = () => {
     const dispatch = useDispatch();
     const { id } = useParams();
     const [ticket, setTicket] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [showCancelModal, setShowCancelModal] = useState(false);
+    const [cancelReason, setCancelReason] = useState('');
+    const [isCancelling, setIsCancelling] = useState(false);
+
+    const handleCancelTicket = async () => {
+        if (!ticket?.id || isCancelling) return;
+
+        setIsCancelling(true);
+        try {
+            const response = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/tickets/my/${encodeURIComponent(ticket.id)}/cancel`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        reason: String(cancelReason || '').trim() || 'Cancelled by user',
+                        flags: {
+                            eventCancelled: false,
+                            okkazoFailure: false,
+                        },
+                    }),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.message || 'Failed to cancel ticket');
+            }
+
+            const nextTicket = data?.data?.ticket;
+            if (nextTicket) {
+                setTicket(mapTicketForView(nextTicket));
+            }
+
+            const refundedAmount = Number(data?.data?.refund?.refundAmountInInr || 0);
+            if (refundedAmount > 0) {
+                toast.success(`Ticket cancelled. Refund initiated: ₹${refundedAmount.toFixed(2)}`);
+            } else {
+                toast.success('Ticket cancelled successfully. No refund is applicable for this timeline.');
+            }
+
+            setShowCancelModal(false);
+            setCancelReason('');
+        } catch (error) {
+            toast.error(error?.message || 'Failed to cancel ticket');
+        } finally {
+            setIsCancelling(false);
+        }
+    };
 
     const handleGetDirections = () => {
         if (ticket?.lat && ticket?.lng) {
@@ -75,34 +157,7 @@ const TicketDetails = () => {
             }
 
             const raw = data.data;
-            const tierLabel = Array.isArray(raw?.tickets?.tiers) && raw.tickets.tiers.length > 0
-                ? raw.tickets.tiers.map((tier) => `${tier.name} x${tier.noOfTickets}`).join(', ')
-                : 'General Admission';
-
-            const qrPayload = raw?.qrToken || raw?.qrPayload || JSON.stringify({
-                ticketId: raw?.ticketId,
-                eventId: raw?.eventId,
-                eventTitle: raw?.eventTitle,
-            });
-
-            const normalizedTicket = {
-                id: raw?.ticketId,
-                title: raw?.eventTitle || 'Event Ticket',
-                date: formatDate(raw?.schedule?.startAt),
-                time: formatTimeRange(raw?.schedule?.startAt, raw?.schedule?.endAt),
-                location: raw?.venue?.locationName || 'Venue TBA',
-                image: raw?.eventBanner?.url || 'https://images.unsplash.com/photo-1459749411177-3c2ea04d1a52?q=80&w=2070&auto=format&fit=crop',
-                ticketType: tierLabel,
-                price: `₹${Number(raw?.tickets?.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-                orderId: raw?.ticketId,
-                attendeeName: 'Ticket Holder',
-                lat: Number(raw?.venue?.latitude),
-                lng: Number(raw?.venue?.longitude),
-                qrPayload,
-                quantity: Number(raw?.tickets?.noOfTickets || 0),
-            };
-
-            setTicket(normalizedTicket);
+            setTicket(mapTicketForView(raw));
             setLoading(false);
         };
 
@@ -116,6 +171,7 @@ const TicketDetails = () => {
     const qrUrl = ticket?.qrPayload
         ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(ticket.qrPayload)}`
         : null;
+    const isTicketCancelled = String(ticket?.ticketStatus || '').toUpperCase() === 'CANCELED';
 
     if (loading) {
         return (
@@ -196,14 +252,71 @@ const TicketDetails = () => {
 
                         {/* Floating Action Buttons (Mobile friendly) */}
                         <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4">
-                            <button className="bg-[#09637E] text-white p-4 rounded-full shadow-lg hover:scanale-110 transition-transform hover:shadow-xl group" title="Download Ticket">
+                            <button className="bg-[#09637E] text-white p-4 rounded-full shadow-lg hover:scale-110 transition-transform hover:shadow-xl group" title="Download Ticket">
                                 <BsDownload size={20} className="group-hover:animate-bounce" />
                             </button>
                             <button className="bg-white text-[#09637E] p-4 rounded-full shadow-lg hover:scale-110 transition-transform hover:shadow-xl border border-[#09637E]/10" title="Share Ticket">
                                 <BsShare size={20} />
                             </button>
+                            <button 
+                                disabled={isTicketCancelled}
+                                onClick={() => setShowCancelModal(true)}
+                                className="bg-white text-red-500 p-4 rounded-full shadow-lg hover:scale-110 transition-transform hover:shadow-xl border border-red-100 disabled:opacity-50 disabled:hover:scale-100" 
+                                title={isTicketCancelled ? 'Ticket already cancelled' : 'Cancel Ticket'}
+                            >
+                                <BsX size={20} />
+                            </button>
                         </div>
                     </motion.div>
+
+                    <AnimatePresence>
+                        {showCancelModal && (
+                            <Modal 
+                                isOpen={showCancelModal} 
+                                onClose={() => setShowCancelModal(false)}
+                                title="Cancel Ticket"
+                                showFooter={false}
+                            >
+                                <div className="space-y-4">
+                                    <p className="text-[#09637E]/80">
+                                        Are you sure you want to cancel your ticket for <span className="font-bold text-[#09637E]">{ticket.title}</span>? 
+                                    </p>
+                                    <p className="text-xs text-[#09637E]/60 bg-red-50 p-4 rounded-xl border border-red-100">
+                                        Note: This action is irreversible. Refund involves cancellation fees as per policy.
+                                    </p>
+                                    <div>
+                                        <label className="block text-[11px] font-black uppercase tracking-wider text-[#09637E]/60 mb-2">
+                                            Cancellation Reason
+                                        </label>
+                                        <textarea
+                                            value={cancelReason}
+                                            onChange={(e) => setCancelReason(e.target.value)}
+                                            rows={3}
+                                            maxLength={300}
+                                            className="w-full rounded-xl border border-[#09637E]/20 px-3 py-2 text-sm text-[#09637E] focus:outline-hidden focus:ring-2 focus:ring-[#09637E]/20"
+                                            placeholder="Tell us why you are cancelling"
+                                        />
+                                    </div>
+                                    <div className="flex gap-3 pt-2">
+                                        <button 
+                                            disabled={isCancelling}
+                                            onClick={() => setShowCancelModal(false)}
+                                            className="flex-1 py-3 bg-[#e9eff1] text-[#708aa0] rounded-xl font-bold text-sm hover:bg-gray-200 transition-all disabled:opacity-60"
+                                        >
+                                            Keep Ticket
+                                        </button>
+                                        <button 
+                                            disabled={isCancelling}
+                                            onClick={handleCancelTicket}
+                                            className="flex-1 py-3 bg-red-500 text-white rounded-xl font-bold text-sm hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 disabled:opacity-60"
+                                        >
+                                            {isCancelling ? 'Cancelling...' : 'Confirm Cancel'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </Modal>
+                        )}
+                    </AnimatePresence>
 
                     {/* Right Column: Event Details */}
                     <motion.div

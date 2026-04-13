@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-hot-toast';
 import { useParams, Link } from 'react-router-dom';
-import { BsArrowLeft, BsFileEarmarkPdf, BsDownload, BsCheckCircleFill, BsPersonCheckFill, BsFillChatSquareTextFill, BsGraphUp, BsWallet2, BsThreeDotsVertical, BsSendFill, BsCalendarEvent, BsGeoAlt } from 'react-icons/bs';
+import { BsArrowLeft, BsFileEarmarkPdf, BsDownload, BsCheckCircleFill, BsPersonCheckFill, BsFillChatSquareTextFill, BsGraphUp, BsWallet2, BsThreeDotsVertical, BsSendFill, BsCalendarEvent, BsGeoAlt, BsExclamationTriangle, BsX } from 'react-icons/bs';
 import { useDispatch, useSelector } from 'react-redux';
 import { io as createSocket } from 'socket.io-client';
 import { refreshAccessToken, selectUser } from '../../../store/slices/authSlice';
@@ -31,6 +31,20 @@ const safeJson = async (response) => {
         return {};
     }
 };
+
+const loadRazorpayScript = () =>
+    new Promise((resolve) => {
+        if (window.Razorpay) {
+            resolve(true);
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
+    });
 
 const toManagerBadge = (name) => {
     const text = String(name || '').trim();
@@ -63,6 +77,111 @@ const normalizeGeneratedRevenuePayout = (rawPayout) => {
     };
 };
 
+const toDateLabelValue = (value, fallback = '—') => {
+    if (!value) return fallback;
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return fallback;
+    return dt.toLocaleDateString();
+};
+
+const buildPromoteRoadmap = (promote) => {
+    const eventStatus = String(promote?.eventStatus || '').toUpperCase();
+    const adminDecisionStatus = String(promote?.adminDecision?.status || '').toUpperCase();
+    const refundRequestStatus = String(promote?.refundRequest?.status || '').trim().toUpperCase();
+    const isClosed = eventStatus === 'CLOSED';
+    const isRefundPending = refundRequestStatus === 'PENDING_REVIEW' || refundRequestStatus === 'APPROVED';
+    const isRefundCompleted = refundRequestStatus === 'REFUNDED';
+    const isRejected = adminDecisionStatus === 'REJECTED';
+    const isManagerUnassigned = eventStatus === 'MANAGER_UNASSIGNED';
+    const isInReview = eventStatus === 'IN_REVIEW';
+    const isConfirmed = eventStatus === 'CONFIRMED';
+    const isLive = eventStatus === 'LIVE';
+    const isCompleted = eventStatus === 'COMPLETED' || eventStatus === 'COMPLETE';
+    const isFinal = isLive || isCompleted;
+
+    const trackingStatus = isClosed
+        ? 'Closed'
+        : isRefundCompleted
+        ? 'Refunded'
+        : isRefundPending
+            ? 'Refund Pending'
+            : isRejected
+                ? 'Rejected'
+                : isManagerUnassigned
+                    ? 'Application Received'
+                    : isInReview
+                        ? 'Application in Review'
+                        : isConfirmed
+                            ? 'Confirmed'
+                            : isLive
+                                ? 'Live'
+                                : isCompleted
+                                    ? 'Completed'
+                                    : 'In Progress';
+
+    return {
+        trackingStatus,
+        steps: [
+            {
+                step: 1,
+                label: 'Application Received',
+                status: isManagerUnassigned && !isRejected ? 'in_progress' : 'completed',
+                date: toDateLabelValue(promote?.createdAt),
+            },
+            {
+                step: 2,
+                label: 'Manager Assigned',
+                status: isRejected
+                    ? (promote?.managerAssignment?.assignedAt ? 'completed' : 'pending')
+                    : (isInReview || isConfirmed || isFinal ? 'completed' : 'pending'),
+                date: toDateLabelValue(promote?.managerAssignment?.assignedAt),
+            },
+            {
+                step: 3,
+                label: isRefundPending || isRefundCompleted
+                    ? 'Cancellation Requested'
+                    : (isRejected ? 'Application Rejected' : isConfirmed ? 'Application Approved' : 'Application In Review'),
+                status: isRejected
+                    ? 'rejected'
+                    : (isRefundPending || isRefundCompleted)
+                        ? 'completed'
+                        : (isInReview ? 'in_progress' : (isConfirmed || isFinal ? 'completed' : 'pending')),
+                date: isRejected
+                    ? toDateLabelValue(promote?.adminDecision?.decidedAt)
+                    : (isRefundPending || isRefundCompleted)
+                        ? toDateLabelValue(promote?.refundRequest?.requestedAt || promote?.updatedAt)
+                        : isInReview
+                            ? 'Today'
+                            : toDateLabelValue(promote?.adminDecision?.decidedAt),
+            },
+            {
+                step: 4,
+                label: isClosed
+                    ? 'Closed'
+                    : isRefundCompleted
+                    ? 'Refunded'
+                    : isRefundPending
+                        ? 'Refund Processing'
+                        : (isRejected ? 'Closed' : isCompleted ? 'Completed' : 'Success / Live'),
+                status: isClosed
+                    ? 'completed'
+                    : isRefundCompleted
+                    ? 'completed'
+                    : isRefundPending
+                        ? 'in_progress'
+                        : (isRejected ? 'pending' : isFinal ? 'completed' : 'pending'),
+                date: isClosed
+                    ? toDateLabelValue(promote?.updatedAt)
+                    : isRefundCompleted
+                    ? toDateLabelValue(promote?.refundRequest?.refundedAt || promote?.updatedAt)
+                    : isRefundPending
+                        ? toDateLabelValue(promote?.refundRequest?.managerReviewedAt || promote?.refundRequest?.requestedAt)
+                        : (isRejected ? toDateLabelValue(promote?.adminDecision?.decidedAt) : isFinal ? toDateLabelValue(promote?.updatedAt) : '—'),
+            },
+        ],
+    };
+};
+
 const EventCommandCenter = () => {
     const { id } = useParams();
     const dispatch = useDispatch();
@@ -83,6 +202,9 @@ const EventCommandCenter = () => {
     const [isLoadingCampaign, setIsLoadingCampaign] = useState(true);
     const [campaignLoadError, setCampaignLoadError] = useState('');
     const [reloadTick, setReloadTick] = useState(0);
+    const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+    const [isSubmittingCancelRequest, setIsSubmittingCancelRequest] = useState(false);
+    const [isPayingLiability, setIsPayingLiability] = useState(false);
 
     const decodeJwtPayload = (token) => {
         try {
@@ -113,13 +235,6 @@ const EventCommandCenter = () => {
         authId: null,
     });
 
-    const toDateLabel = (value, fallback = '—') => {
-        if (!value) return fallback;
-        const dt = new Date(value);
-        if (Number.isNaN(dt.getTime())) return fallback;
-        return dt.toLocaleDateString();
-    };
-
     const toDateTimeLabel = (schedule) => {
         const startAt = schedule?.startAt ? new Date(schedule.startAt) : null;
         if (!startAt || Number.isNaN(startAt.getTime())) return '—';
@@ -130,68 +245,6 @@ const EventCommandCenter = () => {
         const normalized = String(status || '').trim();
         if (!normalized) return 'Pending';
         return normalized.replace(/_/g, ' ');
-    };
-
-    const buildRoadmap = (promote) => {
-        const eventStatus = String(promote?.eventStatus || '').toUpperCase();
-        const adminDecisionStatus = String(promote?.adminDecision?.status || '').toUpperCase();
-        const isRejected = adminDecisionStatus === 'REJECTED';
-        const isManagerUnassigned = eventStatus === 'MANAGER_UNASSIGNED';
-        const isInReview = eventStatus === 'IN_REVIEW';
-        const isConfirmed = eventStatus === 'CONFIRMED';
-        const isLive = eventStatus === 'LIVE';
-        const isCompleted = eventStatus === 'COMPLETED' || eventStatus === 'COMPLETE';
-        const isFinal = isLive || isCompleted;
-
-        const trackingStatus = isRejected
-            ? 'Rejected'
-            : isManagerUnassigned
-                ? 'Application Received'
-                : isInReview
-                    ? 'Application in Review'
-                    : isConfirmed
-                        ? 'Confirmed'
-                    : isLive
-                        ? 'Live'
-                        : isCompleted
-                            ? 'Completed'
-                            : 'In Progress';
-
-        return {
-            trackingStatus,
-            steps: [
-                {
-                    step: 1,
-                    label: 'Application Received',
-                    status: isManagerUnassigned && !isRejected ? 'in_progress' : 'completed',
-                    date: toDateLabel(promote?.createdAt),
-                },
-                {
-                    step: 2,
-                    label: 'Manager Assigned',
-                    status: isRejected
-                        ? (promote?.managerAssignment?.assignedAt ? 'completed' : 'pending')
-                        : (isInReview || isConfirmed || isFinal ? 'completed' : 'pending'),
-                    date: toDateLabel(promote?.managerAssignment?.assignedAt),
-                },
-                {
-                    step: 3,
-                    label: isRejected ? 'Application Rejected' : isConfirmed ? 'Application Approved' : 'Application In Review',
-                    status: isRejected ? 'rejected' : isInReview ? 'in_progress' : (isConfirmed || isFinal ? 'completed' : 'pending'),
-                    date: isRejected
-                        ? toDateLabel(promote?.adminDecision?.decidedAt)
-                        : isInReview
-                            ? 'Today'
-                            : toDateLabel(promote?.adminDecision?.decidedAt),
-                },
-                {
-                    step: 4,
-                    label: isRejected ? 'Closed' : isCompleted ? 'Completed' : 'Success / Live',
-                    status: isRejected ? 'pending' : isFinal ? 'completed' : 'pending',
-                    date: isRejected ? toDateLabel(promote?.adminDecision?.decidedAt) : isFinal ? toDateLabel(promote?.updatedAt) : '—',
-                },
-            ],
-        };
     };
 
     useEffect(() => {
@@ -326,7 +379,7 @@ const EventCommandCenter = () => {
                 ? Number(ticketSalesStats.netPnlInr)
                 : (grossRevenueInr - totalFeesInr);
 
-            const roadmapState = buildRoadmap(pr);
+            const roadmapState = buildPromoteRoadmap(pr);
             const displayStatus = String(pr?.adminDecision?.status || '').toUpperCase() === 'REJECTED'
                 ? 'REJECTED'
                 : (pr?.eventStatus || pr?.adminDecision?.status);
@@ -349,6 +402,9 @@ const EventCommandCenter = () => {
                 managerProfile: pr?.managerProfile || null,
                 trackingStatus: roadmapState.trackingStatus,
                 roadmap: roadmapState.steps,
+                refundRequest: pr?.refundRequest && typeof pr.refundRequest === 'object'
+                    ? pr.refundRequest
+                    : null,
                 ticketSalesStats,
                 generatedRevenuePayout: normalizeGeneratedRevenuePayout(pr?.generatedRevenuePayout),
                 documents: Array.isArray(pr?.authenticityProofs)
@@ -419,9 +475,19 @@ const EventCommandCenter = () => {
                 const netPnlInr = Number.isFinite(Number(ticketSalesStats?.netPnlInr))
                     ? Number(ticketSalesStats.netPnlInr)
                     : (grossRevenueInr - totalFeesInr);
+                const roadmapState = buildPromoteRoadmap(pr);
+                const displayStatus = String(pr?.adminDecision?.status || '').toUpperCase() === 'REJECTED'
+                    ? 'REJECTED'
+                    : (pr?.eventStatus || pr?.adminDecision?.status);
 
                 setCampaign((prev) => prev ? {
                     ...prev,
+                    status: toStatusLabel(displayStatus),
+                    trackingStatus: roadmapState.trackingStatus,
+                    roadmap: roadmapState.steps,
+                    refundRequest: pr?.refundRequest && typeof pr.refundRequest === 'object'
+                        ? pr.refundRequest
+                        : prev.refundRequest,
                     ticketSalesStats,
                     revenueGenerated: grossRevenueInr,
                     cost: totalFeesInr,
@@ -688,6 +754,213 @@ const EventCommandCenter = () => {
         };
     }, [conversationId, socketConnected, socketJoined, dispatch]);
 
+    useEffect(() => {
+        const refundStatus = String(campaign?.refundRequest?.status || '').trim().toUpperCase();
+        const eventStatus = String(campaign?.status || '').trim().toUpperCase().replace(/_/g, ' ');
+        const isRefundBlocked = refundStatus === 'PENDING_REVIEW' || refundStatus === 'APPROVED' || refundStatus === 'REFUNDED';
+        const isStatusBlocked = eventStatus === 'CANCELLED' || eventStatus === 'CANCELED' || eventStatus === 'REJECTED';
+
+        if (activeTab === 'manager_sync' && (isRefundBlocked || isStatusBlocked)) {
+            setActiveTab('command_center');
+        }
+    }, [activeTab, campaign?.refundRequest?.status, campaign?.status]);
+
+    const handleSubmitCancellationRefundRequest = async () => {
+        const normalizedEventId = String(campaign?.id || id || '').trim();
+        if (!normalizedEventId) {
+            toast.error('Cancellation refund request is not available for this event.');
+            return;
+        }
+
+        try {
+            setIsSubmittingCancelRequest(true);
+
+            const response = await fetchWithAuth(
+                buildApiUrl(`/api/events/promote/${encodeURIComponent(normalizedEventId)}/refund-request`),
+                {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await safeJson(response);
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.message || 'Unable to submit cancellation request right now');
+            }
+
+            const updatedPromote = data?.data || null;
+            if (updatedPromote && typeof updatedPromote === 'object') {
+                const ticketSalesStats = updatedPromote?.ticketSalesStats && typeof updatedPromote.ticketSalesStats === 'object'
+                    ? updatedPromote.ticketSalesStats
+                    : null;
+                const grossRevenueInr = Number.isFinite(Number(ticketSalesStats?.grossRevenueInr))
+                    ? Number(ticketSalesStats.grossRevenueInr)
+                    : (typeof updatedPromote?.totalAmount === 'number' ? updatedPromote.totalAmount : 0);
+                const totalFeesInr = Number.isFinite(Number(ticketSalesStats?.totalFeesInr))
+                    ? Number(ticketSalesStats.totalFeesInr)
+                    : (typeof updatedPromote?.platformFee === 'number' ? updatedPromote.platformFee : 0);
+                const netPnlInr = Number.isFinite(Number(ticketSalesStats?.netPnlInr))
+                    ? Number(ticketSalesStats.netPnlInr)
+                    : (grossRevenueInr - totalFeesInr);
+                const roadmapState = buildPromoteRoadmap(updatedPromote);
+                const displayStatus = String(updatedPromote?.adminDecision?.status || '').toUpperCase() === 'REJECTED'
+                    ? 'REJECTED'
+                    : (updatedPromote?.eventStatus || updatedPromote?.adminDecision?.status);
+
+                setCampaign((prev) => prev ? {
+                    ...prev,
+                    status: toStatusLabel(displayStatus),
+                    trackingStatus: roadmapState.trackingStatus,
+                    roadmap: roadmapState.steps,
+                    ticketSalesStats: ticketSalesStats || prev.ticketSalesStats,
+                    revenueGenerated: grossRevenueInr,
+                    cost: totalFeesInr,
+                    netPnl: netPnlInr,
+                    refundRequest: updatedPromote?.refundRequest && typeof updatedPromote.refundRequest === 'object'
+                        ? updatedPromote.refundRequest
+                        : prev.refundRequest,
+                } : prev);
+            }
+
+            const responseTimeline = String(updatedPromote?.refundRequest?.result?.timelineLabel || '').trim() || '5-7 working days';
+            toast.success(`Cancellation request submitted. Refund is under review and is typically completed within ${responseTimeline}.`);
+            setIsCancelModalOpen(false);
+        } catch (error) {
+            toast.error(error?.message || 'Unable to submit cancellation request right now');
+        } finally {
+            setIsSubmittingCancelRequest(false);
+        }
+    };
+
+    const handlePayPromoteLiability = async () => {
+        const normalizedEventId = String(campaign?.id || id || '').trim();
+        if (!normalizedEventId) {
+            toast.error('Liability payment is not available for this event.');
+            return;
+        }
+
+        if (liabilityIsPaid) {
+            toast.success('Cancellation liability is already paid.');
+            return;
+        }
+
+        if (liabilityIsNotRequired || liabilityAmountInr <= 0) {
+            toast('No liability is due for this cancelled event.', { icon: 'ℹ️' });
+            return;
+        }
+
+        try {
+            setIsPayingLiability(true);
+
+            const createRes = await fetchWithAuth(
+                buildApiUrl('/api/orders/create'),
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        eventId: normalizedEventId,
+                        orderType: 'PROMOTE EVENT',
+                        amount: Number(liabilityAmountInr.toFixed(2)),
+                        currency: 'INR',
+                        notes: {
+                            source: 'promote-cancellation-liability-recovery',
+                            orderPurpose: 'PROMOTE_LIABILITY_RECOVERY',
+                            liabilityRecovery: true,
+                        },
+                    }),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const createJson = await safeJson(createRes);
+            if (!createRes.ok || !createJson?.success) {
+                throw new Error(createJson?.message || 'Failed to create liability payment order');
+            }
+
+            const orderData = createJson?.data || {};
+            const razorpayOrderId = String(orderData?.razorpayOrderId || '').trim();
+            const keyId = String(orderData?.keyId || '').trim();
+            const amountPaise = Number(orderData?.amount || 0);
+            const currency = String(orderData?.currency || 'INR').trim().toUpperCase();
+
+            if (!razorpayOrderId || !keyId || !Number.isFinite(amountPaise) || amountPaise <= 0) {
+                throw new Error('Invalid payment order response. Please try again.');
+            }
+
+            const sdkLoaded = await loadRazorpayScript();
+            if (!sdkLoaded || !window.Razorpay) {
+                throw new Error('Unable to load Razorpay checkout. Please check your connection and retry.');
+            }
+
+            await new Promise((resolve) => {
+                let settled = false;
+                const settle = () => {
+                    if (settled) return;
+                    settled = true;
+                    resolve();
+                };
+
+                const options = {
+                    key: keyId,
+                    amount: amountPaise,
+                    currency,
+                    name: 'Okkazo',
+                    description: `Cancellation Liability - ${campaign?.title || 'Promote Event'}`,
+                    order_id: razorpayOrderId,
+                    theme: { color: '#09637E' },
+                    modal: {
+                        ondismiss: () => {
+                            toast('Liability payment was cancelled.', { icon: 'ℹ️' });
+                            settle();
+                        },
+                    },
+                    handler: async (response) => {
+                        try {
+                            const verifyRes = await fetchWithAuth(
+                                buildApiUrl('/api/orders/verify'),
+                                {
+                                    method: 'POST',
+                                    body: JSON.stringify({
+                                        eventId: normalizedEventId,
+                                        razorpay_order_id: response?.razorpay_order_id,
+                                        razorpay_payment_id: response?.razorpay_payment_id,
+                                        razorpay_signature: response?.razorpay_signature,
+                                    }),
+                                },
+                                { dispatch, refreshAction: refreshAccessToken }
+                            );
+
+                            const verifyJson = await safeJson(verifyRes);
+                            if (!verifyRes.ok || !verifyJson?.success) {
+                                throw new Error(verifyJson?.message || 'Liability payment verification failed');
+                            }
+
+                            toast.success('Liability paid successfully. Your cancelled event is now financially settled.');
+                            setReloadTick((v) => v + 1);
+                        } catch (error) {
+                            toast.error(error?.message || 'Liability payment verification failed');
+                        } finally {
+                            settle();
+                        }
+                    },
+                };
+
+                const rzp = new window.Razorpay(options);
+                rzp.on('payment.failed', (event) => {
+                    const description = event?.error?.description || event?.error?.reason || 'Liability payment failed. Please retry.';
+                    toast.error(description);
+                    settle();
+                });
+
+                rzp.open();
+            });
+        } catch (error) {
+            toast.error(error?.message || 'Unable to process liability payment right now');
+        } finally {
+            setIsPayingLiability(false);
+        }
+    };
+
     const handleSendMessage = (e) => {
         e.preventDefault();
         if (!chatMessage.trim() || !conversationId) return;
@@ -798,8 +1071,57 @@ const EventCommandCenter = () => {
     const generatedRevenuePayoutTone = generatedRevenuePayoutStatus === 'SUCCESS'
         ? 'text-emerald-600'
         : (generatedRevenuePayoutStatus === 'FAILED' ? 'text-red-500' : 'text-[#09637E]');
+    const refundRequest = campaign?.refundRequest && typeof campaign.refundRequest === 'object'
+        ? campaign.refundRequest
+        : null;
+    const refundRequestStatus = String(refundRequest?.status || '').trim().toUpperCase();
+    const refundTimelineLabel = String(refundRequest?.result?.timelineLabel || '').trim() || '5-7 working days';
+    const isRefundPending = refundRequestStatus === 'PENDING_REVIEW' || refundRequestStatus === 'APPROVED';
+    const isRefundRejected = refundRequestStatus === 'REJECTED';
+    const isRefundCompleted = refundRequestStatus === 'REFUNDED';
+    const isCancellationRequested = Boolean(refundRequest) && !isRefundRejected;
+    const normalizedCampaignStatus = String(campaign?.status || '').toUpperCase().replace(/_/g, ' ').trim();
+    const isRejectedStatus = normalizedCampaignStatus === 'REJECTED';
+    const isCompletedStatus = normalizedCampaignStatus === 'COMPLETED';
+    const isClosedStatus = normalizedCampaignStatus === 'CLOSED';
+    const isCancelledStatus = normalizedCampaignStatus === 'CANCELLED' || normalizedCampaignStatus === 'CANCELED';
+    const isChatDisabledByStatus = isRefundPending || isRefundCompleted || isCancelledStatus || isClosedStatus || isRejectedStatus;
+    const canRequestEventCancellation = !isRejectedStatus
+        && !isCompletedStatus
+        && !isClosedStatus
+        && !isCancelledStatus
+        && !isRefundCompleted
+        && !isCancellationRequested;
+    const showRefundPolicyHint = isRejectedStatus || isRefundPending || isRefundCompleted;
+    const showCancelledState = !isClosedStatus && (isCancelledStatus || isCancellationRequested);
+    const showLiabilityState = isClosedStatus || showCancelledState;
+    const displayStatus = isClosedStatus ? 'Closed' : (showCancelledState ? 'Cancelled' : campaign.status);
+    const displayTrackingStatus = isClosedStatus ? 'Closed' : (showCancelledState ? 'Cancelled' : (campaign.trackingStatus || 'In Progress'));
     const hasAssignedManager = Boolean(campaign.hasAssignedManager);
     const managerIsOnline = String(manager?.status || '').toLowerCase() === 'online';
+    const liabilityRecovery = refundRequest?.liabilityRecovery && typeof refundRequest.liabilityRecovery === 'object'
+        ? refundRequest.liabilityRecovery
+        : null;
+    const liabilityRecoveryStatus = String(liabilityRecovery?.status || '').trim().toUpperCase();
+    const recordedLiabilityInr = Number(liabilityRecovery?.amountPaise || 0) / 100;
+    const fallbackLiabilityInr = Number(campaign?.ticketSalesStats?.totalFeesInr || campaign?.cost || 0);
+    const liabilityAmountInr = showLiabilityState
+        ? (recordedLiabilityInr > 0 ? recordedLiabilityInr : Math.max(0, fallbackLiabilityInr))
+        : 0;
+    const liabilityIsPaid = liabilityRecoveryStatus === 'PAID';
+    const liabilityIsNotRequired = liabilityRecoveryStatus === 'NOT_REQUIRED' || liabilityAmountInr <= 0;
+    const liabilityIsPendingPayment = liabilityRecoveryStatus === 'PENDING_PAYMENT';
+    const liabilityIsFailed = liabilityRecoveryStatus === 'FAILED';
+    const showLiabilityCard = showLiabilityState && !liabilityIsNotRequired;
+    const liabilityStatusLabel = liabilityIsPaid
+        ? 'Paid'
+        : liabilityIsNotRequired
+            ? 'Not required'
+            : liabilityIsPendingPayment
+                ? 'Pending payment'
+                : liabilityIsFailed
+                    ? 'Payment failed'
+                    : 'Awaiting payment';
 
     return (
         <div className="min-h-screen bg-[#EBF4F6] text-[#09637E] font-sans px-8 pb-8 pt-24 md:px-16 md:pb-16 md:pt-28">
@@ -817,9 +1139,9 @@ const EventCommandCenter = () => {
                         </button>
                         <button
                             onClick={() => setActiveTab("manager_sync")}
-                            disabled={!hasAssignedManager}
-                            title={hasAssignedManager ? 'Open manager sync' : 'Manager not assigned yet'}
-                            className={`inline-flex items-center gap-2 px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "manager_sync" ? "bg-[#09637E] text-white shadow-lg" : "bg-white text-[#09637E] hover:bg-[#09637E]/5"} ${!hasAssignedManager ? 'opacity-50 cursor-not-allowed hover:bg-white' : ''}`}
+                            disabled={!hasAssignedManager || isChatDisabledByStatus}
+                            title={!hasAssignedManager ? 'Manager not assigned yet' : (isChatDisabledByStatus ? 'Manager sync is disabled for refunded/cancelled events' : 'Open manager sync')}
+                            className={`inline-flex items-center gap-2 px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "manager_sync" ? "bg-[#09637E] text-white shadow-lg" : "bg-white text-[#09637E] hover:bg-[#09637E]/5"} ${(!hasAssignedManager || isChatDisabledByStatus) ? 'opacity-50 cursor-not-allowed hover:bg-white' : ''}`}
                         >
                             Manager Sync
                             {managerSyncUnreadCount > 0 ? (
@@ -836,7 +1158,7 @@ const EventCommandCenter = () => {
                         {campaign.title}
                     </h1>
                     <span className="px-4 py-2 bg-[#EBF4F6] border border-[#09637E]/20 text-[#09637E] rounded-full text-[10px] font-black uppercase tracking-widest">
-                        {campaign.status}
+                        {displayStatus}
                     </span>
                 </div>
 
@@ -844,12 +1166,71 @@ const EventCommandCenter = () => {
                     <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-500">
                         {/* Roadmap */}
                         <div className="bg-white rounded-[2.5rem] p-12 shadow-sm border border-[#09637E]/5 relative overflow-hidden">
-                            <div className="flex justify-between items-center mb-12">
-                                <h3 className="text-2xl font-serif-premium italic text-[#09637E]">Event Planning Roadmap</h3>
-                                <span className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/60">Tracking Status: {campaign.trackingStatus || 'In Progress'}</span>
+                            <div className="flex justify-between items-start mb-12 gap-4">
+                                <div>
+                                    <h3 className="text-2xl font-serif-premium italic text-[#09637E]">Event Planning Roadmap</h3>
+                                    {showRefundPolicyHint && (
+                                        <Link to="/refund-policy" className="text-[10px] font-bold uppercase tracking-widest text-[#09637E]/50 hover:text-[#09637E] transition-colors">
+                                            Refer Refund Policy details
+                                        </Link>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/60">Tracking Status: {displayTrackingStatus}</span>
+                                    {canRequestEventCancellation && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsCancelModalOpen(true)}
+                                            className="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-100 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all"
+                                        >
+                                            Cancel Event
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="relative">
+                                {isRefundPending && (
+                                    <div className="mb-6 rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs font-semibold text-sky-800">
+                                        Cancellation request received. Refund is pending and will be processed within {refundTimelineLabel}.
+                                    </div>
+                                )}
+
+                                {showLiabilityCard && (
+                                    <div className="mb-6 rounded-2xl border border-amber-100 bg-amber-50 px-5 py-4">
+                                        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 mb-2">
+                                                    Cancellation Liability
+                                                </p>
+                                                <p className="text-sm font-semibold text-amber-900">
+                                                    Liability Amount: ₹{Number(liabilityAmountInr || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                                                </p>
+                                                <p className="text-xs text-amber-800/90 mt-1">
+                                                    Status: <span className="font-bold">{liabilityStatusLabel}</span>
+                                                    {liabilityRecovery?.paymentOrderId ? ` • Ref: ${liabilityRecovery.paymentOrderId}` : ''}
+                                                </p>
+                                                <p className="text-xs text-amber-800/90 mt-2">
+                                                    Your event was cancelled and refunds were processed. Please settle this liability through Razorpay.
+                                                </p>
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                onClick={handlePayPromoteLiability}
+                                                disabled={isPayingLiability || liabilityIsPaid || liabilityIsNotRequired}
+                                                className="shrink-0 px-5 py-3 rounded-xl bg-[#09637E] text-white text-[10px] font-black uppercase tracking-widest hover:bg-[#088395] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                            >
+                                                {liabilityIsPaid
+                                                    ? 'Liability Paid'
+                                                    : liabilityIsNotRequired
+                                                        ? 'No Liability Due'
+                                                        : (isPayingLiability ? 'Opening Razorpay...' : 'Pay via Razorpay')}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Line */}
                                 <div className="absolute top-1/2 left-0 w-full h-0.5 bg-[#09637E]/10 -translate-y-1/2 z-0" />
 
@@ -909,11 +1290,11 @@ const EventCommandCenter = () => {
                                             : 'Your event is waiting for manager assignment. Chat will unlock once a manager is assigned.'}
                                     </p>
                                     <button
-                                        onClick={() => hasAssignedManager && setActiveTab("manager_sync")}
-                                        disabled={!hasAssignedManager}
-                                        className={`w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${hasAssignedManager ? 'bg-white text-[#09637E] hover:bg-[#EBF4F6]' : 'bg-white/70 text-[#09637E]/50 cursor-not-allowed'}`}
+                                        onClick={() => hasAssignedManager && !isChatDisabledByStatus && setActiveTab("manager_sync")}
+                                        disabled={!hasAssignedManager || isChatDisabledByStatus}
+                                        className={`w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors ${hasAssignedManager && !isChatDisabledByStatus ? 'bg-white text-[#09637E] hover:bg-[#EBF4F6]' : 'bg-white/70 text-[#09637E]/50 cursor-not-allowed'}`}
                                     >
-                                        Chat with Manager
+                                        {isChatDisabledByStatus ? 'Manager Sync Disabled' : 'Chat with Manager'}
                                     </button>
                                 </div>
 
@@ -1124,6 +1505,52 @@ const EventCommandCenter = () => {
                                         <BsSendFill size={18} />
                                     </button>
                                 </form>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {isCancelModalOpen && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0b2d49]/40 backdrop-blur-sm">
+                        <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
+                            <div className="p-8">
+                                <div className="flex justify-between items-start mb-6">
+                                    <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                                        <BsExclamationTriangle size={24} />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsCancelModalOpen(false)}
+                                        disabled={isSubmittingCancelRequest}
+                                        className="p-2 text-[#09637E]/30 hover:text-[#09637E] transition-colors disabled:opacity-50"
+                                    >
+                                        <BsX size={24} />
+                                    </button>
+                                </div>
+
+                                <h3 className="text-2xl font-serif-premium text-[#0b2d49] mb-2">Cancel Event?</h3>
+                                <p className="text-sm text-[#09637E]/70 leading-relaxed mb-8">
+                                    Are you sure you want to cancel <span className="font-bold text-[#0b2d49]">&quot;{campaign?.title}&quot;</span>? This action cannot be undone and involves cancellation fees.
+                                </p>
+
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsCancelModalOpen(false)}
+                                        disabled={isSubmittingCancelRequest}
+                                        className="flex-1 px-6 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest bg-[#EBF4F6] text-[#09637E] hover:bg-[#ddeef2] transition-all disabled:opacity-60"
+                                    >
+                                        Keep Event
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSubmitCancellationRefundRequest}
+                                        disabled={isSubmittingCancelRequest}
+                                        className="flex-1 px-6 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest bg-rose-600 text-white hover:bg-rose-700 transition-all disabled:opacity-60"
+                                    >
+                                        {isSubmittingCancelRequest ? 'Submitting...' : 'Confirm Cancel'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

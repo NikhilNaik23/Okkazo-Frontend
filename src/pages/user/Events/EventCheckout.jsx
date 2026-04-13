@@ -217,6 +217,9 @@ const EventCheckout = () => {
                     eventLocation: preparedTicket?.eventLocation,
                     ticketLink: preparedTicket?.checkoutLink,
                     serviceChargePercent: normalizedServiceChargePercent,
+                    baseTicketAmountInInr: Number(subtotal.toFixed(2)),
+                    serviceFeeInInr: Number(serviceFee.toFixed(2)),
+                    platformFeeInInr: Number(processingFee.toFixed(2)),
                     checkoutTotalInInr: payableAmountInInr,
                 },
             }));

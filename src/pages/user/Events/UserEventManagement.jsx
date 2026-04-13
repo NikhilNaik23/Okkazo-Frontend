@@ -10,7 +10,7 @@ import {
 } from '../../../store/slices/planningSlice';
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { BsArrowLeft, BsChatDots, BsCheckCircleFill, BsClock, BsSend, BsFileEarmarkZip, BsDownload, BsCircle, BsTicketPerforated, BsPaperclip, BsThreeDotsVertical, BsStar, BsStarFill } from "react-icons/bs";
+import { BsArrowLeft, BsChatDots, BsCheckCircleFill, BsClock, BsSend, BsFileEarmarkZip, BsDownload, BsCircle, BsTicketPerforated, BsPaperclip, BsThreeDotsVertical, BsStar, BsStarFill, BsExclamationTriangle, BsX } from "react-icons/bs";
 import { myOrganizedEvents } from "../../../data/myEventsData";
 import { toast, Toaster } from "react-hot-toast";
 import { useDispatch, useSelector } from "react-redux";
@@ -181,6 +181,57 @@ const toServiceKey = (value) => {
     return raw;
 };
 
+const mapPlanningToManagedEvent = (planning, fallbackEventId = null) => {
+    const p = planning && typeof planning === 'object' ? planning : {};
+    const selectedServices = Array.isArray(p?.selectedServices) ? p.selectedServices : [];
+    const selectedVendors = Array.isArray(p?.selectedVendors) ? p.selectedVendors : [];
+
+    return {
+        kind: 'PLANNING',
+        id: p?.eventId || fallbackEventId,
+        title: p?.eventTitle || 'Event',
+        location: p?.location?.name || 'Location TBD',
+        image:
+            p?.eventBanner?.url
+            || p?.eventBanner
+            || p?.banner?.url
+            || p?.banner
+            || null,
+        status: String(p?.status || 'PENDING APPROVAL').trim(),
+        listingType: String(p?.category || '').toLowerCase() === 'public' ? 'Public' : 'Private',
+        depositPaid: Boolean(p?.depositPaid || p?.depositPaidAt || p?.depositPaidAmountPaise),
+        depositPaidAmountPaise: Number(p?.depositPaidAmountPaise || 0),
+        depositPaidCurrency: p?.depositPaidCurrency || 'INR',
+        depositPaidAt: p?.depositPaidAt || null,
+        vendorConfirmationPaid: Boolean(p?.vendorConfirmationPaid),
+        vendorConfirmationPaidAmountPaise: Number(p?.vendorConfirmationPaidAmountPaise || 0),
+        remainingPaymentPaid: Boolean(p?.remainingPaymentPaid),
+        remainingPaymentPaidAmountPaise: Number(p?.remainingPaymentPaidAmountPaise || 0),
+        assignedManagerId: p?.assignedManagerId || null,
+        managerProfile: p?.managerProfile || null,
+        guestCount: typeof p?.guestCount === 'number' ? p.guestCount : null,
+        ticketTiers: Array.isArray(p?.tickets?.tiers) ? p.tickets.tiers : [],
+        ticketDayWiseAllocations: Array.isArray(p?.tickets?.dayWiseAllocations) ? p.tickets.dayWiseAllocations : [],
+        eventDescription: typeof p?.eventDescription === 'string' ? p.eventDescription : null,
+        ticketSalesStats: p?.ticketSalesStats && typeof p.ticketSalesStats === 'object'
+            ? p.ticketSalesStats
+            : null,
+        generatedRevenuePayout: normalizeGeneratedRevenuePayout(p?.generatedRevenuePayout),
+        selectedPromotions: (Array.isArray(p?.promotionType) ? p.promotionType : [])
+            .map(normalizePromotionLabel)
+            .filter(Boolean),
+        selectedServices,
+        selectedVendors,
+        vendorSelectionVendors: [],
+        feedback: p?.feedback && typeof p.feedback === 'object'
+            ? p.feedback
+            : { platform: null, vendors: [] },
+        refundRequest: p?.refundRequest && typeof p.refundRequest === 'object'
+            ? p.refundRequest
+            : null,
+    };
+};
+
 const UserEventManagement = () => {
     const { eventId } = useParams();
     const navigate = useNavigate();
@@ -191,6 +242,8 @@ const UserEventManagement = () => {
     const [event, setEvent] = useState(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("overview"); // "overview" (Command Center), "billing" (Bills & Payment), "chat" (Manager Sync)
+    const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+    const [isSubmittingCancelRequest, setIsSubmittingCancelRequest] = useState(false);
     const [chatMessage, setChatMessage] = useState("");
     const [messages, setMessages] = useState([]);
     const [conversationId, setConversationId] = useState(null);
@@ -715,13 +768,6 @@ const UserEventManagement = () => {
     useEffect(() => {
         let cancelled = false;
 
-        const toDisplayStatus = (status) => {
-            const s = String(status || '').trim();
-            if (!s) return '';
-            // Keep original spacing/format if backend already returns a readable status.
-            return s;
-        };
-
         const load = async () => {
             setLoading(true);
             try {
@@ -730,54 +776,12 @@ const UserEventManagement = () => {
                     const result = await dispatch(fetchPlanningByEventId(String(eventId).trim()));
                     if (result.meta?.requestStatus === 'fulfilled' && result.payload) {
                         const p = result.payload;
-                        const selectedServices = Array.isArray(p?.selectedServices) ? p.selectedServices : [];
-                        const selectedVendors = Array.isArray(p?.selectedVendors) ? p.selectedVendors : [];
                         const planningEventId = p?.eventId || eventId;
                         if (planningEventId) {
                             dispatch(fetchPlanningVendorSelectionByEventId(planningEventId));
                         }
 
-                        const mapped = {
-                            kind: 'PLANNING',
-                            id: planningEventId,
-                            title: p?.eventTitle || 'Event',
-                            location: p?.location?.name || 'Location TBD',
-                            image:
-                                p?.eventBanner?.url ||
-                                p?.eventBanner ||
-                                p?.banner?.url ||
-                                p?.banner ||
-                                null,
-                            status: toDisplayStatus(p?.status || 'PENDING APPROVAL'),
-                            listingType: String(p?.category || '').toLowerCase() === 'public' ? 'Public' : 'Private',
-                            depositPaid: Boolean(p?.depositPaid || p?.depositPaidAt || p?.depositPaidAmountPaise),
-                            depositPaidAmountPaise: Number(p?.depositPaidAmountPaise || 0),
-                            depositPaidCurrency: p?.depositPaidCurrency || 'INR',
-                            depositPaidAt: p?.depositPaidAt || null,
-                            vendorConfirmationPaid: Boolean(p?.vendorConfirmationPaid),
-                            vendorConfirmationPaidAmountPaise: Number(p?.vendorConfirmationPaidAmountPaise || 0),
-                            remainingPaymentPaid: Boolean(p?.remainingPaymentPaid),
-                            remainingPaymentPaidAmountPaise: Number(p?.remainingPaymentPaidAmountPaise || 0),
-                            assignedManagerId: p?.assignedManagerId || null,
-                            managerProfile: p?.managerProfile || null,
-                            guestCount: typeof p?.guestCount === 'number' ? p.guestCount : null,
-                            ticketTiers: Array.isArray(p?.tickets?.tiers) ? p.tickets.tiers : [],
-                            ticketDayWiseAllocations: Array.isArray(p?.tickets?.dayWiseAllocations) ? p.tickets.dayWiseAllocations : [],
-                            eventDescription: typeof p?.eventDescription === 'string' ? p.eventDescription : null,
-                            ticketSalesStats: p?.ticketSalesStats && typeof p.ticketSalesStats === 'object'
-                                ? p.ticketSalesStats
-                                : null,
-                            generatedRevenuePayout: normalizeGeneratedRevenuePayout(p?.generatedRevenuePayout),
-                            selectedPromotions: (Array.isArray(p?.promotionType) ? p.promotionType : [])
-                                .map(normalizePromotionLabel)
-                                .filter(Boolean),
-                            selectedServices,
-                            selectedVendors,
-                            vendorSelectionVendors: [],
-                            feedback: p?.feedback && typeof p.feedback === 'object'
-                                ? p.feedback
-                                : { platform: null, vendors: [] },
-                        };
+                        const mapped = mapPlanningToManagedEvent(p, planningEventId);
 
                         if (!cancelled) setEvent(mapped);
                         return;
@@ -795,7 +799,7 @@ const UserEventManagement = () => {
                             title: pr?.eventTitle || 'Event',
                             location: pr?.venue?.locationName || 'Location TBD',
                             image: pr?.eventBanner?.url || null,
-                            status: toDisplayStatus(pr?.adminDecision?.status || pr?.eventStatus || 'PENDING'),
+                            status: String(pr?.adminDecision?.status || pr?.eventStatus || 'PENDING').trim(),
                             listingType: 'Public',
                             assignedManagerId: pr?.assignedManagerId || null,
                             managerProfile: pr?.managerProfile || null,
@@ -807,9 +811,14 @@ const UserEventManagement = () => {
                                 ? pr.ticketSalesStats
                                 : null,
                             generatedRevenuePayout: normalizeGeneratedRevenuePayout(pr?.generatedRevenuePayout),
-                            selectedPromotions: [],
+                            selectedPromotions: (Array.isArray(pr?.promotion) ? pr.promotion : [])
+                                .map(normalizePromotionLabel)
+                                .filter(Boolean),
                             selectedServices: [],
                             selectedVendors: [],
+                            refundRequest: pr?.refundRequest && typeof pr.refundRequest === 'object'
+                                ? pr.refundRequest
+                                : null,
                             feedback: { platform: null, vendors: [] },
                         };
 
@@ -894,13 +903,28 @@ const UserEventManagement = () => {
 
     // Roadmap Status Logic
     const normalizedStatus = String(event?.status || '').toUpperCase().replace(/_/g, ' ').trim();
+    const refundRequest = event?.refundRequest && typeof event.refundRequest === 'object'
+        ? event.refundRequest
+        : null;
+    const refundRequestStatus = String(refundRequest?.status || '').trim().toUpperCase();
+    const refundTimelineLabel = String(refundRequest?.result?.timelineLabel || '').trim() || '5-7 working days';
+    const isRefundPending = refundRequestStatus === 'PENDING_REVIEW' || refundRequestStatus === 'APPROVED';
+    const isRefundRejected = refundRequestStatus === 'REJECTED';
+    const isRefundCompleted = refundRequestStatus === 'REFUNDED';
+    const isCancellationRequested = Boolean(refundRequest) && !isRefundRejected;
     const isPendingApproval = normalizedStatus === 'PENDING APPROVAL' || normalizedStatus === 'PENDING_APPROVAL';
     const isLive = normalizedStatus === 'LIVE';
     const isRejected = normalizedStatus === 'REJECTED';
     const isCompleted = normalizedStatus === 'COMPLETED';
+    const isCancelled = normalizedStatus === 'CANCELLED' || normalizedStatus === 'CANCELED';
+    const isRefundedStatus = normalizedStatus === 'REFUNDED';
     const isConfirmedStatus = normalizedStatus === 'CONFIRMED';
     const isVendorPaymentPending = normalizedStatus === 'VENDOR PAYMENT PENDING';
     const isUserCompletedStatus = isCompleted || isVendorPaymentPending;
+    const isUiLockedStatus = isCompleted || isCancelled || isRefundedStatus || isRefundCompleted;
+    const isBillingDisabled = isUiLockedStatus;
+    const isChatDisabledByStatus = isUiLockedStatus;
+    const isServicesAndVendorsDisabled = isUiLockedStatus;
     const isApproved = normalizedStatus === 'APPROVED';
     const isPrivatePlanningEvent =
         String(event?.kind || '').toUpperCase() === 'PLANNING'
@@ -1534,6 +1558,9 @@ const UserEventManagement = () => {
                                 ? pr.ticketSalesStats
                                 : prev.ticketSalesStats,
                             generatedRevenuePayout: normalizeGeneratedRevenuePayout(pr?.generatedRevenuePayout),
+                            refundRequest: pr?.refundRequest && typeof pr.refundRequest === 'object'
+                                ? pr.refundRequest
+                                : prev.refundRequest,
                         } : prev);
                     }
                 }
@@ -1693,6 +1720,17 @@ const UserEventManagement = () => {
             })
         );
     }, [event?.id, event?.feedback, event?.kind, optedVendorsForFeedback]);
+
+    useEffect(() => {
+        if (activeTab === 'billing' && isBillingDisabled) {
+            setActiveTab('overview');
+            return;
+        }
+
+        if (activeTab === 'chat' && isChatDisabledByStatus) {
+            setActiveTab('overview');
+        }
+    }, [activeTab, isBillingDisabled, isChatDisabledByStatus]);
 
     if (loading) {
         return (
@@ -2063,7 +2101,66 @@ const UserEventManagement = () => {
         });
     };
 
-    const displayStatus = isPendingApproval
+    const handleSubmitCancellationRefundRequest = async () => {
+        const eventKind = String(event?.kind || '').trim().toUpperCase();
+        const normalizedEventId = String(event?.id || eventId || '').trim();
+        if (!normalizedEventId || !['PLANNING', 'PROMOTE'].includes(eventKind)) {
+            toast.error('Cancellation refund requests are not available for this event type.');
+            return;
+        }
+
+        try {
+            setIsSubmittingCancelRequest(true);
+
+            const routeBase = eventKind === 'PROMOTE' ? 'promote' : 'planning';
+
+            const response = await fetchWithAuth(
+                `${EVENTS_API_BASE_URL}/api/events/${routeBase}/${encodeURIComponent(normalizedEventId)}/refund-request`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const data = await response.json().catch(() => null);
+            if (!response.ok || !data?.success) {
+                throw new Error(data?.message || 'Unable to submit cancellation request right now');
+            }
+
+            const updatedEvent = data?.data || null;
+            if (updatedEvent && typeof updatedEvent === 'object') {
+                if (eventKind === 'PLANNING') {
+                    setEvent(mapPlanningToManagedEvent(updatedEvent, normalizedEventId));
+                } else {
+                    setEvent((prev) => prev ? {
+                        ...prev,
+                        status: String(updatedEvent?.adminDecision?.status || updatedEvent?.eventStatus || prev.status || ''),
+                        refundRequest: updatedEvent?.refundRequest && typeof updatedEvent.refundRequest === 'object'
+                            ? updatedEvent.refundRequest
+                            : prev.refundRequest,
+                        ticketSalesStats: updatedEvent?.ticketSalesStats && typeof updatedEvent.ticketSalesStats === 'object'
+                            ? updatedEvent.ticketSalesStats
+                            : prev.ticketSalesStats,
+                    } : prev);
+                }
+            }
+
+            const responseTimeline = String(updatedEvent?.refundRequest?.result?.timelineLabel || '').trim() || refundTimelineLabel;
+            toast.success(`Cancellation request submitted. Refund is under review and is typically completed within ${responseTimeline}.`);
+            setIsCancelModalOpen(false);
+        } catch (error) {
+            toast.error(error?.message || 'Unable to submit cancellation request right now');
+        } finally {
+            setIsSubmittingCancelRequest(false);
+        }
+    };
+
+    const displayStatus = isRefundCompleted
+        ? 'Refunded'
+        : isRefundPending
+            ? 'Refund Pending'
+            : isPendingApproval
         ? 'Pending Approval'
         : isLive
             ? 'Live'
@@ -2093,7 +2190,16 @@ const UserEventManagement = () => {
     const canDirectServiceEdit = !isPromote && !vendorConfirmationPaid && (isApproved || isPendingApproval);
     const canSubmitServiceChangeRequest = !isPromote && (vendorConfirmationPaid || stickyStages.has(normalizedStatus));
     const isServiceEditingLockedStage = normalizedStatus === 'CONFIRMED';
-    const canEditServicesUI = !isServiceEditingLockedStage && (canDirectServiceEdit || canSubmitServiceChangeRequest);
+    const canEditServicesUI = !isServicesAndVendorsDisabled && !isServiceEditingLockedStage && (canDirectServiceEdit || canSubmitServiceChangeRequest);
+    const eventKindForCancellation = String(event?.kind || '').toUpperCase();
+    const canRequestEventCancellation = (
+        (eventKindForCancellation === 'PLANNING' && !isLive)
+        || eventKindForCancellation === 'PROMOTE'
+    )
+        && !isRejected
+        && !isCompleted
+        && !isCancellationRequested;
+    const showRefundPolicyHint = isRejected || isRefundPending || isRefundCompleted;
     const serviceDraftChanged = selectedServicesDraft.length === selectedServices.length
         ? !selectedServicesDraft.every((v, i) => v === selectedServices[i])
         : true;
@@ -2351,7 +2457,7 @@ const UserEventManagement = () => {
         {
             id: 1,
             label: 'Application Received',
-            status: hasManagerAssigned || isLive || isRejected || isUserCompletedStatus ? 'completed' : 'current',
+            status: hasManagerAssigned || isLive || isRejected || isUserCompletedStatus || isCancellationRequested ? 'completed' : 'current',
         },
         {
             id: 2,
@@ -2362,17 +2468,29 @@ const UserEventManagement = () => {
             id: 3,
             label: 'Application in Review',
             status: hasManagerAssigned
-                ? (isPendingApproval ? 'current' : (isLive || isRejected || isUserCompletedStatus) ? 'completed' : 'current')
+                ? (isPendingApproval ? 'current' : (isLive || isRejected || isUserCompletedStatus || isRefundPending || isRefundCompleted) ? 'completed' : 'current')
                 : 'pending',
         },
         {
             id: 4,
-            label: isRejected ? 'Rejected' : isUserCompletedStatus ? 'Completed' : 'Success / Live',
-            status: (isLive || isRejected || isUserCompletedStatus) ? 'completed' : 'pending',
+            label: isRefundPending
+                ? 'Refund Pending'
+                : isRefundCompleted
+                    ? 'Refunded'
+                    : isRejected
+                        ? 'Rejected'
+                        : isUserCompletedStatus
+                            ? 'Completed'
+                            : 'Success / Live',
+            status: isRefundPending
+                ? 'current'
+                : (isRefundCompleted || isLive || isRejected || isUserCompletedStatus)
+                    ? 'completed'
+                    : 'pending',
         },
     ];
 
-    const roadmapProgressWidth = (isLive || isRejected || isUserCompletedStatus)
+    const roadmapProgressWidth = (isRefundPending || isRefundCompleted || isLive || isRejected || isUserCompletedStatus)
         ? '100%'
         : hasManagerAssigned
             ? '66%'
@@ -2412,15 +2530,18 @@ const UserEventManagement = () => {
                         >
                             Command Center
                         </button>
+                        {!isBillingDisabled && (
+                            <button
+                                onClick={() => setActiveTab("billing")}
+                                className={`px-6 py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'billing' ? 'bg-surface text-primary shadow-sm' : 'text-primary/40 hover:text-primary'}`}
+                            >
+                                Bills & Payment
+                            </button>
+                        )}
                         <button
-                            onClick={() => setActiveTab("billing")}
-                            className={`px-6 py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'billing' ? 'bg-surface text-primary shadow-sm' : 'text-primary/40 hover:text-primary'}`}
-                        >
-                            Bills & Payment
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("chat")}
-                            className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${activeTab === 'chat' ? 'bg-surface text-primary shadow-sm' : 'text-primary/40 hover:text-primary'}`}
+                            onClick={() => !isChatDisabledByStatus && setActiveTab("chat")}
+                            disabled={isChatDisabledByStatus}
+                            className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-lg font-bold text-xs uppercase tracking-widest transition-all ${isChatDisabledByStatus ? 'text-primary/25 cursor-not-allowed' : (activeTab === 'chat' ? 'bg-surface text-primary shadow-sm' : 'text-primary/40 hover:text-primary')}`}
                         >
                             Manager Sync
                             {managerSyncUnreadCount > 0 ? (
@@ -2434,7 +2555,7 @@ const UserEventManagement = () => {
 
                 {activeTab === "overview" && (
                     <div className="space-y-8 animate-fade-in-up">
-                        {!isPromote && isApproved && !vendorConfirmationPaid && (
+                        {!isPromote && isApproved && !vendorConfirmationPaid && !isUiLockedStatus && (
                             <div className="bg-white rounded-4xl p-10 shadow-sm border border-primary/5">
                                 <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
                                     <div>
@@ -2835,16 +2956,32 @@ const UserEventManagement = () => {
                             <div className="flex justify-between items-start mb-12">
                                 <div>
                                     <h2 className="text-xl font-serif-premium text-[#0b2d49] mb-1">Event Planning Roadmap</h2>
-                                    {isRejected && (
+                                    {showRefundPolicyHint && (
                                         <Link to="/refund-policy" className="text-[10px] font-bold uppercase tracking-widest text-primary/50 hover:text-primary transition-colors">
                                             Refer Refund Policy details
                                         </Link>
                                     )}
                                 </div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-primary/40">Tracking Status: {displayStatus}</p>
+                                <div className="flex items-center gap-4">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-primary/40">Tracking Status: {displayStatus}</p>
+                                    {canRequestEventCancellation && (
+                                        <button
+                                            onClick={() => setIsCancelModalOpen(true)}
+                                            className="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-100 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all shadow-xs"
+                                        >
+                                            Cancel Event
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="relative z-10">
+                                {isRefundPending && (
+                                    <div className="mb-6 rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs font-semibold text-sky-800">
+                                        Cancellation request received. Refund is pending and will be processed within {refundTimelineLabel}.
+                                    </div>
+                                )}
+
                                 {/* Connecting Line */}
                                 <div className="absolute top-4 left-0 right-0 h-0.5 bg-gray-100 -z-10" />
                                 <div className="absolute top-4 left-0 h-0.5 bg-primary/20 transition-all duration-1000" style={{ width: roadmapProgressWidth }} />
@@ -3017,6 +3154,10 @@ const UserEventManagement = () => {
                                         <h3 className="text-2xl font-serif-premium italic mb-4">
                                             {!hasManagerAssigned
                                                 ? 'Manager Selection'
+                                                : isRefundPending
+                                                    ? 'Refund Under Review'
+                                                    : isRefundCompleted
+                                                        ? 'Refund Completed'
                                                 : isRejected
                                                     ? 'Application Closed'
                                                     : 'Manager Connected'
@@ -3025,6 +3166,10 @@ const UserEventManagement = () => {
                                         <p className="text-xs opacity-80 leading-relaxed max-w-62.5">
                                             {!hasManagerAssigned
                                                 ? "A dedicated manager will be assigned once your event moves forward in the review process."
+                                                : isRefundPending
+                                                    ? `Your cancellation request has been accepted and is currently under refund review. Refund processing usually takes ${refundTimelineLabel}.`
+                                                    : isRefundCompleted
+                                                        ? "Your cancellation refund has been completed successfully."
                                                 : isRejected
                                                     ? "Your application was not approved. A refund has been processed according to our policy."
                                                     : "Your manager is assigned to your event. Sync up for strategy and execution details."
@@ -3033,14 +3178,24 @@ const UserEventManagement = () => {
                                     </div>
 
                                     <button
-                                        onClick={() => hasManagerAssigned && !isRejected && setActiveTab("chat")}
-                                        disabled={!hasManagerAssigned || isRejected}
-                                        className={`mt-8 w-full py-4 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${!hasManagerAssigned || isRejected
+                                        onClick={() => hasManagerAssigned && !isRejected && !isRefundPending && !isRefundCompleted && !isChatDisabledByStatus && setActiveTab("chat")}
+                                        disabled={!hasManagerAssigned || isRejected || isRefundPending || isRefundCompleted || isChatDisabledByStatus}
+                                        className={`mt-8 w-full py-4 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${!hasManagerAssigned || isRejected || isRefundPending || isRefundCompleted || isChatDisabledByStatus
                                             ? 'bg-white/10 text-white/50 cursor-not-allowed'
                                             : 'bg-white text-primary hover:bg-white/90'
                                             }`}
                                     >
-                                        {!hasManagerAssigned ? 'Assignment Pending' : isRejected ? 'Refund Processed' : 'Chat with Manager'}
+                                        {!hasManagerAssigned
+                                            ? 'Assignment Pending'
+                                            : isChatDisabledByStatus
+                                                ? 'Sync Disabled'
+                                            : isRefundPending
+                                                ? 'Refund Pending'
+                                                : isRefundCompleted
+                                                    ? 'Refund Completed'
+                                                    : isRejected
+                                                        ? 'Refund Processed'
+                                                        : 'Chat with Manager'}
                                     </button>
                                 </div>
 
@@ -3146,6 +3301,14 @@ const UserEventManagement = () => {
                                                 </span>
                                             )}
                                         </div>
+
+                                        {isServicesAndVendorsDisabled && (
+                                            <div className="mb-6 rounded-2xl border border-primary/10 bg-surface p-4">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-primary/55">
+                                                    Services & Vendors are disabled for this event status.
+                                                </p>
+                                            </div>
+                                        )}
 
                                         {canEditServicesUI && (
                                             <div className="mb-6 rounded-2xl border border-primary/10 bg-surface p-4 space-y-3">
@@ -3268,7 +3431,7 @@ const UserEventManagement = () => {
                                                         ? (vendorProfile?.businessName || `${String(vendorAuthId).slice(0, 10)}…`)
                                                         : 'Not selected';
                                                     const persistedInSelection = selectedServices.some((s) => toServiceKey(s) === serviceKey);
-                                                    const canOpenPicker = Boolean(planningEventId) && persistedInSelection;
+                                                    const canOpenPicker = !isServicesAndVendorsDisabled && Boolean(planningEventId) && persistedInSelection;
                                                     const pickerState = serviceAlternativesByKey?.[serviceKey] || null;
                                                     const pickerOpen = expandedServicePickerKey === serviceKey;
                                                     const pickerTitle = isVenueService
@@ -3306,7 +3469,7 @@ const UserEventManagement = () => {
                                                                     </p>
                                                                 </div>
                                                                 <div className="flex items-center gap-2 flex-wrap justify-end">
-                                                                    {vendorStatus.key !== 'accepted' && (
+                                                                    {vendorStatus.key !== 'accepted' && !isServicesAndVendorsDisabled && (
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => toggleServiceVendorPicker(key)}
@@ -3336,7 +3499,7 @@ const UserEventManagement = () => {
                                                                 <p className="mt-2 text-[10px] font-bold text-primary/50">{pickerHelp}</p>
                                                             )}
 
-                                                            {vendorStatus.key !== 'accepted' && pickerOpen && canOpenPicker && (
+                                                            {vendorStatus.key !== 'accepted' && !isServicesAndVendorsDisabled && pickerOpen && canOpenPicker && (
                                                                 <div className="mt-3 rounded-2xl border border-primary/10 bg-white p-3 space-y-3">
                                                                     {pickerState?.status === 'loading' && (
                                                                         <p className="text-xs font-medium text-primary/70">Loading options...</p>
@@ -3484,7 +3647,7 @@ const UserEventManagement = () => {
                     </div>
                 )}
 
-                {activeTab === "billing" && (
+                {!isBillingDisabled && activeTab === "billing" && (
                     <div className="space-y-8 animate-fade-in-up">
                         {!canShowBillingDetails ? (
                             <div className="bg-white rounded-4xl p-10 shadow-sm border border-primary/5">
@@ -3615,7 +3778,7 @@ const UserEventManagement = () => {
 
                 {activeTab === "chat" && (
                     <div className="animate-fade-in-up">
-                        {!hasManagerAssigned || isRejected ? (
+                        {!hasManagerAssigned || isRejected || isChatDisabledByStatus ? (
                             <div className="bg-white rounded-4xl shadow-sm border border-primary/5 overflow-hidden flex flex-col h-175">
                                 <div className="flex-1 flex flex-col items-center justify-center p-8 text-center opacity-60">
                                 <div className="w-24 h-24 bg-surface rounded-full flex items-center justify-center mb-8 text-primary">
@@ -3623,7 +3786,9 @@ const UserEventManagement = () => {
                                 </div>
                                 <h3 className="text-2xl font-serif-premium text-[#0b2d49] mb-3">Sync Unavailable</h3>
                                 <p className="text-sm text-primary max-w-sm leading-relaxed">
-                                    {!hasManagerAssigned
+                                    {isChatDisabledByStatus
+                                        ? 'Manager Sync is disabled for completed/cancelled/refunded events.'
+                                        : !hasManagerAssigned
                                         ? 'Manager Sync will be unlocked once a manager is assigned to your event.'
                                         : 'This event is not eligible for Manager Sync.'}
                                 </p>
@@ -3783,6 +3948,49 @@ const UserEventManagement = () => {
                     </div>
                 )}
             </main>
+            {/* Cancel Event Confirmation Modal */}
+            {isCancelModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0b2d49]/40 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-scale-up">
+                        <div className="p-8">
+                            <div className="flex justify-between items-start mb-6">
+                                <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                                    <BsExclamationTriangle size={24} />
+                                </div>
+                                <button
+                                    onClick={() => setIsCancelModalOpen(false)}
+                                    disabled={isSubmittingCancelRequest}
+                                    className="p-2 text-primary/20 hover:text-primary transition-colors disabled:opacity-50"
+                                >
+                                    <BsX size={24} />
+                                </button>
+                            </div>
+
+                            <h3 className="text-2xl font-serif-premium text-[#0b2d49] mb-2">Cancel Event?</h3>
+                            <p className="text-sm text-primary/60 leading-relaxed mb-8">
+                                Are you sure you want to cancel <span className="font-bold text-[#0b2d49]">"{event?.title}"</span>? This action cannot be undone and involves cancellation fees.
+                            </p>
+
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <button
+                                    onClick={() => setIsCancelModalOpen(false)}
+                                    disabled={isSubmittingCancelRequest}
+                                    className="flex-1 px-6 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest bg-surface text-primary hover:bg-surface/80 transition-all disabled:opacity-60"
+                                >
+                                    Keep Event
+                                </button>
+                                <button
+                                    onClick={handleSubmitCancellationRefundRequest}
+                                    disabled={isSubmittingCancelRequest}
+                                    className="flex-1 px-6 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest bg-rose-600 text-white hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 disabled:opacity-60"
+                                >
+                                    {isSubmittingCancelRequest ? 'Submitting...' : 'Confirm Cancel'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
     };

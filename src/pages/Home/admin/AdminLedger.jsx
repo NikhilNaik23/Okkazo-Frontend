@@ -50,7 +50,7 @@ const getTypeIcon = (type) => {
     return <Ticket size={16} className="text-[#28a785]" />;
   }
 
-  if (normalized === 'REFUND') {
+  if (normalized === 'REFUND' || normalized === 'PLANNING_REFUND') {
     return <RotateCcw size={16} className="text-[#f59e0b]" />;
   }
 
@@ -61,10 +61,21 @@ const getTypeIcon = (type) => {
   return <ShieldCheck size={16} className="text-[#3b82f6]" />;
 };
 
+const formatTypeLabel = (type) => {
+  const normalized = String(type || '').trim().toUpperCase();
+  if (!normalized) return '—';
+  if (normalized === 'PLANNING_REFUND') return 'PLANNING_REFUND';
+  return normalized;
+};
+
 const getStatusColor = (status) => {
   const normalized = String(status || '').toUpperCase();
   if (normalized === 'PAID' || normalized === 'COMPLETED') {
     return 'bg-[#ebf7f3] text-[#28a785]';
+  }
+
+  if (normalized === 'REFUNDED') {
+    return 'bg-[#fff7ed] text-[#f97316]';
   }
 
   if (normalized === 'CREATED' || normalized === 'PENDING') {
@@ -383,7 +394,7 @@ const AdminLedger = () => {
                         <div className="p-2 rounded-lg bg-[#f8fafc] border border-[#f0f2f5] group-hover:bg-white transition-colors">
                            {getTypeIcon(txn.type)}
                         </div>
-                        <span className="text-sm font-bold text-[#1a1c1e]">{txn.type}</span>
+                        <span className="text-sm font-bold text-[#1a1c1e]">{formatTypeLabel(txn.type)}</span>
                       </div>
                     </td>
                     <td className="px-8 py-5 text-sm font-bold text-[#1a1c1e]">{txn.vendor || 'System Auto'}</td>

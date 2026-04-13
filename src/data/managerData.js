@@ -5,6 +5,7 @@ import {
   MdBarChart,
   MdChat,
   MdDescription,
+  MdPercent,
   MdPerson,
   MdLogout,
   MdNotifications,
@@ -13,6 +14,8 @@ import {
 export const managerNavItems = [
   { key: "dashboard", label: "Dashboard", icon: MdDashboard },
   { key: "events", label: "Events", icon: MdCalendarMonth },
+  { key: "refund-requests", label: "Refund Requests", icon: MdDescription },
+  { key: "refund-policies", label: "Refund Policies", icon: MdPercent },
   { key: "vendors", label: "Manage Vendors", icon: MdGroup },
   { key: "analytics", label: "View Analytics", icon: MdBarChart },
   { key: "chat", label: "Chat", icon: MdChat },

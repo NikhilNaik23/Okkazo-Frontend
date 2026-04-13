@@ -64,12 +64,32 @@ const mapApiTicketToCard = (ticket, idx) => {
         ? ticket.tickets.tiers.map((tier) => `${tier?.name || 'Tier'} x${Number(tier?.noOfTickets || 0)}`).join(', ')
         : 'General Admission';
 
+    const normalizedTicketStatus = String(ticket?.ticketStatus || '').trim().toUpperCase();
+    const isCancelled = normalizedTicketStatus === 'CANCELED' || normalizedTicketStatus === 'CANCELLED';
+
+    const selectedDayRaw = String(ticket?.selectedDay || ticket?.tickets?.selectedDay || '').trim();
+    const parsedSelectedDay = selectedDayRaw ? new Date(`${selectedDayRaw}T00:00:00+05:30`) : null;
+    const selectedDayLabel = parsedSelectedDay && !Number.isNaN(parsedSelectedDay.getTime())
+        ? parsedSelectedDay.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        : null;
+
+    const cancelledAtRaw = ticket?.cancellation?.cancelledAt ? new Date(ticket.cancellation.cancelledAt) : null;
+    const cancelledAtLabel = cancelledAtRaw && !Number.isNaN(cancelledAtRaw.getTime())
+        ? cancelledAtRaw.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        : null;
+
     return {
         id: ticket?.ticketId || `ticket-${idx}`,
         title: ticket?.eventTitle || 'Event Ticket',
         location: ticket?.venue?.locationName || 'TBA',
         image: resolveBannerUrl(ticket?.eventBanner) || myOrganizedEvents?.[idx % (myOrganizedEvents.length || 1)]?.image,
-        statusTag: 'Confirmed Guest',
+        statusTag: isCancelled
+            ? `Cancelled${cancelledAtLabel ? ` on ${cancelledAtLabel}` : ''}`
+            : 'Confirmed Guest',
+        statusNote: isCancelled
+            ? (selectedDayLabel ? `Cancelled ticket date: ${selectedDayLabel}` : 'This ticket is cancelled and invalid for entry.')
+            : (selectedDayLabel ? `Ticket date: ${selectedDayLabel}` : ''),
+        ticketStatus: normalizedTicketStatus || 'PENDING',
         month,
         day,
         tierText,
@@ -125,28 +145,38 @@ const computePromoteSettlementInr = (promote, promotionFeeMap = {}) => {
 const mapPromoteToCampaign = (promote, idx, { promotionFeeMap = {}, pendingOrderAmountByEventId = {} } = {}) => {
     const raw = String(promote?.eventStatus || '').trim();
     const normalized = normalizePromoteStatus(raw);
+    const refundStatus = String(promote?.refundRequest?.status || '').trim().toUpperCase();
+    const hasCancellationRequest = Boolean(refundStatus) && refundStatus !== 'REJECTED';
+    const isClosedEvent = normalized === 'closed';
+    const statusToken = isClosedEvent ? 'closed' : (hasCancellationRequest ? 'cancelled' : normalized);
     const eventId = String(promote?.eventId || '').trim();
 
     const statusLabel = (() => {
-        if (normalized === 'payment-required') return 'Payment Required';
-        if (normalized === 'manager-unassigned') return 'Pending Review';
-        if (normalized === 'in-review') return 'Pending Review';
-        if (normalized === 'live') return 'Live';
-        if (normalized === 'complete') return 'Complete';
+        if (statusToken === 'cancelled' || statusToken === 'canceled') return 'Cancelled';
+        if (statusToken === 'closed') return 'Closed';
+        if (statusToken === 'payment-required') return 'Payment Required';
+        if (statusToken === 'manager-unassigned') return 'Pending Review';
+        if (statusToken === 'in-review') return 'Pending Review';
+        if (statusToken === 'live') return 'Live';
+        if (statusToken === 'complete') return 'Complete';
         return raw ? raw.replace(/_/g, ' ') : 'Pending Review';
     })();
 
     const gradient = (() => {
-        if (normalized === 'live') return 'bg-gradient-to-b from-[#7AB2B2]/80 via-[#7AB2B2]/20 to-white/90';
-        if (normalized === 'payment-required') return 'bg-gradient-to-b from-[#EBF4F6]/80 via-[#d7a444]/20 to-white/90';
-        if (normalized === 'complete') return 'bg-gradient-to-b from-[#2d5c58]/70 via-[#7AB2B2]/10 to-white/90';
+        if (statusToken === 'cancelled' || statusToken === 'canceled') return 'bg-gradient-to-b from-[#f4ecec]/90 via-[#dca5a5]/35 to-white/90';
+        if (statusToken === 'closed') return 'bg-gradient-to-b from-[#2f4f6d]/75 via-[#7AB2B2]/15 to-white/90';
+        if (statusToken === 'live') return 'bg-gradient-to-b from-[#7AB2B2]/80 via-[#7AB2B2]/20 to-white/90';
+        if (statusToken === 'payment-required') return 'bg-gradient-to-b from-[#EBF4F6]/80 via-[#d7a444]/20 to-white/90';
+        if (statusToken === 'complete') return 'bg-gradient-to-b from-[#2d5c58]/70 via-[#7AB2B2]/10 to-white/90';
         return 'bg-gradient-to-b from-[#EBF4F6]/80 via-[#7AB2B2]/20 to-white/90';
     })();
 
     const centerText = (() => {
-        if (normalized === 'payment-required') return 'Locked';
-        if (normalized === 'complete') return 'Check';
-        if (normalized === 'live') return 'LIVE';
+        if (statusToken === 'payment-required') return 'Locked';
+        if (statusToken === 'complete') return 'Check';
+        if (statusToken === 'closed') return 'Done';
+        if (statusToken === 'cancelled' || statusToken === 'canceled') return 'Stop';
+        if (statusToken === 'live') return 'LIVE';
         // Keep short text so it fits the circular badge
         return 'Review';
     })();
@@ -159,7 +189,7 @@ const mapPromoteToCampaign = (promote, idx, { promotionFeeMap = {}, pendingOrder
         ? promote.platformFee
         : null;
 
-    const isPayRequired = normalized === 'payment-required';
+    const isPayRequired = statusToken === 'payment-required';
 
     const backendPendingAmount = Number(pendingOrderAmountByEventId[eventId]);
     const fallbackSettlementAmount = computePromoteSettlementInr(promote, promotionFeeMap);
@@ -178,20 +208,24 @@ const mapPromoteToCampaign = (promote, idx, { promotionFeeMap = {}, pendingOrder
         : (hasBackendPendingAmount ? backendPendingAmount : null);
 
     const shownAmount = isPayRequired ? settlementAmount : totalAmount;
-    const revenueLabel = isPayRequired ? 'Settlement Fee Due' : 'Total Amount';
-    const revenue = shownAmount != null
-        ? `₹${shownAmount.toLocaleString(undefined, {
-            minimumFractionDigits: isPayRequired ? 2 : 0,
-            maximumFractionDigits: isPayRequired ? 2 : 0,
-        })}`
-        : '—';
+    const revenueLabel = (statusToken === 'cancelled' || statusToken === 'canceled' || statusToken === 'closed')
+        ? 'Event Status'
+        : (isPayRequired ? 'Settlement Fee Due' : 'Total Amount');
+    const revenue = (statusToken === 'cancelled' || statusToken === 'canceled' || statusToken === 'closed')
+        ? (statusToken === 'closed' ? 'Closed' : 'Cancelled')
+        : (shownAmount != null
+            ? `₹${shownAmount.toLocaleString(undefined, {
+                minimumFractionDigits: isPayRequired ? 2 : 0,
+                maximumFractionDigits: isPayRequired ? 2 : 0,
+            })}`
+            : '—');
 
     return {
         id: eventId || promote?.eventId,
         title: promote?.eventTitle || 'Untitled Campaign',
         subtitle: String(promote?.eventCategory || 'PROMOTION').toUpperCase(),
         status: statusLabel,
-        eventStatus: normalized,
+        eventStatus: statusToken,
         totalAmount,
         platformFee,
         settlementAmount,
@@ -199,7 +233,7 @@ const mapPromoteToCampaign = (promote, idx, { promotionFeeMap = {}, pendingOrder
         revenue,
         centerText,
         gradient,
-        buttonText: normalized === 'payment-required' ? 'Pay Now' : 'Manage',
+        buttonText: statusToken === 'payment-required' ? 'Pay Now' : 'Manage',
         _idx: idx,
     };
 };
@@ -235,8 +269,15 @@ const formatPlanningDate = (planning) => {
 const mapPlanningToCardEvent = (planning, idx) => {
     const isPublic = planning?.category === 'public';
     const rawStatus = String(planning?.status || '').trim().toUpperCase();
+    const refundRequestStatus = String(planning?.refundRequest?.status || '').trim().toUpperCase();
+    const isCancelledStatus = rawStatus === 'CANCELLED' || rawStatus === 'CANCELED';
+    const isRefundedStatus = rawStatus === 'REFUNDED' || refundRequestStatus === 'REFUNDED';
+    const isRefundPending = refundRequestStatus === 'PENDING_REVIEW' || refundRequestStatus === 'APPROVED';
 
     const status = (() => {
+        if (isRefundedStatus) return 'Refunded';
+        if (isCancelledStatus) return 'Canceled';
+        if (isRefundPending) return 'Refund Pending';
         if (rawStatus === 'PAYMENT PENDING' || rawStatus === 'PAYMENT_PENDING') return 'Payment Pending';
         if (rawStatus === 'IMMEDIATE ACTION') return 'Immediate Action';
         if (rawStatus === 'PENDING APPROVAL') return 'Pending Approval';
@@ -255,6 +296,9 @@ const mapPlanningToCardEvent = (planning, idx) => {
     const sold = (() => {
         if (!isPublic) return '';
         if (status === 'Live') return 'Live now';
+        if (status === 'Refunded') return 'Refunded';
+        if (status === 'Canceled') return 'Canceled';
+        if (status === 'Refund Pending') return 'Refund Pending';
         if (status === 'Completed') return 'Completed';
         if (status === 'Pending Approval') return 'In review';
         if (status === 'Immediate Action') return 'Action required';
@@ -539,10 +583,14 @@ const MyEvents = () => {
 
     const nowMs = Date.now();
     const upcomingTickets = filteredTickets.filter((ticket) => {
+        const ticketStatus = String(ticket?.ticketStatus || '').toUpperCase();
+        if (ticketStatus === 'CANCELED' || ticketStatus === 'CANCELLED') return false;
         if (!ticket?.scheduleStartAt) return true;
         return new Date(ticket.scheduleStartAt).getTime() >= nowMs;
     });
     const pastTickets = filteredTickets.filter((ticket) => {
+        const ticketStatus = String(ticket?.ticketStatus || '').toUpperCase();
+        if (ticketStatus === 'CANCELED' || ticketStatus === 'CANCELLED') return true;
         if (!ticket?.scheduleStartAt) return false;
         return new Date(ticket.scheduleStartAt).getTime() < nowMs;
     });
@@ -806,6 +854,8 @@ const MyEvents = () => {
                                                                     event.status === 'Draft' ? 'bg-gray-100 text-gray-500 border border-gray-200' :
                                                                         event.status === 'Approved' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
                                                                             event.status === 'Rejected' ? 'bg-red-50 text-red-600 border border-red-100' :
+                                                                                event.status === 'Refunded' ? 'bg-slate-100 text-slate-700 border border-slate-200' :
+                                                                                    event.status === 'Canceled' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
                                                                                 'bg-slate-500/50 backdrop-blur-md text-white'
                                                             }`}>
                                                             {event.status === 'Live' && <span className="w-1.5 h-1.5 bg-[#09637E] rounded-full animate-pulse" />}
@@ -981,7 +1031,7 @@ const MyEvents = () => {
                                                 <FilterDropdown
                                                     label="Status"
                                                     value={campaignFilterStatus}
-                                                    options={["All", "Payment Required", "Pending Review", "Live", "Complete"]}
+                                                    options={["All", "Payment Required", "Pending Review", "Cancelled", "Closed", "Live", "Complete"]}
                                                     onChange={(val) => {
                                                         setCampaignFilterStatus(val);
                                                         setCampaignPage(1); // Reset to first page on filter change
