@@ -6,7 +6,12 @@ import useNotificationFeed from '../../../hooks/useNotificationFeed';
 
 const VendorNotificationSidebar = ({ isOpen, onClose }) => {
     const { grouped, markAllRead } = useNotificationFeed({ enabled: isOpen });
-    const notifications = grouped;
+    const latestNotifications = (Array.isArray(grouped?.all) ? grouped.all : []).slice(0, 10);
+    const notifications = {
+        new: latestNotifications.filter((n) => n.unread),
+        promotions: latestNotifications.filter((n) => !n.unread && n.category === 'PROMOTION'),
+        earlier: latestNotifications.filter((n) => !n.unread && n.category !== 'PROMOTION'),
+    };
 
     const handleMarkAllRead = async () => {
         await markAllRead();

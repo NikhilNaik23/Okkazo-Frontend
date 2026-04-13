@@ -14,6 +14,7 @@ const promotePipelineStages = [
     { id: 'confirmed', label: 'Confirmed' },
     { id: 'live', label: 'Live' },
     { id: 'completed', label: 'Completed' },
+    { id: 'cancelled', label: 'Cancelled' },
 ];
 
 const PROMOTION_BUTTONS = [
@@ -87,6 +88,7 @@ const OverviewTab = ({
                 if (status === 'CONFIRMED') return 'confirmed';
                 if (status === 'LIVE') return 'live';
                 if (status === 'COMPLETED' || status === 'COMPLETE') return 'completed';
+                if (status === 'CANCELLED' || status === 'CANCELED') return 'cancelled';
                 return 'promoting';
             }
 
@@ -472,6 +474,26 @@ const OverviewTab = ({
                                             <p className="font-black text-teal-800">Payable To User</p>
                                             <p className="font-black text-teal-800">{formatInr(generatedRevenuePayout.payoutAmountInr)}</p>
                                         </div>
+                                        {Number(generatedRevenuePayout?.liabilityInr || 0) > 0 ? (
+                                            <div className="flex items-center justify-between px-4 py-3 bg-amber-50">
+                                                <p className="font-black text-amber-800">Creator Liability (Fees To Recover)</p>
+                                                <p className="font-black text-amber-800">{formatInr(generatedRevenuePayout.liabilityInr)}</p>
+                                            </div>
+                                        ) : null}
+                                        {Number(generatedRevenuePayout?.liabilityInr || 0) > 0 ? (
+                                            <div className="flex items-center justify-between px-4 py-3">
+                                                <p className="font-bold text-gray-900">Liability Recovery Status</p>
+                                                <p className="font-black text-gray-900">
+                                                    {String(generatedRevenuePayout?.liabilityRecoveryStatus || 'NOT_REQUIRED').replace(/_/g, ' ')}
+                                                </p>
+                                            </div>
+                                        ) : null}
+                                        {generatedRevenuePayout?.liabilityRecoveryOrderId ? (
+                                            <div className="flex items-center justify-between px-4 py-3 bg-white/60">
+                                                <p className="font-bold text-gray-900">Liability Order Ref</p>
+                                                <p className="font-black text-gray-900">{generatedRevenuePayout.liabilityRecoveryOrderId}</p>
+                                            </div>
+                                        ) : null}
                                         <div className="flex items-center justify-between px-4 py-3">
                                             <p className="font-bold text-gray-900">Already Paid To User</p>
                                             <p className="font-black text-gray-900">{formatInr(generatedRevenuePayout.payoutPaidInr)}</p>

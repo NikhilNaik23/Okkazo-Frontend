@@ -7,6 +7,10 @@ const CampaignCard = ({ camp, onAction }) => {
             {/* Status Pill */}
             <div className="flex justify-start">
                 <span className={`px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-2 shadow-sm ${camp.status?.includes('Live') ? 'bg-emerald-400 text-[#09637E]' :
+                    camp.status?.includes('Cancelled') ? 'bg-rose-100 text-rose-700' :
+                    camp.status?.includes('Closed') ? 'bg-slate-700 text-white' :
+                    camp.status?.includes('Refunded') ? 'bg-slate-200 text-slate-700' :
+                    camp.status?.includes('Refund Pending') ? 'bg-amber-100 text-amber-800' :
                     camp.status?.includes('Complete') ? 'bg-emerald-600 text-white' :
                     camp.status?.includes('Pending') ? 'bg-[#EBF4F6] text-[#09637E]' :
                     camp.status?.includes('Payment') ? 'bg-[#d7a444] text-[#0b2d49]' :
@@ -52,7 +56,7 @@ const CampaignCard = ({ camp, onAction }) => {
                 <div className="flex justify-end items-end">
                     <button
                         onClick={() => (typeof onAction === 'function' ? onAction(camp) : (window.location.href = `/user/promote-event/${camp.id}`))}
-                        className={`px-6 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${camp.status === 'Complete' ? 'bg-[#09637E] text-white hover:bg-[#074d63]' : 'bg-white text-[#09637E] hover:bg-gray-100 shadow-lg'
+                        className={`px-6 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${(camp.status === 'Complete' || camp.status === 'Closed') ? 'bg-[#09637E] text-white hover:bg-[#074d63]' : 'bg-white text-[#09637E] hover:bg-gray-100 shadow-lg'
                             }`}>
                         {camp.buttonText || 'View'}
                     </button>

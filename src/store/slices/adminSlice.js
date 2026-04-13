@@ -672,6 +672,34 @@ export const decidePromoteEventRequest = createAsyncThunk(
     }
 );
 
+export const updatePromoteEventStatusForAdmin = createAsyncThunk(
+    'admin/updatePromoteEventStatusForAdmin',
+    async ({ eventId, eventStatus }, { dispatch, rejectWithValue }) => {
+        try {
+            const accessToken = localStorage.getItem('accessToken');
+            if (!accessToken) return rejectWithValue('No access token found');
+
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/events/promote/${encodeURIComponent(eventId)}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({ eventStatus }),
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) return rejectWithValue(data.message || 'Failed to update promote event status');
+
+            dispatch(fetchAdminEventDashboard());
+            dispatch(fetchPromoteEventRequestById(eventId));
+            return data.data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
 export const assignPromoteEventManager = createAsyncThunk(
     'admin/assignPromoteEventManager',
     async ({ eventId, managerId }, { dispatch, rejectWithValue }) => {

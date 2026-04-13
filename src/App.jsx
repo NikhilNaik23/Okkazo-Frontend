@@ -37,6 +37,8 @@ import ManagerNotifications from "./pages/Home/manager/ManagerNotifications";
 import ManagerReports from "./pages/Home/manager/ManagerReports";
 import ManagerProfile from "./pages/Home/manager/ManagerProfile";
 import ManagerLogout from "./pages/Home/manager/ManagerLogout";
+import ManagerRefundRequests from "./pages/Home/manager/ManagerRefundRequests";
+import ManagerRefundPolicies from "./pages/Home/manager/ManagerRefundPolicies";
 
 import UserLayout from "./components/Layout/user/UserLayout";
 
@@ -71,6 +73,7 @@ import VendorEventBillTab from "./components/Vendor/EventDetails/VendorEventBill
 import AccountSettingsPage from "./pages/vendor/AccountSettings";
 import VendorNotifications from "./pages/vendor/Notifications";
 import Ledger from "./pages/vendor/Ledger";
+import RefundPolicyCenter from "./pages/shared/RefundPolicyCenter";
 
 const App = () => {
   const location = useLocation();
@@ -308,6 +311,15 @@ const App = () => {
             }
           />
 
+          <Route
+            path="/refund-policy"
+            element={
+              <ProtectedRoute allowedRoles={['USER', 'VENDOR', 'ADMIN', 'MANAGER']}>
+                <RefundPolicyCenter />
+              </ProtectedRoute>
+            }
+          />
+
 
           {/* Admin Routes - Only for ADMIN role */}
           <Route
@@ -334,6 +346,8 @@ const App = () => {
             <Route path="events" element={<ManagerEvents />} />
             <Route path="events/:id" element={<ManagerEventDetails />} />
             <Route path="event/:id" element={<ManagerEventDetails />} />
+            <Route path="refund-requests" element={<ManagerRefundRequests />} />
+            <Route path="refund-policies" element={<ManagerRefundPolicies />} />
             <Route path="vendors" element={<ManagerVendors />} />
             <Route path="analytics" element={<ManagerAnalytics />} />
             <Route path="chat" element={<ManagerChatPage />} />

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { useParams } from 'react-router-dom';
-import { Search, Filter, Download, Bell, Check, CheckCircle, AlertCircle, Loader2, X } from 'lucide-react';
+import { Search, Filter, Download, Bell, Check, CheckCircle, AlertCircle, Loader2, X, RotateCcw } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { Badge } from '../ui';
 import { fetchWithAuth } from '../../../../utils/apiHandler';
@@ -90,6 +90,9 @@ const GuestsTab = ({
     eventTitle = 'Event',
     triggerExportSignal = 0,
     triggerNotifySignal = 0,
+    cancellationOpsState = null,
+    canRunCancellationFallback = false,
+    onCancellationOpsUpdated = null,
 }) => {
     const dispatch = useDispatch();
     const { id: eventId } = useParams();
@@ -104,11 +107,16 @@ const GuestsTab = ({
     const [exporting, setExporting] = useState(false);
     const [notifyModalOpen, setNotifyModalOpen] = useState(false);
     const [notifySubmitting, setNotifySubmitting] = useState(false);
+    const [runningCancellationOps, setRunningCancellationOps] = useState(false);
     const [notifyForm, setNotifyForm] = useState({
         title: `Update for ${String(eventTitle || '').trim() || 'your event'}`,
         message: '',
         actionUrl: '',
     });
+
+    const cancellationOpsStatus = String(cancellationOpsState?.status || '').trim().toUpperCase();
+    const cancellationOpsError = String(cancellationOpsState?.error || '').trim() || null;
+    const cancellationOpsCompleted = cancellationOpsStatus === 'COMPLETED';
 
     useEffect(() => {
         setNotifyForm((prev) => ({
@@ -304,6 +312,49 @@ const GuestsTab = ({
         }
     };
 
+    const handleRunCancellationFallback = async () => {
+        if (!eventId || !canRunCancellationFallback || cancellationOpsCompleted) return;
+
+        setRunningCancellationOps(true);
+        try {
+            const res = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(eventId))}/refund-request/cancellation-ops`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const json = await safeJson(res);
+            if (!res.ok || !json?.success) {
+                throw new Error(json?.message || 'Failed to run cancellation fallback operations');
+            }
+
+            const updatedPlanning = json?.data || null;
+            if (updatedPlanning && typeof onCancellationOpsUpdated === 'function') {
+                onCancellationOpsUpdated(updatedPlanning);
+            }
+
+            const details = updatedPlanning?.refundRequest?.cancellationOps?.details || {};
+            const refundedCount = Number(details?.bulkGuestTicketRefund?.refundedCount || 0);
+            const failedRefunds = Number(details?.bulkGuestTicketRefund?.failedCount || 0);
+            const notified = Number(details?.notifications?.delivered || 0);
+
+            if (json?.alreadyCompleted) {
+                toast.success('Cancellation guest operations were already completed.');
+            } else if (failedRefunds > 0) {
+                toast.success(`Fallback executed. Refunded ${refundedCount} orders, ${failedRefunds} refunds failed, notified ${notified} guests.`);
+            } else {
+                toast.success(`Fallback executed successfully. Refunded ${refundedCount} orders and notified ${notified} guests.`);
+            }
+        } catch (error) {
+            toast.error(error?.message || 'Failed to run cancellation fallback operations');
+        } finally {
+            setRunningCancellationOps(false);
+        }
+    };
+
     useEffect(() => {
         if (!triggerExportSignal) return;
         handleExportGuests();
@@ -362,8 +413,29 @@ const GuestsTab = ({
                             <Bell className="w-4 h-4" /> Notify Guests
                         </button>
                     ) : null}
+                    {canRunCancellationFallback ? (
+                        <button
+                            onClick={handleRunCancellationFallback}
+                            disabled={runningCancellationOps || loading || cancellationOpsCompleted}
+                            title={cancellationOpsCompleted
+                                ? 'Automatic/manual cancellation operations already completed'
+                                : 'Manual fallback for cancellation notifications/emails/refunds'}
+                            className="px-4 py-2.5 bg-amber-600 text-white rounded-xl text-sm font-bold hover:bg-amber-700 shadow-lg shadow-amber-900/20 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                            <RotateCcw className="w-4 h-4" />
+                            {runningCancellationOps ? 'Running...' : cancellationOpsCompleted ? 'Guest Cancel Ops Done' : 'Run Cancel Guest Ops'}
+                        </button>
+                    ) : null}
                 </div>
             </div>
+
+            {canRunCancellationFallback && (cancellationOpsStatus || cancellationOpsError) ? (
+                <div className="px-4 py-3 border-b border-gray-100 bg-amber-50/50 text-xs text-amber-900">
+                    <span className="font-bold uppercase tracking-wider mr-2">Cancellation Ops:</span>
+                    <span className="font-semibold">{cancellationOpsStatus || 'UNKNOWN'}</span>
+                    {cancellationOpsError ? <span className="ml-2 text-rose-700">{cancellationOpsError}</span> : null}
+                </div>
+            ) : null}
 
             {/* Data Grid */}
             <div className="overflow-x-auto">

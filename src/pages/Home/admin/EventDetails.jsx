@@ -40,6 +40,7 @@ import {
     fetchEventVendorAlternatives,
     fetchEventVendorSelection,
     fetchUnavailableEventManagers,
+    updatePromoteEventStatusForAdmin,
     unassignPlanningEventManager,
     unassignPromoteEventManager,
 } from "../../../store/slices/adminSlice";
@@ -303,6 +304,28 @@ const EventDetails = () => {
             .catch((err) => {
                 toast.error(err || 'Failed to reject event');
             });
+  };
+
+  const handleMarkAsClosed = () => {
+      if (selectedEventRequestType === 'PLANNING') return;
+
+      toast.dismiss();
+      dispatch(updatePromoteEventStatusForAdmin({ eventId: id, eventStatus: 'CLOSED' }))
+          .unwrap()
+          .then(() => {
+              setCurrentStatus('VERIFIED');
+              toast.success('Event has been marked as closed.', {
+                  style: {
+                      borderRadius: '12px',
+                      background: '#0b2d49',
+                      color: '#fff',
+                      fontWeight: '600',
+                  },
+              });
+          })
+          .catch((err) => {
+              toast.error(err || 'Failed to mark event as closed');
+          });
   };
 
     const eventData = eventDetailsData;
@@ -811,6 +834,13 @@ const EventDetails = () => {
         selectedEventRequest?.adminDecision?.status,
     ]);
 
+    const promoteLifecycleStatusToken = useMemo(
+        () => String(selectedEventRequest?.eventStatus || selectedEventRequest?.status || '').trim().toUpperCase().replace(/[\s-]+/g, '_'),
+        [selectedEventRequest?.eventStatus, selectedEventRequest?.status]
+    );
+    const showMarkAsClosedAction = selectedEventRequestType !== 'PLANNING'
+        && ['CANCELLED', 'CANCELED'].includes(promoteLifecycleStatusToken);
+
     const iconForService = (serviceName) => {
         const key = String(serviceName || '').trim().toLowerCase();
         if (key.includes('cater')) return Utensils;
@@ -923,7 +953,15 @@ const EventDetails = () => {
                        </div>
                    )}
                    
-                   {selectedEventRequestType !== 'PLANNING' && currentStatus === "PENDING" && (
+                   {showMarkAsClosedAction ? (
+                       <button
+                           onClick={handleMarkAsClosed}
+                           className="flex items-center gap-2 px-5 py-2.5 bg-[#0b2d49] text-white font-semibold rounded-xl hover:bg-[#0b2d49]/90 transition-colors shadow-lg shadow-[#0b2d49]/20"
+                       >
+                           <CheckCircle size={18} />
+                           Mark as Closed
+                       </button>
+                   ) : (selectedEventRequestType !== 'PLANNING' && currentStatus === "PENDING") && (
                        <>
                            <button 
                                onClick={handleReject}

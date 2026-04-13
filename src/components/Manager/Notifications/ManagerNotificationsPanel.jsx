@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
 import { BsCheck2All, BsX } from "react-icons/bs";
 import { motion, AnimatePresence } from "framer-motion";
@@ -6,12 +6,11 @@ import { toast } from "react-hot-toast";
 import useNotificationFeed from "../../../hooks/useNotificationFeed";
 
 const ManagerNotificationsPanel = ({ isOpen, onClose }) => {
-    const [visibleCount, setVisibleCount] = useState(5);
     const { grouped, markAllRead } = useNotificationFeed({ enabled: isOpen });
 
-    const allPastItems = [...grouped.earlier, ...grouped.promotions];
-    const filteredNew = grouped.new;
-    const filteredPast = allPastItems;
+    const latestNotifications = (Array.isArray(grouped?.all) ? grouped.all : []).slice(0, 10);
+    const filteredNew = latestNotifications.filter((n) => n.unread);
+    const filteredPast = latestNotifications.filter((n) => !n.unread);
 
     const handleMarkAllRead = async () => {
         await markAllRead();
@@ -96,7 +95,7 @@ const ManagerNotificationsPanel = ({ isOpen, onClose }) => {
                                             <div className="w-full h-[1px] bg-teal-900/5"></div>
                                         </div>
                                         <div className="space-y-3">
-                                            {filteredPast.slice(0, visibleCount).map((n) => (
+                                            {filteredPast.map((n) => (
                                                 <div 
                                                     key={n.id} 
                                                     className="p-4 rounded-xl hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-all cursor-pointer flex gap-4"

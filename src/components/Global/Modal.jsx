@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { BsX } from 'react-icons/bs';
 
-const Modal = ({ isOpen, onClose, title, children, confirmText = "I Understand" }) => {
+const Modal = ({ isOpen, onClose, title, children, confirmText = "I Understand", showFooter = true }) => {
     const modalRef = useRef(null);
 
     useEffect(() => {
@@ -53,14 +53,16 @@ const Modal = ({ isOpen, onClose, title, children, confirmText = "I Understand" 
                     {children}
                 </div>
                 {/* Modal Footer */}
-                <div className="p-5 border-t border-[#e9eff1] bg-[#e9eff1]/30">
-                    <button
-                        onClick={onClose}
-                        className="w-full py-3 bg-gradient-to-r from-[#09637E] to-[#088395] text-white rounded-xl font-bold text-sm hover:from-[#088395] hover:to-[#09637E] transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-                    >
-                        {confirmText}
-                    </button>
-                </div>
+                {showFooter && (
+                    <div className="p-5 border-t border-[#e9eff1] bg-[#e9eff1]/30">
+                        <button
+                            onClick={onClose}
+                            className="w-full py-3 bg-gradient-to-r from-[#09637E] to-[#088395] text-white rounded-xl font-bold text-sm hover:from-[#088395] hover:to-[#09637E] transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                            {confirmText}
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

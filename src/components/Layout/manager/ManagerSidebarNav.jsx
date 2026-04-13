@@ -19,6 +19,12 @@ const EVENTS_BLOCKED_ASSIGNED_ROLES = new Set([
   "REVENUE OPERATIONS SPECIALISTS",
   "REVENUE OPERATION SPECIALISTS",
 ]);
+const REFUND_ALLOWED_ASSIGNED_ROLES = new Set([
+  "REVENUE OPERATIONS SPECIALIST",
+  "REVENUE OPERATION SPECIALIST",
+  "REVENUE OPERATIONS SPECIALISTS",
+  "REVENUE OPERATION SPECIALISTS",
+]);
 
 const normalizeDepartment = (value) => String(value || '').trim().toUpperCase().replace(/[_-]/g, ' ');
 const normalizeAssignedRole = (value) => String(value || '').trim().toUpperCase().replace(/[_-]/g, ' ').replace(/\s+/g, ' ');
@@ -120,6 +126,13 @@ const ManagerSidebarNav = ({ onToggleNotifications }) => {
     return !EVENTS_BLOCKED_ASSIGNED_ROLES.has(assignedRole);
   }, [user?.assignedRole]);
 
+  const canViewRefundRequests = useMemo(() => {
+    const assignedRole = normalizeAssignedRole(user?.assignedRole);
+    return REFUND_ALLOWED_ASSIGNED_ROLES.has(assignedRole);
+  }, [user?.assignedRole]);
+
+  const canViewRefundPolicies = canViewRefundRequests;
+
   useEffect(() => {
     if (!canViewAnalytics && location.pathname.includes('/manager/analytics')) {
       navigate('/manager/dashboard', { replace: true });
@@ -142,12 +155,32 @@ const ManagerSidebarNav = ({ onToggleNotifications }) => {
     }
   }, [canViewEvents, location.pathname, navigate]);
 
+  useEffect(() => {
+    const onRefundRoute =
+      location.pathname === '/manager/refund-requests'
+      || location.pathname.startsWith('/manager/refund-requests/');
+    if (!canViewRefundRequests && onRefundRoute) {
+      navigate('/manager/dashboard', { replace: true });
+    }
+  }, [canViewRefundRequests, location.pathname, navigate]);
+
+  useEffect(() => {
+    const onRefundPoliciesRoute =
+      location.pathname === '/manager/refund-policies'
+      || location.pathname.startsWith('/manager/refund-policies/');
+    if (!canViewRefundPolicies && onRefundPoliciesRoute) {
+      navigate('/manager/dashboard', { replace: true });
+    }
+  }, [canViewRefundPolicies, location.pathname, navigate]);
+
   const navItems = useMemo(
     () => NAV_ITEMS
       .filter((item) => item.key !== 'analytics' || canViewAnalytics)
       .filter((item) => item.key !== 'events' || canViewEvents)
+      .filter((item) => item.key !== 'refund-requests' || canViewRefundRequests)
+      .filter((item) => item.key !== 'refund-policies' || canViewRefundPolicies)
       .filter((item) => item.key !== 'reports' || canViewReports),
-    [canViewAnalytics, canViewEvents, canViewReports]
+    [canViewAnalytics, canViewEvents, canViewRefundRequests, canViewRefundPolicies, canViewReports]
   );
 
   const enrichItems = (items) =>

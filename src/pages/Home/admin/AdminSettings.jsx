@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { fetchWithAuth } from "../../../utils/apiHandler";
 import { refreshAccessToken } from "../../../store/slices/authSlice";
+import RefundPolicyEditorCard from "../../../components/Refunds/RefundPolicyEditorCard";
 
 const STORAGE_KEY = 'okkazo.admin.settings.v1';
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
@@ -603,6 +604,13 @@ const AdminSettings = () => {
                                 />
                             ))}
                         </div>
+                    </section>
+
+                    <section>
+                        <RefundPolicyEditorCard
+                            title="Planning Refund Deduction Policy"
+                            subtitle="Admins and Revenue Operations specialists can update deduction percentages and timeline labels in real time."
+                        />
                     </section>
                     
                     <section className="bg-gradient-to-br from-[#0b2d49] to-[#1a4b70] rounded-[32px] p-8 text-white relative overflow-hidden shadow-2xl">

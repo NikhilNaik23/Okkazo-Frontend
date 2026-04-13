@@ -156,7 +156,9 @@ const ManagerEventDetails = () => {
     const [guestCount, setGuestCount] = useState(null);
     const [todoCount, setTodoCount] = useState(null);
     const [markingComplete, setMarkingComplete] = useState(false);
+    const [markingClose, setMarkingClose] = useState(false);
     const [payingGeneratedRevenue, setPayingGeneratedRevenue] = useState(false);
+    const [recoveringLiability, setRecoveringLiability] = useState(false);
     const [promotionActionLoadingKey, setPromotionActionLoadingKey] = useState('');
     const [vendorPayoutMode, setVendorPayoutMode] = useState('DEMO');
     const [eventTransactions, setEventTransactions] = useState(null);
@@ -559,6 +561,7 @@ const ManagerEventDetails = () => {
                 selectedPromotions: Array.isArray(rawEvent?.promotion) ? rawEvent.promotion : [],
                 platformFee: rawEvent?.platformFee ?? null,
                 serviceChargePercent: rawEvent?.serviceChargePercent ?? null,
+                refundRequest: rawEvent?.refundRequest && typeof rawEvent.refundRequest === 'object' ? rawEvent.refundRequest : null,
                 client,
                 availableCoreStaff,
                 selectedTeamMembers,
@@ -682,6 +685,24 @@ const ManagerEventDetails = () => {
         if (!assignedManagerAuthId || !actorAuthId) return false;
         return assignedManagerAuthId === actorAuthId;
     }, [assignedManager?.authId, currentUserAuthId]);
+
+    const refundRequest = useMemo(() => {
+        if (!['planning', 'promote'].includes(String(eventType || '').trim().toLowerCase())) return null;
+        const req = rawEvent?.refundRequest;
+        return req && typeof req === 'object' ? req : null;
+    }, [eventType, rawEvent?.refundRequest]);
+
+    const canRunCancellationGuestFallback = useMemo(() => {
+        if (eventType !== 'planning' || !canNotifyGuests) return false;
+        if (!refundRequest) return false;
+
+        const refundStatus = String(refundRequest?.status || '').trim().toUpperCase();
+        if (refundStatus === 'REJECTED') return false;
+
+        const planningStatus = String(rawEvent?.status || rawEvent?.eventStatus || '').trim().toUpperCase();
+        const cancelledStatuses = new Set(['CANCELLED', 'CANCELED', 'REFUNDED']);
+        return cancelledStatuses.has(planningStatus) || ['PENDING_REVIEW', 'APPROVED', 'REFUNDED'].includes(refundStatus);
+    }, [eventType, canNotifyGuests, refundRequest, rawEvent?.status, rawEvent?.eventStatus]);
 
     const chatContactAuthIds = useMemo(() => {
         const ids = new Set();
@@ -908,12 +929,19 @@ const ManagerEventDetails = () => {
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
         return todayStart >= eventDayStart;
     }, [rawEvent?.schedule?.startAt, rawEvent?.eventDate]);
-    const canMarkAsComplete = canManagerCompletePlanning && normalizedStatus === 'CONFIRMED' && hasEventDateReached;
+    const canMarkPlanningAsComplete = canManagerCompletePlanning && normalizedStatus === 'CONFIRMED' && hasEventDateReached;
     const generatedRevenuePayout = useMemo(() => {
         const isPlanningPublic = eventType === 'planning' && String(event?.listingType || '').trim().toLowerCase() === 'public';
         const isPromote = eventType === 'promote';
         const isSupported = isPlanningPublic || isPromote;
         const normalizedEventStatus = String(event?.status || '').trim().toUpperCase().replace(/_/g, ' ');
+        const promoteRefundStatus = String(rawEvent?.refundRequest?.status || '').trim().toUpperCase();
+        const cancelledPromoteStatuses = new Set(['CANCELLED', 'CANCELED', 'REFUNDED']);
+        const blockedRefundStatuses = new Set(['PENDING_REVIEW', 'APPROVED', 'REFUNDED']);
+        const cancellationLocked = isPromote && (
+            cancelledPromoteStatuses.has(normalizedEventStatus)
+            || blockedRefundStatuses.has(promoteRefundStatus)
+        );
         const planningCompletionMarked = !isPlanningPublic
             || ['COMPLETED', 'VENDOR PAYMENT PENDING', 'CLOSED'].includes(normalizedEventStatus);
 
@@ -938,12 +966,22 @@ const ManagerEventDetails = () => {
             }, 0)
             : 0;
 
-        const payoutAmountInr = Number(Math.max(0, generatedRevenueInr - totalFeesInr).toFixed(2));
+        const payoutAmountInr = cancellationLocked
+            ? 0
+            : Number(Math.max(0, generatedRevenueInr - totalFeesInr).toFixed(2));
         const payoutStatus = String(rawEvent?.generatedRevenuePayout?.status || '').trim().toUpperCase();
         const payoutPaidInr = payoutStatus === 'SUCCESS'
             ? toInrFromPaise(rawEvent?.generatedRevenuePayout?.amountPaise)
             : 0;
         const payoutPendingInr = Number(Math.max(0, payoutAmountInr - payoutPaidInr).toFixed(2));
+        const liabilityRecoveryStatus = String(rawEvent?.refundRequest?.liabilityRecovery?.status || '').trim().toUpperCase();
+        const liabilityRecovered = liabilityRecoveryStatus === 'PAID';
+        const liabilityPendingPayment = liabilityRecoveryStatus === 'PENDING_PAYMENT';
+        const liabilityRecoveryFailed = liabilityRecoveryStatus === 'FAILED';
+        const liabilityRecordedInr = toInrFromPaise(rawEvent?.refundRequest?.liabilityRecovery?.amountPaise);
+        const liabilityInr = cancellationLocked
+            ? Number((liabilityRecordedInr > 0 ? liabilityRecordedInr : totalFeesInr).toFixed(2))
+            : 0;
 
         const totalAmountInr = toNonNegativeNumber(
             rawEvent?.totalAmount
@@ -969,6 +1007,17 @@ const ManagerEventDetails = () => {
             alreadyPaid: payoutStatus === 'SUCCESS',
             payoutPaidInr,
             payoutPendingInr,
+            liabilityInr,
+            cancellationLocked,
+            liabilityRecoveryStatus,
+            liabilityRecovered,
+            liabilityPendingPayment,
+            liabilityRecoveryFailed,
+            liabilityRecoveryOrderId: String(rawEvent?.refundRequest?.liabilityRecovery?.paymentOrderId || '').trim() || null,
+            canRecoverLiability: cancellationLocked && liabilityInr > 0 && !liabilityRecovered,
+            payoutBlockedReason: cancellationLocked
+                ? 'Event is cancelled/refund in progress. Generated revenue payout is disabled. Collect platform fee + service charge from event creator as liability.'
+                : null,
             requiresCompletionFirst: isPlanningPublic,
             completionMarked: planningCompletionMarked,
             requiresRemainingPaymentFirst: isPlanningPublic,
@@ -987,10 +1036,29 @@ const ManagerEventDetails = () => {
         rawEvent?.vendorConfirmationPaidAmountPaise,
         rawEvent?.remainingPaymentPaidAmountPaise,
         rawEvent?.generatedRevenuePayout?.amountPaise,
+        rawEvent?.refundRequest?.liabilityRecovery?.status,
+        rawEvent?.refundRequest?.liabilityRecovery?.amountPaise,
+        rawEvent?.refundRequest?.liabilityRecovery?.paymentOrderId,
         vendorSelection?.vendors,
         vendorSelection?.totalMaxAmount,
         rawEvent?.generatedRevenuePayout?.status,
     ]);
+
+    const isPromoteCompletionStatus = ['COMPLETE', 'COMPLETED', 'CLOSED'].includes(normalizedStatus);
+    const isPromoteClosedStatus = normalizedStatus === 'CLOSED';
+    const canManagerCompletePromote = eventType === 'promote' && generatedRevenuePayout.cancellationLocked;
+    const promoteLiabilitySettled = canManagerCompletePromote && (
+        generatedRevenuePayout.liabilityRecovered
+        || generatedRevenuePayout.liabilityRecoveryStatus === 'NOT_REQUIRED'
+        || generatedRevenuePayout.liabilityInr <= 0
+    );
+    const canMarkAsClose = eventType === 'promote'
+        && canManagerCompletePromote
+        && promoteLiabilitySettled
+        && !isPromoteClosedStatus;
+    const canMarkAsComplete = isPlanningEvent
+        ? canMarkPlanningAsComplete
+        : canManagerCompletePromote && promoteLiabilitySettled && !isPromoteCompletionStatus;
 
     const privateBilling = useMemo(() => {
         const listingType = String(event?.listingType || '').trim().toLowerCase();
@@ -1278,6 +1346,11 @@ const ManagerEventDetails = () => {
             return;
         }
 
+        if (generatedRevenuePayout.cancellationLocked) {
+            toast.error(generatedRevenuePayout.payoutBlockedReason || 'Generated revenue payout is disabled for cancelled events.');
+            return;
+        }
+
         if (generatedRevenuePayout.requiresRemainingPaymentFirst && !generatedRevenuePayout.remainingPaymentSettled) {
             toast.error(
                 `Remaining event payment is pending${generatedRevenuePayout.remainingPaymentDueInr > 0
@@ -1329,6 +1402,62 @@ const ManagerEventDetails = () => {
         }
     };
 
+    const handleRecoverCreatorLiability = async () => {
+        if (!canUseRestrictedManagerActions) {
+            toast.error('This action is not available for your assigned role.');
+            return;
+        }
+
+        if (!event || eventType !== 'promote') {
+            toast('Liability recovery is available only for promote events.', { icon: 'ℹ️' });
+            return;
+        }
+
+        if (!generatedRevenuePayout.cancellationLocked) {
+            toast.error('Liability recovery is available only after cancellation/refund flow starts.');
+            return;
+        }
+
+        if (generatedRevenuePayout.liabilityRecovered) {
+            toast.success('Creator liability is already recovered.');
+            return;
+        }
+
+        if (generatedRevenuePayout.liabilityPendingPayment) {
+            toast('Liability recovery is already pending creator payment.', { icon: 'ℹ️' });
+            return;
+        }
+
+        if (generatedRevenuePayout.liabilityInr <= 0) {
+            toast('No liability is due for this event.', { icon: 'ℹ️' });
+            return;
+        }
+
+        try {
+            setRecoveringLiability(true);
+            const res = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}/liability-recovery`,
+                {
+                    method: 'PATCH',
+                    body: JSON.stringify({}),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const json = await safeJson(res);
+            if (!res.ok || !json?.success) {
+                throw new Error(json?.message || 'Failed to initiate creator liability recovery');
+            }
+
+            setRawEvent(json.data);
+            toast.success(json?.message || 'Creator liability recovery initiated.');
+        } catch (error) {
+            toast.error(error?.message || 'Failed to initiate creator liability recovery');
+        } finally {
+            setRecoveringLiability(false);
+        }
+    };
+
     const handleMarkAsComplete = async () => {
         if (!event) return;
 
@@ -1337,31 +1466,57 @@ const ManagerEventDetails = () => {
             return;
         }
 
-        if (!canManagerCompletePlanning) {
-            toast('Mark as complete is available only for planning events.', { icon: 'ℹ️' });
-            return;
-        }
-
-        if (normalizedStatus === 'COMPLETED') {
+        if (isPlanningEvent && normalizedStatus === 'COMPLETED') {
             toast.success('This event is already marked as completed.');
             return;
         }
 
-        if (!hasEventDateReached) {
+        if (!isPlanningEvent && isPromoteCompletionStatus) {
+            toast.success('This event is already marked as completed.');
+            return;
+        }
+
+        if (isPlanningEvent && !canManagerCompletePlanning) {
+            toast('Mark as complete is available only for planning events.', { icon: 'ℹ️' });
+            return;
+        }
+
+        if (isPlanningEvent && !hasEventDateReached) {
             toast('Mark as complete is available on the event date.', { icon: '📅' });
             return;
         }
 
-        if (!canMarkAsComplete) {
+        if (isPlanningEvent && !canMarkPlanningAsComplete) {
             toast.error('Only CONFIRMED events can be marked as complete.');
+            return;
+        }
+
+        if (!isPlanningEvent && !canManagerCompletePromote) {
+            toast.error('Cancelled/refund promote events can be marked complete only after liability handling.');
+            return;
+        }
+
+        if (!isPlanningEvent && !promoteLiabilitySettled) {
+            toast.error('Creator liability must be paid (or become zero/not required) before completing this promote event.');
             return;
         }
 
         try {
             setMarkingComplete(true);
+            const endpoint = isPlanningEvent
+                ? `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(id))}/mark-complete`
+                : `${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}/status`;
+
+            const requestInit = isPlanningEvent
+                ? { method: 'PATCH' }
+                : {
+                    method: 'PATCH',
+                    body: JSON.stringify({ eventStatus: 'COMPLETE' }),
+                };
+
             const res = await fetchWithAuth(
-                `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(id))}/mark-complete`,
-                { method: 'PATCH' },
+                endpoint,
+                requestInit,
                 { dispatch, refreshAction: refreshAccessToken }
             );
 
@@ -1376,6 +1531,59 @@ const ManagerEventDetails = () => {
             toast.error(error?.message || 'Failed to mark event as complete');
         } finally {
             setMarkingComplete(false);
+        }
+    };
+
+    const handleMarkAsClose = async () => {
+        if (!event) return;
+
+        if (!canUseRestrictedManagerActions) {
+            toast.error('This action is not available for your assigned role.');
+            return;
+        }
+
+        if (eventType !== 'promote') {
+            toast('Mark as close is available only for promote events.', { icon: 'ℹ️' });
+            return;
+        }
+
+        if (isPromoteClosedStatus) {
+            toast.success('This event is already closed.');
+            return;
+        }
+
+        if (!canManagerCompletePromote) {
+            toast.error('Cancelled/refund promote events can be closed only after liability handling starts.');
+            return;
+        }
+
+        if (!promoteLiabilitySettled) {
+            toast.error('Creator liability must be paid (or become zero/not required) before closing this promote event.');
+            return;
+        }
+
+        try {
+            setMarkingClose(true);
+            const res = await fetchWithAuth(
+                `${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}/status`,
+                {
+                    method: 'PATCH',
+                    body: JSON.stringify({ eventStatus: 'CLOSED' }),
+                },
+                { dispatch, refreshAction: refreshAccessToken }
+            );
+
+            const json = await safeJson(res);
+            if (!res.ok || !json?.success) {
+                throw new Error(json?.message || 'Failed to close event');
+            }
+
+            setRawEvent(json.data);
+            toast.success('Event closed successfully.');
+        } catch (error) {
+            toast.error(error?.message || 'Failed to close event');
+        } finally {
+            setMarkingClose(false);
         }
     };
 
@@ -1499,6 +1707,27 @@ const ManagerEventDetails = () => {
                             </button>
                             <div className="flex flex-col gap-2">
                                 {canUseRestrictedManagerActions ? (
+                                    <>
+                                        {eventType === 'promote' ? (
+                                            <button
+                                                onClick={handleMarkAsClose}
+                                                disabled={!event || markingClose || !canMarkAsClose}
+                                                title={!event
+                                                    ? 'Event details are loading.'
+                                                    : markingClose
+                                                        ? 'Closing event...'
+                                                        : isPromoteClosedStatus
+                                                            ? 'Event is already closed.'
+                                                            : !canManagerCompletePromote
+                                                                ? 'Available after cancellation/refund flow starts.'
+                                                                : !promoteLiabilitySettled
+                                                                    ? 'Creator liability must be paid (or become zero/not required) first.'
+                                                                    : 'Close this cancelled promote event.'}
+                                                className="px-6 py-2.5 bg-slate-700 text-white hover:bg-slate-800 rounded-xl font-bold transition-colors shadow-lg shadow-black/10 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                                            >
+                                                <CheckCircle className="w-4 h-4" /> {markingClose ? 'Closing…' : 'Mark as Close'}
+                                            </button>
+                                        ) : null}
                                     <button
                                         onClick={handleMarkAsComplete}
                                         disabled={!event || markingComplete || !canMarkAsComplete}
@@ -1506,19 +1735,26 @@ const ManagerEventDetails = () => {
                                             ? 'Event details are loading.'
                                             : markingComplete
                                                 ? 'Marking event as completed...'
-                                                    : !canManagerCompletePlanning
+                                                    : isPlanningEvent && !canManagerCompletePlanning
                                                         ? 'Available only for planning events.'
-                                                    : normalizedStatus === 'COMPLETED'
+                                                    : isPlanningEvent && normalizedStatus === 'COMPLETED'
                                                         ? 'Event is already completed.'
-                                                        : normalizedStatus !== 'CONFIRMED'
+                                                    : !isPlanningEvent && isPromoteCompletionStatus
+                                                        ? 'Event is already completed.'
+                                                        : isPlanningEvent && normalizedStatus !== 'CONFIRMED'
                                                             ? 'Only CONFIRMED events can be marked as complete.'
-                                                            : !hasEventDateReached
+                                                            : isPlanningEvent && !hasEventDateReached
                                                                 ? 'Available on the event date.'
+                                                            : !isPlanningEvent && !canManagerCompletePromote
+                                                                ? 'For promote, this is available after cancellation/refund flow starts.'
+                                                            : !isPlanningEvent && !promoteLiabilitySettled
+                                                                ? 'Creator liability must be paid (or become zero/not required) first.'
                                                                 : 'Mark this event as complete.'}
                                         className="px-6 py-2.5 bg-teal-600 text-white hover:bg-teal-700 rounded-xl font-bold transition-colors shadow-lg shadow-black/10 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                                     >
                                         <CheckCircle className="w-4 h-4" /> {markingComplete ? 'Marking…' : 'Mark as Complete'}
                                     </button>
+                                    </>
                                 ) : null}
                                 <button
                                     onClick={() => setIsEditModalOpen(true)}
@@ -1570,33 +1806,60 @@ const ManagerEventDetails = () => {
                         </div>
 
                         {canUseRestrictedManagerActions && event && generatedRevenuePayout.isSupported ? (
-                            <button
-                                onClick={handlePayGeneratedRevenue}
-                                disabled={payingGeneratedRevenue
-                                    || generatedRevenuePayout.alreadyPaid
-                                    || generatedRevenuePayout.payoutAmountInr <= 0
-                                    || (generatedRevenuePayout.requiresCompletionFirst && !generatedRevenuePayout.completionMarked)
-                                    || (generatedRevenuePayout.requiresRemainingPaymentFirst && !generatedRevenuePayout.remainingPaymentSettled)}
-                                title={generatedRevenuePayout.alreadyPaid
-                                    ? 'Generated revenue payout already sent to user.'
-                                    : (generatedRevenuePayout.requiresCompletionFirst && !generatedRevenuePayout.completionMarked)
-                                        ? 'Mark this event as complete first.'
-                                    : (generatedRevenuePayout.requiresRemainingPaymentFirst && !generatedRevenuePayout.remainingPaymentSettled)
-                                        ? `Waiting for user remaining payment${generatedRevenuePayout.remainingPaymentDueInr > 0
-                                            ? ` (${formatMoneyShort(generatedRevenuePayout.remainingPaymentDueInr)} due)`
-                                            : ''}.`
-                                    : generatedRevenuePayout.payoutAmountInr <= 0
-                                        ? 'No payable generated revenue for this event.'
-                                        : `Pay ${formatMoneyShort(generatedRevenuePayout.payoutAmountInr)} to user using ${vendorPayoutMode} mode.`}
-                                className="px-4 py-2.5 rounded-xl font-bold text-sm bg-teal-600 text-white hover:bg-teal-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
-                            >
-                                <DollarSign className="w-4 h-4" />
-                                {payingGeneratedRevenue
-                                    ? 'Paying...'
-                                    : generatedRevenuePayout.alreadyPaid
-                                        ? 'Revenue Paid'
-                                        : `${vendorPayoutMode === 'DEMO' ? 'Demo Pay' : 'Pay'} Generated Revenue (${formatMoneyShort(generatedRevenuePayout.payoutAmountInr)})`}
-                            </button>
+                            <div className="flex items-center gap-2">
+                                {generatedRevenuePayout.canRecoverLiability ? (
+                                    <button
+                                        onClick={handleRecoverCreatorLiability}
+                                        disabled={recoveringLiability || generatedRevenuePayout.liabilityPendingPayment}
+                                        title={generatedRevenuePayout.liabilityPendingPayment
+                                            ? 'Liability recovery is already pending creator payment.'
+                                            : generatedRevenuePayout.liabilityRecoveryFailed
+                                                ? 'Retry failed liability recovery order creation.'
+                                                : `Recover ${formatMoneyShort(generatedRevenuePayout.liabilityInr)} from event creator.`}
+                                        className="px-4 py-2.5 rounded-xl font-bold text-sm bg-amber-600 text-white hover:bg-amber-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                                    >
+                                        <DollarSign className="w-4 h-4" />
+                                        {recoveringLiability
+                                            ? 'Recovering...'
+                                            : generatedRevenuePayout.liabilityPendingPayment
+                                                ? `Liability Pending (${formatMoneyShort(generatedRevenuePayout.liabilityInr)})`
+                                                : generatedRevenuePayout.liabilityRecoveryFailed
+                                                    ? `Retry Liability Recovery (${formatMoneyShort(generatedRevenuePayout.liabilityInr)})`
+                                                    : `Recover Liability (${formatMoneyShort(generatedRevenuePayout.liabilityInr)})`}
+                                    </button>
+                                ) : null}
+
+                                <button
+                                    onClick={handlePayGeneratedRevenue}
+                                    disabled={payingGeneratedRevenue
+                                        || generatedRevenuePayout.alreadyPaid
+                                        || generatedRevenuePayout.payoutAmountInr <= 0
+                                        || generatedRevenuePayout.cancellationLocked
+                                        || (generatedRevenuePayout.requiresCompletionFirst && !generatedRevenuePayout.completionMarked)
+                                        || (generatedRevenuePayout.requiresRemainingPaymentFirst && !generatedRevenuePayout.remainingPaymentSettled)}
+                                    title={generatedRevenuePayout.alreadyPaid
+                                        ? 'Generated revenue payout already sent to user.'
+                                        : generatedRevenuePayout.cancellationLocked
+                                            ? (generatedRevenuePayout.payoutBlockedReason || 'Generated revenue payout is disabled for cancelled events.')
+                                        : (generatedRevenuePayout.requiresCompletionFirst && !generatedRevenuePayout.completionMarked)
+                                            ? 'Mark this event as complete first.'
+                                        : (generatedRevenuePayout.requiresRemainingPaymentFirst && !generatedRevenuePayout.remainingPaymentSettled)
+                                            ? `Waiting for user remaining payment${generatedRevenuePayout.remainingPaymentDueInr > 0
+                                                ? ` (${formatMoneyShort(generatedRevenuePayout.remainingPaymentDueInr)} due)`
+                                                : ''}.`
+                                        : generatedRevenuePayout.payoutAmountInr <= 0
+                                            ? 'No payable generated revenue for this event.'
+                                            : `Pay ${formatMoneyShort(generatedRevenuePayout.payoutAmountInr)} to user using ${vendorPayoutMode} mode.`}
+                                    className="px-4 py-2.5 rounded-xl font-bold text-sm bg-teal-600 text-white hover:bg-teal-700 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                                >
+                                    <DollarSign className="w-4 h-4" />
+                                    {payingGeneratedRevenue
+                                        ? 'Paying...'
+                                        : generatedRevenuePayout.alreadyPaid
+                                            ? 'Revenue Paid'
+                                            : `${vendorPayoutMode === 'DEMO' ? 'Demo Pay' : 'Pay'} Generated Revenue (${formatMoneyShort(generatedRevenuePayout.payoutAmountInr)})`}
+                                </button>
+                            </div>
                         ) : null}
                     </div>
                 </div>
@@ -1640,11 +1903,19 @@ const ManagerEventDetails = () => {
                         )}
                         {activeTab === 'guests' && (
                             <GuestsTab
+                                eventType={eventType}
                                 onGuestCountChange={setGuestCount}
                                 canNotifyGuests={canNotifyGuests}
                                 eventTitle={event?.title || rawEvent?.eventTitle || 'Event'}
                                 triggerExportSignal={guestExportTrigger}
                                 triggerNotifySignal={guestNotifyTrigger}
+                                cancellationOpsState={refundRequest?.cancellationOps || null}
+                                canRunCancellationFallback={canRunCancellationGuestFallback}
+                                onCancellationOpsUpdated={(updatedPlanning) => {
+                                    if (updatedPlanning && typeof updatedPlanning === 'object') {
+                                        setRawEvent(updatedPlanning);
+                                    }
+                                }}
                             />
                         )}
                         {activeTab === 'vendors' && eventType !== 'promote' && <VendorsTab />}
