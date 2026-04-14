@@ -91,6 +91,18 @@ const isPaymentRequiredRequest = (request) => {
     return statusTokens.includes('PAYMENT_REQUIRED');
 };
 
+const isTerminalRequestForApplications = (request) => {
+    const requestType = String(request?.requestType || 'PROMOTE').trim().toUpperCase();
+
+    if (requestType === 'PLANNING') {
+        const planningStatus = normalizeStatusToken(request?.status);
+        return ['REJECTED', 'CANCELLED', 'CANCELED', 'COMPLETED', 'COMPLETE', 'CLOSED', 'VENDOR_PAYMENT_PENDING'].includes(planningStatus);
+    }
+
+    const promoteStatus = normalizeStatusToken(request?.eventStatus);
+    return ['REJECTED', 'CANCELLED', 'CANCELED', 'COMPLETED', 'COMPLETE', 'CLOSED'].includes(promoteStatus);
+};
+
 const mapRequestToUiEvent = (request) => {
     const requestType = request?.requestType;
 
@@ -208,6 +220,8 @@ const AdminEvents = () => {
     const pendingApplications = useMemo(
         () => (eventDashboard?.applications || [])
             .filter((request) => !isPaymentRequiredRequest(request))
+            .filter((request) => !isTerminalRequestForApplications(request))
+            .filter((request) => deriveUiStatus(request) !== 'VERIFIED')
             .map(mapRequestToUiEvent),
         [eventDashboard]
     );

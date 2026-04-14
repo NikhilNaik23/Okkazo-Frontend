@@ -145,9 +145,10 @@ const computePromoteSettlementInr = (promote, promotionFeeMap = {}) => {
 const mapPromoteToCampaign = (promote, idx, { promotionFeeMap = {}, pendingOrderAmountByEventId = {} } = {}) => {
     const raw = String(promote?.eventStatus || '').trim();
     const normalized = normalizePromoteStatus(raw);
+    const adminDecisionStatus = String(promote?.adminDecision?.status || '').trim().toUpperCase();
     const refundStatus = String(promote?.refundRequest?.status || '').trim().toUpperCase();
     const hasCancellationRequest = Boolean(refundStatus) && refundStatus !== 'REJECTED';
-    const isClosedEvent = normalized === 'closed';
+    const isClosedEvent = normalized === 'closed' || adminDecisionStatus === 'REJECTED';
     const statusToken = isClosedEvent ? 'closed' : (hasCancellationRequest ? 'cancelled' : normalized);
     const eventId = String(promote?.eventId || '').trim();
 
