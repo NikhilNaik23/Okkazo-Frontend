@@ -100,6 +100,7 @@ const OverviewTab = ({
             if (status === 'IN REVIEW') return 'vendor_confirm';
             if (status === 'LIVE') return 'live';
             if (status === 'COMPLETED') return 'completed';
+            if (status === 'CANCELLED' || status === 'CANCELED' || status === 'CLOSED') return 'cancelled';
 
             return 'planning';
         })();
