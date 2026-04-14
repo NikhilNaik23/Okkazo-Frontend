@@ -1089,7 +1089,6 @@ const EventCommandCenter = () => {
     const canRequestEventCancellation = !isRejectedStatus
         && !isCompletedStatus
         && !isClosedStatus
-        && !isCancelledStatus
         && !isRefundCompleted
         && !isCancellationRequested;
     const showRefundPolicyHint = isRejectedStatus || isRefundPending || isRefundCompleted;
@@ -1183,7 +1182,7 @@ const EventCommandCenter = () => {
                                             onClick={() => setIsCancelModalOpen(true)}
                                             className="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-100 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all"
                                         >
-                                            Cancel Event
+                                            {isCancelledStatus ? 'Request Refund' : 'Cancel Event'}
                                         </button>
                                     )}
                                 </div>
@@ -1528,9 +1527,14 @@ const EventCommandCenter = () => {
                                     </button>
                                 </div>
 
-                                <h3 className="text-2xl font-serif-premium text-[#0b2d49] mb-2">Cancel Event?</h3>
+                                <h3 className="text-2xl font-serif-premium text-[#0b2d49] mb-2">
+                                    {isCancelledStatus ? 'Request Refund?' : 'Cancel Event?'}
+                                </h3>
                                 <p className="text-sm text-[#09637E]/70 leading-relaxed mb-8">
-                                    Are you sure you want to cancel <span className="font-bold text-[#0b2d49]">&quot;{campaign?.title}&quot;</span>? This action cannot be undone and involves cancellation fees.
+                                    {isCancelledStatus 
+                                        ? <span>Are you sure you want to request a refund for <span className="font-bold text-[#0b2d49]">&quot;{campaign?.title}&quot;</span>? Your previous request was rejected.</span>
+                                        : <span>Are you sure you want to cancel <span className="font-bold text-[#0b2d49]">&quot;{campaign?.title}&quot;</span>? This action cannot be undone and involves cancellation fees.</span>
+                                    }
                                 </p>
 
                                 <div className="flex flex-col sm:flex-row gap-3">
@@ -1540,7 +1544,7 @@ const EventCommandCenter = () => {
                                         disabled={isSubmittingCancelRequest}
                                         className="flex-1 px-6 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest bg-[#EBF4F6] text-[#09637E] hover:bg-[#ddeef2] transition-all disabled:opacity-60"
                                     >
-                                        Keep Event
+                                        {isCancelledStatus ? 'Cancel' : 'Keep Event'}
                                     </button>
                                     <button
                                         type="button"
@@ -1548,7 +1552,7 @@ const EventCommandCenter = () => {
                                         disabled={isSubmittingCancelRequest}
                                         className="flex-1 px-6 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest bg-rose-600 text-white hover:bg-rose-700 transition-all disabled:opacity-60"
                                     >
-                                        {isSubmittingCancelRequest ? 'Submitting...' : 'Confirm Cancel'}
+                                        {isSubmittingCancelRequest ? 'Submitting...' : (isCancelledStatus ? 'Submit Request' : 'Confirm Cancel')}
                                     </button>
                                 </div>
                             </div>

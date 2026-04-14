@@ -2969,7 +2969,7 @@ const UserEventManagement = () => {
                                             onClick={() => setIsCancelModalOpen(true)}
                                             className="px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-100 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all shadow-xs"
                                         >
-                                            Cancel Event
+                                            {isCancelled ? 'Request Refund' : 'Cancel Event'}
                                         </button>
                                     )}
                                 </div>
@@ -3966,9 +3966,14 @@ const UserEventManagement = () => {
                                 </button>
                             </div>
 
-                            <h3 className="text-2xl font-serif-premium text-[#0b2d49] mb-2">Cancel Event?</h3>
+                            <h3 className="text-2xl font-serif-premium text-[#0b2d49] mb-2">
+                                {isCancelled ? 'Request Refund?' : 'Cancel Event?'}
+                            </h3>
                             <p className="text-sm text-primary/60 leading-relaxed mb-8">
-                                Are you sure you want to cancel <span className="font-bold text-[#0b2d49]">"{event?.title}"</span>? This action cannot be undone and involves cancellation fees.
+                                {isCancelled 
+                                    ? <span>Are you sure you want to request a refund for <span className="font-bold text-[#0b2d49]">"{event?.title}"</span>? Your previous request was rejected.</span>
+                                    : <span>Are you sure you want to cancel <span className="font-bold text-[#0b2d49]">"{event?.title}"</span>? This action cannot be undone and involves cancellation fees.</span>
+                                }
                             </p>
 
                             <div className="flex flex-col sm:flex-row gap-3">
@@ -3977,14 +3982,14 @@ const UserEventManagement = () => {
                                     disabled={isSubmittingCancelRequest}
                                     className="flex-1 px-6 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest bg-surface text-primary hover:bg-surface/80 transition-all disabled:opacity-60"
                                 >
-                                    Keep Event
+                                    {isCancelled ? 'Cancel' : 'Keep Event'}
                                 </button>
                                 <button
                                     onClick={handleSubmitCancellationRefundRequest}
                                     disabled={isSubmittingCancelRequest}
                                     className="flex-1 px-6 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest bg-rose-600 text-white hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 disabled:opacity-60"
                                 >
-                                    {isSubmittingCancelRequest ? 'Submitting...' : 'Confirm Cancel'}
+                                    {isSubmittingCancelRequest ? 'Submitting...' : (isCancelled ? 'Submit Request' : 'Confirm Cancel')}
                                 </button>
                             </div>
                         </div>

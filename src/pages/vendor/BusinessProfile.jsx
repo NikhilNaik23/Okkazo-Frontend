@@ -148,6 +148,11 @@ const BusinessProfile = () => {
         let upcomingEvents = 0;
 
         rows.forEach((row) => {
+            const planningStatus = String(row?.planningStatus || '').trim().toUpperCase();
+            if (planningStatus === 'CANCELLED' || planningStatus === 'CANCELED' || planningStatus === 'CLOSED') {
+                return;
+            }
+
             const vendorItems = Array.isArray(row?.vendorItems) ? row.vendorItems : [];
             const hasRejected = vendorItems.some((v) => String(v?.status || '').trim().toUpperCase() === 'REJECTED');
             const isPending = vendorItems.some((v) => String(v?.status || '').trim().toUpperCase() === 'YET_TO_SELECT');

@@ -103,6 +103,37 @@ const VendorsTab = () => {
     const [payoutLoadingByKey, setPayoutLoadingByKey] = useState({});
     const [vendorPayoutMode, setVendorPayoutMode] = useState('DEMO');
 
+    // Make Manual Payout Modal state
+    const [manualPayoutVendor, setManualPayoutVendor] = useState(null);
+    const [manualPayoutAmountInr, setManualPayoutAmountInr] = useState('');
+    const [isSubmittingManualPayout, setIsSubmittingManualPayout] = useState(false);
+    const [cancellationBalance, setCancellationBalance] = useState({
+        available: false,
+        grossPaidInr: 0,
+        refundAmountInr: 0,
+        remainingAfterRefundInr: 0,
+    });
+
+    const applyCancellationBalanceFromPlanning = useCallback((planningPayload) => {
+        const grossPaidPaise = Number(planningPayload?.refundRequest?.result?.grossPaidAmountPaise || 0);
+        const refundAmountPaise = Number(planningPayload?.refundRequest?.result?.refundAmountPaise || 0);
+
+        const grossPaidInr = Number.isFinite(grossPaidPaise) && grossPaidPaise > 0
+            ? grossPaidPaise / 100
+            : 0;
+        const refundAmountInr = Number.isFinite(refundAmountPaise) && refundAmountPaise > 0
+            ? refundAmountPaise / 100
+            : 0;
+        const remainingAfterRefundInr = Math.max(0, grossPaidInr - refundAmountInr);
+
+        setCancellationBalance({
+            available: grossPaidInr > 0 || refundAmountInr > 0,
+            grossPaidInr,
+            refundAmountInr,
+            remainingAfterRefundInr,
+        });
+    }, []);
+
     const selectVendorForService = async ({ service, vendorAuthId, serviceId, price }) => {
         if (!eventId) return;
 
@@ -360,10 +391,39 @@ const VendorsTab = () => {
 
     const handleReleaseVendorPayout = async (vendor) => {
         if (!eventId || !vendor?.vendorAuthId || !vendor?.service) return;
-        const key = toPayoutKey(vendor.vendorAuthId, vendor.service);
-        if (!key) return;
 
-        setPayoutLoadingByKey((prev) => ({ ...prev, [key]: true }));
+        if (normalizedPlanningStatus === 'CANCELLED' && !manualPayoutVendor) {
+            if (remainingVendorBudgetInr <= 0) {
+                toast.error('No amount remains after refund to release vendor payouts.');
+                return;
+            }
+
+            setManualPayoutVendor(vendor);
+            const suggestedAmount = Math.min(
+                Math.max(0, Number(vendor.payoutAmount || 0)),
+                remainingVendorBudgetInr
+            );
+            setManualPayoutAmountInr(String(Math.round(suggestedAmount)));
+            return;
+        }
+
+        const overrideInr = Number(manualPayoutAmountInr);
+        const hasOverride = manualPayoutVendor && Number.isFinite(overrideInr) && overrideInr > 0;
+        const targetVendor = manualPayoutVendor || vendor;
+        const targetKey = toPayoutKey(targetVendor.vendorAuthId, targetVendor.service);
+        if (!targetKey) return;
+
+        if (hasOverride && overrideInr > remainingVendorBudgetInr) {
+            toast.error(`Entered payout exceeds remaining balance (${formatMoneyShort(remainingVendorBudgetInr)}).`);
+            return;
+        }
+
+        if (hasOverride) {
+            setIsSubmittingManualPayout(true);
+        } else {
+            setPayoutLoadingByKey((prev) => ({ ...prev, [targetKey]: true }));
+        }
+
         try {
             const res = await fetchWithAuth(
                 `${API_BASE_URL}/api/orders/vendor-payouts/release`,
@@ -371,8 +431,9 @@ const VendorsTab = () => {
                     method: 'POST',
                     body: JSON.stringify({
                         eventId: String(eventId),
-                        vendorAuthId: String(vendor.vendorAuthId),
-                        service: String(vendor.service),
+                        vendorAuthId: String(targetVendor.vendorAuthId),
+                        service: String(targetVendor.service),
+                        ...(hasOverride && { overrideAmountPaise: Math.round(overrideInr * 100) }),
                     }),
                 },
                 { dispatch, refreshAction: refreshAccessToken }
@@ -385,7 +446,7 @@ const VendorsTab = () => {
 
             const payout = json?.data?.payout;
             if (payout) {
-                setPayoutsByKey((prev) => ({ ...prev, [key]: payout }));
+                setPayoutsByKey((prev) => ({ ...prev, [targetKey]: payout }));
             }
 
             const responseMode = String(json?.data?.payoutMode || '').trim().toUpperCase();
@@ -398,10 +459,18 @@ const VendorsTab = () => {
                 : (json?.message || 'Vendor payout processed');
             toast.success(successMessage);
             fetchEventPayouts();
+
+            if (manualPayoutVendor) {
+                setManualPayoutVendor(null);
+                setManualPayoutAmountInr('');
+            }
         } catch (e) {
             toast.error(e?.message || 'Failed to release vendor payout');
         } finally {
-            setPayoutLoadingByKey((prev) => ({ ...prev, [key]: false }));
+            if (hasOverride) {
+                setIsSubmittingManualPayout(false);
+            }
+            setPayoutLoadingByKey((prev) => ({ ...prev, [targetKey]: false }));
         }
     };
 
@@ -422,18 +491,20 @@ const VendorsTab = () => {
             .then((action) => {
                 if (cancelled) return;
                 if (action?.meta?.requestStatus === 'fulfilled') {
+                    const planningPayload = action?.payload || {};
                     const resolvedClientAuthId = String(
-                        action?.payload?.authId
-                        || action?.payload?.userAuthId
-                        || action?.payload?.ownerAuthId
+                        planningPayload?.authId
+                        || planningPayload?.userAuthId
+                        || planningPayload?.ownerAuthId
                         || ''
                     ).trim();
-                    const status = String(action?.payload?.status || '').trim();
-                    const pricingDemand = derivePricingDemandFromEvent(action?.payload || {});
+                    const status = String(planningPayload?.status || '').trim();
+                    const pricingDemand = derivePricingDemandFromEvent(planningPayload);
                     setClientAuthId(resolvedClientAuthId);
                     setPlanningStatus(status);
                     setGuestCountForPricing(pricingDemand?.attendeeCount ?? null);
                     setDayCountForPricing(pricingDemand?.dayCount ?? 1);
+                    applyCancellationBalanceFromPlanning(planningPayload);
                 }
             })
             .catch(() => undefined);
@@ -441,7 +512,7 @@ const VendorsTab = () => {
         return () => {
             cancelled = true;
         };
-    }, [dispatch, eventId]);
+    }, [applyCancellationBalanceFromPlanning, dispatch, eventId]);
 
     const vendors = useMemo(() => {
         const selectedServices = Array.isArray(vendorSelection?.selectedServices) ? vendorSelection.selectedServices : [];
@@ -555,7 +626,21 @@ const VendorsTab = () => {
     };
 
     const normalizedPlanningStatus = String(planningStatus || '').trim().toUpperCase().replace(/_/g, ' ');
-    const canShowPayoutAction = normalizedPlanningStatus === 'VENDOR PAYMENT PENDING';
+    const totalPaidToVendorsInr = useMemo(
+        () => Object.values(payoutsByKey || {}).reduce((sum, row) => {
+            const status = String(row?.status || '').trim().toUpperCase();
+            if (status !== 'SUCCESS' && status !== 'INITIATED') return sum;
+
+            const payoutAmountPaise = Number(row?.payoutAmountPaise || 0);
+            if (!Number.isFinite(payoutAmountPaise) || payoutAmountPaise <= 0) return sum;
+            return sum + (payoutAmountPaise / 100);
+        }, 0),
+        [payoutsByKey]
+    );
+    const remainingVendorBudgetInr = normalizedPlanningStatus === 'CANCELLED'
+        ? Math.max(0, Number(cancellationBalance.remainingAfterRefundInr || 0) - totalPaidToVendorsInr)
+        : 0;
+    const canShowPayoutAction = normalizedPlanningStatus === 'VENDOR PAYMENT PENDING' || normalizedPlanningStatus === 'CANCELLED';
 
     return (
         <div className="space-y-6">
@@ -579,8 +664,10 @@ const VendorsTab = () => {
                                 dispatch(fetchPlanningVendorSelectionByEventId(eventId));
                                 dispatch(fetchPlanningByEventId(String(eventId))).then((action) => {
                                     if (action?.meta?.requestStatus === 'fulfilled') {
-                                        const status = String(action?.payload?.status || '').trim();
+                                        const planningPayload = action?.payload || {};
+                                        const status = String(planningPayload?.status || '').trim();
                                         setPlanningStatus(status);
+                                        applyCancellationBalanceFromPlanning(planningPayload);
                                     }
                                 });
                                 fetchEventPayouts();
@@ -593,6 +680,14 @@ const VendorsTab = () => {
                     </button>
                 </div>
             </div>
+
+            {normalizedPlanningStatus === 'CANCELLED' && (
+                <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3">
+                    <p className="text-sm font-semibold text-sky-800">
+                        This event is cancelled. Vendor reservation days have been released, so vendors are available for those dates again.
+                    </p>
+                </div>
+            )}
 
             {vendorSelectionStatus === 'loading' && vendors.length === 0 && (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -607,7 +702,7 @@ const VendorsTab = () => {
                 </div>
             )}
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Total Vendors</p>
                     <p className="text-2xl font-extrabold text-gray-900 mt-1">{vendors.length}</p>
@@ -620,6 +715,15 @@ const VendorsTab = () => {
                     <p className="text-xs font-bold text-amber-600 uppercase tracking-wide">Pending</p>
                     <p className="text-2xl font-extrabold text-amber-700 mt-1">{vendors.filter((v) => v.availability === 'pending').length}</p>
                 </div>
+                {normalizedPlanningStatus === 'CANCELLED' && cancellationBalance.available && (
+                    <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 shadow-sm">
+                        <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide">Remaining After Refund</p>
+                        <p className="text-2xl font-extrabold text-indigo-700 mt-1">{formatMoneyShort(cancellationBalance.remainingAfterRefundInr)}</p>
+                        <p className="text-[11px] font-semibold text-indigo-500 mt-1">
+                            Paid to vendors: {formatMoneyShort(totalPaidToVendorsInr)}
+                        </p>
+                    </div>
+                )}
                 <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Total Cost</p>
                     <p className="text-2xl font-extrabold text-teal-600 mt-1">
@@ -731,6 +835,7 @@ const VendorsTab = () => {
                                                             || !(vendor.payoutAmount > 0)
                                                             || !vendor.vendorAuthId
                                                             || payoutLoadingByKey[vendor.payoutKey]
+                                                            || (normalizedPlanningStatus === 'CANCELLED' && remainingVendorBudgetInr <= 0)
                                                             || String(vendor?.payout?.status || '').trim().toUpperCase() === 'SUCCESS'
                                                             || String(vendor?.payout?.status || '').trim().toUpperCase() === 'INITIATED'
                                                         }
@@ -839,6 +944,75 @@ const VendorsTab = () => {
                     );
                 })}
             </div>
+
+            {/* Manual Payout Modal for Cancelled Events */}
+            {manualPayoutVendor && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl p-8">
+                        <div className="flex justify-between items-start mb-6">
+                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                                <Wallet size={24} />
+                            </div>
+                            <button
+                                onClick={() => setManualPayoutVendor(null)}
+                                disabled={isSubmittingManualPayout}
+                                className="p-2 text-gray-400 hover:text-gray-900 transition-colors disabled:opacity-50"
+                            >
+                                <XCircle size={24} />
+                            </button>
+                        </div>
+                        
+                        <h3 className="text-xl font-black text-gray-900 mb-2">Adjust Vendor Payout</h3>
+                        <p className="text-sm text-gray-500 mb-6">
+                            Event is cancelled. Enter the final adjusted payout amount to transfer to <span className="font-bold text-gray-900">{manualPayoutVendor.businessName || 'the vendor'}</span>.
+                        </p>
+
+                        <div className="mb-6">
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2">
+                                Final Payout Amount (₹)
+                            </label>
+                            <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-lg font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                                value={manualPayoutAmountInr}
+                                onChange={(e) => setManualPayoutAmountInr(e.target.value)}
+                                disabled={isSubmittingManualPayout}
+                                placeholder="e.g. 500"
+                            />
+                            <p className="text-xs text-gray-400 mt-2">
+                                Original derived payout: <span className="font-semibold px-1">{formatMoneyShort(manualPayoutVendor.payoutAmount)}</span>
+                            </p>
+                            <p className="text-xs text-indigo-600 mt-1 font-semibold">
+                                Remaining balance after refund: {formatMoneyShort(remainingVendorBudgetInr)}
+                            </p>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setManualPayoutVendor(null)}
+                                disabled={isSubmittingManualPayout}
+                                className="flex-1 px-4 py-3 rounded-xl font-bold text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-60"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleReleaseVendorPayout(manualPayoutVendor)}
+                                disabled={
+                                    isSubmittingManualPayout
+                                    || !manualPayoutAmountInr
+                                    || Number(manualPayoutAmountInr) <= 0
+                                    || Number(manualPayoutAmountInr) > remainingVendorBudgetInr
+                                }
+                                className="flex-1 px-4 py-3 rounded-xl font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200 disabled:opacity-60 flex items-center justify-center gap-2"
+                            >
+                                {isSubmittingManualPayout ? 'Processing...' : 'Confirm Payout'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

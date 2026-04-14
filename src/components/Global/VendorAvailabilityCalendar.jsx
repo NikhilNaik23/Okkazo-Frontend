@@ -123,6 +123,11 @@ const VendorAvailabilityCalendar = ({ compact = false }) => {
                 // Fallback source: confirmed booked events list (ensures accepted/confirmed events are visible on calendar).
                 const requests = Array.isArray(requestsData?.data?.requests) ? requestsData.data.requests : [];
                 requests.forEach((row) => {
+                    const planningStatus = String(row?.planningStatus || '').trim().toUpperCase();
+                    if (planningStatus === 'CANCELLED' || planningStatus === 'CANCELED' || planningStatus === 'CLOSED') {
+                        return;
+                    }
+
                     const items = Array.isArray(row?.vendorItems) ? row.vendorItems : [];
                     const hasRejected = items.some((v) => String(v?.status || '').trim().toUpperCase() === 'REJECTED');
                     const isPending = items.some((v) => String(v?.status || '').trim().toUpperCase() === 'YET_TO_SELECT');
