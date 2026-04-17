@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
-import { BsPencil, BsGear, BsEnvelope, BsTelephone, BsGeoAlt, BsStars, BsClockHistory, BsCameraFill, BsBoxArrowRight } from "react-icons/bs";
+import { BsPencil, BsGear, BsEnvelope, BsTelephone, BsGeoAlt, BsStars, BsClockHistory, BsArrowClockwise, BsBoxArrowRight } from "react-icons/bs";
 import { toast } from "react-hot-toast";
 import { selectUser, selectIsLoading as selectAuthLoading, selectIsAuthenticated, fetchCurrentUser, logout } from "../../../store/slices/authSlice";
+import useNotificationFeed from "../../../hooks/useNotificationFeed";
 
 const UserProfile = () => {
     const navigate = useNavigate();
@@ -12,9 +13,23 @@ const UserProfile = () => {
     const authUser = useSelector(selectUser);
     const authLoading = useSelector(selectAuthLoading);
     const isAuthenticated = useSelector(selectIsAuthenticated);
+    const {
+        grouped: activityGrouped,
+        status: activityStatus,
+        refresh: refreshActivity,
+    } = useNotificationFeed({
+        enabled: isAuthenticated,
+        limit: 25,
+        fetchUnread: false,
+        pollIntervalMs: 45000,
+    });
 
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+
+    const activityItems = Array.isArray(activityGrouped?.all)
+        ? activityGrouped.all.slice(0, 5)
+        : [];
 
     const handleLogout = () => {
         dispatch(logout());
@@ -184,36 +199,87 @@ const UserProfile = () => {
                                 <div className="bg-[#EBF4F6] rounded-[2.5rem] p-10 shadow-[inset_0_2px_4px_rgba(255,255,255,0.8),0_4px_16px_rgba(9,99,126,0.05)] border border-white/60 h-full relative overflow-hidden flex flex-col">
                                     <div className="absolute top-0 right-0 w-64 h-64 bg-white/20 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
 
-                                    <div className="flex items-center justify-between mb-10 relative z-10">
-                                        <h2 className="text-2xl font-serif-premium text-[#09637E] border-l-4 border-[#09637E] pl-4 font-bold">
-                                            Recent Activity
-                                        </h2>
-                                        <button className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/60 hover:text-[#09637E] transition-colors">View All</button>
-                                    </div>
-
-                                    <div className="flex-1 flex flex-col items-center justify-center relative z-10">
-                                        <div className="w-24 h-24 rounded-full border-4 border-[#09637E]/10 flex items-center justify-center mb-6 relative">
-                                            <BsClockHistory size={40} className="text-[#09637E]/20" />
-                                            {/* Decorative orbit dots */}
-                                            <div className="absolute top-0 right-0 w-3 h-3 bg-[#7AB2B2] rounded-full opacity-50 animate-ping"></div>
+                                    <div className="mb-8 relative z-10">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <h2 className="text-2xl font-serif-premium text-[#09637E] border-l-4 border-[#09637E] pl-4 font-bold">
+                                                Recent Activity
+                                            </h2>
+                                            <button
+                                                onClick={() => refreshActivity()}
+                                                className="w-9 h-9 bg-[#09637E] rounded-full flex items-center justify-center text-white shadow-md hover:shadow-lg hover:scale-105 transition-all"
+                                                aria-label="Refresh recent activity"
+                                                title="Refresh recent activity"
+                                            >
+                                                <BsArrowClockwise size={14} />
+                                            </button>
                                         </div>
-                                        <h3 className="font-serif-premium italic text-2xl text-[#09637E]/30 mb-2">A blank canvas for your journey.</h3>
-                                        <p className="text-xs text-[#09637E]/40 max-w-xs text-center leading-relaxed">Your recent interactions and event highlights will appear here.</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/45 mt-3 pl-5">
+                                            Latest 5 updates
+                                        </p>
+                                    </div>
 
-                                        {/* Pagination dots placeholder */}
-                                        <div className="flex gap-2 mt-8">
-                                            <div className="w-8 h-1.5 bg-[#09637E]/10 rounded-full"></div>
-                                            <div className="w-1.5 h-1.5 bg-[#09637E]/10 rounded-full"></div>
-                                            <div className="w-1.5 h-1.5 bg-[#09637E]/10 rounded-full"></div>
+                                    {activityStatus === 'loading' && activityItems.length === 0 ? (
+                                        <div className="flex-1 flex flex-col items-center justify-center relative z-10">
+                                            <div className="w-10 h-10 border-4 border-[#09637E]/25 border-t-[#09637E] rounded-full animate-spin mb-4" />
+                                            <p className="text-xs font-bold uppercase tracking-widest text-[#09637E]/50">Loading activity...</p>
                                         </div>
-                                    </div>
+                                    ) : activityItems.length > 0 ? (
+                                        <div className="flex-1 relative z-10 overflow-hidden">
+                                            <div className="h-full overflow-y-auto pr-1 custom-scrollbar">
+                                                <div className="bg-white/40 rounded-3xl border border-white/70 p-5">
+                                                    {activityItems.map((item, index) => (
+                                                        <div
+                                                            key={item.id}
+                                                            className={`w-full text-left ${index < activityItems.length - 1 ? 'mb-4 pb-4 border-b border-[#09637E]/10' : ''}`}
+                                                        >
+                                                            <div className="grid grid-cols-[14px_minmax(0,1fr)_auto] items-start gap-3">
+                                                                <div className="relative pt-1">
+                                                                    <span className="block w-3 h-3 rounded-full bg-[#09637E] ring-4 ring-white/60" />
+                                                                    {index < activityItems.length - 1 ? (
+                                                                        <span className="absolute left-[5px] top-4 h-[calc(100%+0.75rem)] w-px bg-[#09637E]/20" />
+                                                                    ) : null}
+                                                                </div>
 
-                                    {/* Quick Fab or Action (Optional from design) */}
-                                    <div className="absolute bottom-8 right-8">
-                                        <button className="w-12 h-12 bg-[#09637E] rounded-full flex items-center justify-center text-white shadow-xl hover:scale-110 transition-transform">
-                                            <div className="w-6 h-6 border-2 border-white/50 rounded-full border-t-white animate-spin-slow" />
-                                        </button>
-                                    </div>
+                                                                <div className="min-w-0">
+                                                                    <div className="flex items-center gap-2 mb-1.5">
+                                                                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${item.bgColor || 'bg-[#EBF4F6]'}`}>
+                                                                            {item.icon}
+                                                                        </div>
+                                                                        <h3 className="text-sm font-bold text-[#09637E] truncate">
+                                                                            {item.title || 'Activity'}
+                                                                        </h3>
+                                                                    </div>
+                                                                    <p className="text-xs text-[#09637E]/70 leading-relaxed line-clamp-2 pl-9">
+                                                                        {item.message || 'A new update is available.'}
+                                                                    </p>
+                                                                </div>
+
+                                                                <span className="text-[10px] font-black uppercase tracking-widest text-[#09637E]/45 mt-1 whitespace-nowrap">
+                                                                    {item.time || 'Just now'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex-1 flex flex-col items-center justify-center relative z-10">
+                                            <div className="w-24 h-24 rounded-full border-4 border-[#09637E]/10 flex items-center justify-center mb-6 relative">
+                                                <BsClockHistory size={40} className="text-[#09637E]/20" />
+                                                <div className="absolute top-0 right-0 w-3 h-3 bg-[#7AB2B2] rounded-full opacity-50 animate-ping"></div>
+                                            </div>
+                                            <h3 className="font-serif-premium italic text-2xl text-[#09637E]/30 mb-2">A blank canvas for your journey.</h3>
+                                            <p className="text-xs text-[#09637E]/40 max-w-xs text-center leading-relaxed">Your recent interactions and event highlights will appear here.</p>
+
+                                            <div className="flex gap-2 mt-8">
+                                                <div className="w-8 h-1.5 bg-[#09637E]/10 rounded-full"></div>
+                                                <div className="w-1.5 h-1.5 bg-[#09637E]/10 rounded-full"></div>
+                                                <div className="w-1.5 h-1.5 bg-[#09637E]/10 rounded-full"></div>
+                                            </div>
+                                        </div>
+                                    )}
+
                                 </div>
                             </div>
                         </div>

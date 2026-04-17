@@ -239,6 +239,12 @@ const EditProfile = () => {
         );
     };
 
+    const hasContactNumber = String(formData.phone || '').replace(/\D/g, '').length >= 8;
+    const hasCurrentBase = String(formData.location || '').trim().length > 0;
+    const hasFieldOfInterest = Array.isArray(formData.interests)
+        && formData.interests.some((interest) => String(interest || '').trim().length > 0);
+    const showFirstTimeProfilePrompt = !hasContactNumber && !hasCurrentBase && !hasFieldOfInterest;
+
     return (
         <div className="min-h-screen bg-[#EBF4F6] font-sans text-[#09637E] flex flex-col items-center pt-32 pb-12 relative overflow-hidden">
 
@@ -250,8 +256,13 @@ const EditProfile = () => {
 
             {/* Page Title */}
             <h1 className="text-6xl font-serif-premium italic text-[#09637E] mb-12 relative z-10 text-center animate-in fade-in slide-in-from-top-4 duration-700">
-                Edit Profile
+                {showFirstTimeProfilePrompt ? 'Complete Your Profile' : 'Edit Profile'}
                 <span className="block w-24 h-1 bg-[#09637E]/20 mx-auto mt-4 rounded-full"></span>
+                {showFirstTimeProfilePrompt ? (
+                    <span className="block mt-5 text-sm md:text-base font-sans not-italic font-semibold tracking-normal text-[#09637E]/70">
+                        Fill your contact number, current base, and field of interest to get started.
+                    </span>
+                ) : null}
             </h1>
 
             {/* Main Form Card */}
