@@ -1,15 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    User, Mail, Lock, Bell, Shield, Save, LogOut, ChevronRight, Building2, Briefcase
+    User, Mail, Lock, Save, LogOut, ChevronRight, Building2, Briefcase
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import {
+    changePassword,
     clearError,
     clearUpdateSuccess,
     fetchCurrentUser,
     logout,
+    selectAuthProvider,
     selectError,
     selectIsLoading,
     selectUpdateSuccess,
@@ -27,9 +29,16 @@ const ManagerProfile = () => {
     });
 
     const user = useSelector(selectUser);
+    const authProvider = useSelector(selectAuthProvider);
     const isLoading = useSelector(selectIsLoading);
     const error = useSelector(selectError);
     const updateSuccess = useSelector(selectUpdateSuccess);
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const [passwordForm, setPasswordForm] = useState({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+    });
 
     useEffect(() => {
         dispatch(fetchCurrentUser());
@@ -91,8 +100,6 @@ const ManagerProfile = () => {
     const sections = [
         { id: 'general', label: 'General', icon: User },
         { id: 'security', label: 'Password & Security', icon: Lock },
-        { id: 'notifications', label: 'Notifications', icon: Bell },
-        { id: 'team', label: 'Team Management', icon: Shield },
     ];
 
     const handleInputChange = (e) => {
@@ -130,8 +137,69 @@ const ManagerProfile = () => {
         navigate('/login');
     };
 
-    const handleSavePreferences = () => {
-        toast.success('Notification preferences saved.');
+    const handlePasswordInputChange = (e) => {
+        const { name, value } = e.target;
+        setPasswordForm((prev) => ({ ...prev, [name]: value }));
+    };
+
+    const provider = String(user?.authProvider || authProvider || '').toUpperCase();
+    const hasKnownProvider = ['EMAIL', 'SIGN_IN_WITH_GOOGLE', 'BOTH'].includes(provider);
+    const hasEmailPassword = provider === 'EMAIL' || provider === 'BOTH';
+
+    const handlePasswordChangeSubmit = async (e) => {
+        e.preventDefault();
+
+        if (!hasKnownProvider) {
+            toast.error('Checking account provider. Please try again.');
+            return;
+        }
+
+        if (!hasEmailPassword) {
+            toast.error('Password change is available only for email-password accounts.');
+            return;
+        }
+
+        const currentPassword = String(passwordForm.currentPassword || '').trim();
+        const newPassword = String(passwordForm.newPassword || '');
+        const confirmPassword = String(passwordForm.confirmPassword || '');
+
+        if (!currentPassword) {
+            toast.error('Current password is required');
+            return;
+        }
+
+        if (!newPassword) {
+            toast.error('New password is required');
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            toast.error('New password and confirm password do not match');
+            return;
+        }
+
+        setIsChangingPassword(true);
+        try {
+            const result = await dispatch(changePassword({
+                currentPassword,
+                newPassword,
+                confirmPassword,
+            }));
+
+            if (changePassword.fulfilled.match(result)) {
+                setPasswordForm({
+                    currentPassword: '',
+                    newPassword: '',
+                    confirmPassword: '',
+                });
+                toast.success('Password changed successfully. A confirmation email has been sent.');
+                return;
+            }
+
+            toast.error(result?.payload || 'Failed to change password');
+        } finally {
+            setIsChangingPassword(false);
+        }
     };
 
     return (
@@ -269,44 +337,82 @@ const ManagerProfile = () => {
                             </div>
                         )}
 
-                        {activeSection === 'notifications' && (
+                        {activeSection === 'security' && (
                             <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
                                 <div>
-                                    <h2 className="text-xl font-bold text-gray-900 mb-1">Notification Preferences</h2>
-                                    <p className="text-gray-500 text-sm">Choose what we get in touch about.</p>
+                                    <h2 className="text-xl font-bold text-gray-900 mb-1">Password & Security</h2>
+                                    <p className="text-gray-500 text-sm">Change your password securely from this panel.</p>
                                 </div>
-                                <div className="space-y-6">
-                                    {["New event inquiry", "Vendor application", "Payment received", "System updates"].map((item, i) => (
-                                        <div key={i} className="flex items-center justify-between p-4 border border-gray-100 rounded-xl">
-                                            <div>
-                                                <h3 className="font-bold text-gray-900 text-sm">{item}</h3>
-                                                <p className="text-xs text-gray-500">Get notified via email and push.</p>
-                                            </div>
-                                            <label className="relative inline-flex items-center cursor-pointer">
-                                                <input type="checkbox" defaultChecked={i < 2} className="sr-only peer" />
-                                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
-                                            </label>
+
+                                <form onSubmit={handlePasswordChangeSubmit} className="border border-gray-100 rounded-2xl p-6 space-y-5">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-gray-500 uppercase">Current Password</label>
+                                        <input
+                                            type="password"
+                                            name="currentPassword"
+                                            value={passwordForm.currentPassword}
+                                            onChange={handlePasswordInputChange}
+                                            autoComplete="current-password"
+                                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-medium text-gray-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
+                                            placeholder="Enter current password"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-gray-500 uppercase">New Password</label>
+                                            <input
+                                                type="password"
+                                                name="newPassword"
+                                                value={passwordForm.newPassword}
+                                                onChange={handlePasswordInputChange}
+                                                autoComplete="new-password"
+                                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-medium text-gray-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
+                                                placeholder="Enter new password"
+                                            />
                                         </div>
-                                    ))}
-                                </div>
-                                <div className="border-t border-gray-100 pt-8 flex items-center justify-end gap-3">
-                                    <button onClick={handleSavePreferences} className="px-5 py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 shadow-lg shadow-gray-900/20 flex items-center gap-2">
-                                        <Save className="w-4 h-4" /> Save Preferences
-                                    </button>
-                                </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Confirm New Password</label>
+                                            <input
+                                                type="password"
+                                                name="confirmPassword"
+                                                value={passwordForm.confirmPassword}
+                                                onChange={handlePasswordInputChange}
+                                                autoComplete="new-password"
+                                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 font-medium text-gray-900 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 outline-none transition-all"
+                                                placeholder="Confirm new password"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <p className="text-xs text-gray-500">
+                                        Use at least 8 characters with uppercase, lowercase, number, and special character.
+                                    </p>
+
+                                    {!hasKnownProvider && (
+                                        <p className="text-xs text-amber-600 font-medium">Checking your account provider...</p>
+                                    )}
+
+                                    {hasKnownProvider && !hasEmailPassword && (
+                                        <p className="text-xs text-amber-600 font-medium">
+                                            This account is using Google sign-in only. Password change is unavailable.
+                                        </p>
+                                    )}
+
+                                    <div className="pt-2 flex justify-end">
+                                        <button
+                                            type="submit"
+                                            disabled={isChangingPassword || !hasKnownProvider || !hasEmailPassword}
+                                            className="px-5 py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-gray-800 shadow-lg shadow-gray-900/20 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                                        >
+                                            <Lock className="w-4 h-4" /> {isChangingPassword ? 'Updating...' : 'Change Password'}
+                                        </button>
+                                    </div>
+                                </form>
                             </div>
                         )}
 
-                        {/* Placeholder for other sections */}
-                        {['security', 'team'].includes(activeSection) && (
-                            <div className="flex flex-col items-center justify-center h-full min-h-100 text-center">
-                                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4 text-gray-400">
-                                    <Shield className="w-8 h-8" />
-                                </div>
-                                <h3 className="text-xl font-bold text-gray-900">Coming Soon</h3>
-                                <p className="text-gray-500 max-w-sm mt-2">This settings section is currently under development. Check back later!</p>
-                            </div>
-                        )}
                     </div>
                 </div>
             </div>

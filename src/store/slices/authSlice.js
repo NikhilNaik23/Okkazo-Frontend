@@ -494,6 +494,37 @@ export const resetPassword = createAsyncThunk(
     }
 );
 
+// Async thunk for authenticated password change
+export const changePassword = createAsyncThunk(
+    'auth/changePassword',
+    async ({ currentPassword, newPassword, confirmPassword }, { dispatch, rejectWithValue }) => {
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}/auth/change-password`, {
+                method: 'POST',
+                body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+            }, { dispatch, refreshAction: refreshAccessToken });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                const validationErrors = data?.errors;
+                if (validationErrors && typeof validationErrors === 'object') {
+                    const firstMessage = Object.values(validationErrors).find((v) => typeof v === 'string' && v.trim());
+                    if (firstMessage) {
+                        return rejectWithValue(firstMessage);
+                    }
+                }
+
+                return rejectWithValue(data?.message || 'Failed to change password');
+            }
+
+            return data;
+        } catch (error) {
+            return rejectWithValue(error.message || 'Network error');
+        }
+    }
+);
+
 // Async thunk for email verification
 export const verifyEmail = createAsyncThunk(
     'auth/verifyEmail',
@@ -773,6 +804,19 @@ const authSlice = createSlice({
                 state.error = null;
             })
             .addCase(resetPassword.rejected, (state, action) => {
+                state.isLoading = false;
+                state.error = action.payload;
+            })
+            // Change Password
+            .addCase(changePassword.pending, (state) => {
+                state.isLoading = true;
+                state.error = null;
+            })
+            .addCase(changePassword.fulfilled, (state) => {
+                state.isLoading = false;
+                state.error = null;
+            })
+            .addCase(changePassword.rejected, (state, action) => {
                 state.isLoading = false;
                 state.error = action.payload;
             })

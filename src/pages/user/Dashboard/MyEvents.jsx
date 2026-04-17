@@ -135,25 +135,31 @@ const mapPromoteToCampaign = (promote, idx, { promotionFeeMap = {}, pendingOrder
     const eventId = String(promote?.eventId || '').trim();
 
     const statusLabel = (() => {
-        if (normalized === 'payment-required') return 'Payment Required';
-        if (normalized === 'manager-unassigned') return 'Pending Review';
-        if (normalized === 'in-review') return 'Pending Review';
-        if (normalized === 'live') return 'Live';
-        if (normalized === 'complete') return 'Complete';
+        if (statusToken === 'cancelled' || statusToken === 'canceled') return 'Cancelled';
+        if (statusToken === 'closed') return 'Closed';
+        if (statusToken === 'payment-required') return 'Payment Required';
+        if (statusToken === 'manager-unassigned') return 'Pending Review';
+        if (statusToken === 'in-review') return 'Pending Review';
+        if (statusToken === 'live') return 'Live';
+        if (statusToken === 'complete') return 'Complete';
         return raw ? raw.replace(/_/g, ' ') : 'Pending Review';
     })();
 
     const gradient = (() => {
-        if (normalized === 'live') return 'bg-gradient-to-b from-[#7AB2B2]/80 via-[#7AB2B2]/20 to-white/90';
-        if (normalized === 'payment-required') return 'bg-gradient-to-b from-[#EBF4F6]/80 via-[#d7a444]/20 to-white/90';
-        if (normalized === 'complete') return 'bg-gradient-to-b from-[#2d5c58]/70 via-[#7AB2B2]/10 to-white/90';
+        if (statusToken === 'cancelled' || statusToken === 'canceled') return 'bg-gradient-to-b from-[#f4ecec]/90 via-[#dca5a5]/35 to-white/90';
+        if (statusToken === 'closed') return 'bg-gradient-to-b from-[#2f4f6d]/75 via-[#7AB2B2]/15 to-white/90';
+        if (statusToken === 'live') return 'bg-gradient-to-b from-[#7AB2B2]/80 via-[#7AB2B2]/20 to-white/90';
+        if (statusToken === 'payment-required') return 'bg-gradient-to-b from-[#EBF4F6]/80 via-[#d7a444]/20 to-white/90';
+        if (statusToken === 'complete') return 'bg-gradient-to-b from-[#2d5c58]/70 via-[#7AB2B2]/10 to-white/90';
         return 'bg-gradient-to-b from-[#EBF4F6]/80 via-[#7AB2B2]/20 to-white/90';
     })();
 
     const centerText = (() => {
-        if (normalized === 'payment-required') return 'Locked';
-        if (normalized === 'complete') return 'Check';
-        if (normalized === 'live') return 'LIVE';
+        if (statusToken === 'payment-required') return 'Locked';
+        if (statusToken === 'complete') return 'Check';
+        if (statusToken === 'closed') return 'Closed';
+        if (statusToken === 'cancelled' || statusToken === 'canceled') return 'Stop';
+        if (statusToken === 'live') return 'LIVE';
         // Keep short text so it fits the circular badge
         return 'Review';
     })();
@@ -166,7 +172,7 @@ const mapPromoteToCampaign = (promote, idx, { promotionFeeMap = {}, pendingOrder
         ? promote.platformFee
         : null;
 
-    const isPayRequired = normalized === 'payment-required';
+    const isPayRequired = statusToken === 'payment-required';
 
     const backendPendingAmount = Number(pendingOrderAmountByEventId[eventId]);
     const fallbackSettlementAmount = computePromoteSettlementInr(promote, promotionFeeMap);
@@ -185,20 +191,24 @@ const mapPromoteToCampaign = (promote, idx, { promotionFeeMap = {}, pendingOrder
         : (hasBackendPendingAmount ? backendPendingAmount : null);
 
     const shownAmount = isPayRequired ? settlementAmount : totalAmount;
-    const revenueLabel = isPayRequired ? 'Settlement Fee Due' : 'Total Amount';
-    const revenue = shownAmount != null
-        ? `₹${shownAmount.toLocaleString(undefined, {
-            minimumFractionDigits: isPayRequired ? 2 : 0,
-            maximumFractionDigits: isPayRequired ? 2 : 0,
-        })}`
-        : '—';
+    const revenueLabel = (statusToken === 'cancelled' || statusToken === 'canceled' || statusToken === 'closed')
+        ? 'Event Status'
+        : (isPayRequired ? 'Settlement Fee Due' : 'Total Amount');
+    const revenue = (statusToken === 'cancelled' || statusToken === 'canceled' || statusToken === 'closed')
+        ? (statusToken === 'closed' ? 'Closed' : 'Cancelled')
+        : (shownAmount != null
+            ? `₹${shownAmount.toLocaleString(undefined, {
+                minimumFractionDigits: isPayRequired ? 2 : 0,
+                maximumFractionDigits: isPayRequired ? 2 : 0,
+            })}`
+            : '—');
 
     return {
         id: eventId || promote?.eventId,
         title: promote?.eventTitle || 'Untitled Campaign',
         subtitle: String(promote?.eventCategory || 'PROMOTION').toUpperCase(),
         status: statusLabel,
-        eventStatus: normalized,
+        eventStatus: statusToken,
         totalAmount,
         platformFee,
         settlementAmount,
@@ -206,7 +216,7 @@ const mapPromoteToCampaign = (promote, idx, { promotionFeeMap = {}, pendingOrder
         revenue,
         centerText,
         gradient,
-        buttonText: normalized === 'payment-required' ? 'Pay Now' : 'Manage',
+        buttonText: statusToken === 'payment-required' ? 'Pay Now' : 'Manage',
         _idx: idx,
     };
 };

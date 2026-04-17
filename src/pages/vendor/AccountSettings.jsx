@@ -9,13 +9,19 @@ import {
   BsCreditCard
 } from "react-icons/bs";
 import { toast } from "react-hot-toast";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import {
   isStrongPassword,
   PASSWORD_REQUIREMENTS_MESSAGE,
 } from "../../utils/passwordValidation";
 import { fetchWithAuth } from "../../utils/apiHandler";
-import { refreshAccessToken } from "../../store/slices/authSlice";
+import {
+  changePassword,
+  fetchVendorApplication,
+  refreshAccessToken,
+  selectVendorApplication,
+  selectVendorApplicationLoading,
+} from "../../store/slices/authSlice";
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -29,16 +35,14 @@ const safeJson = async (response) => {
 
 const AccountSettings = () => {
   const dispatch = useDispatch();
+  const vendorApplication = useSelector(selectVendorApplication);
+  const isVendorApplicationLoading = useSelector(selectVendorApplicationLoading);
   const [notifications, setNotifications] = useState({
     email: true,
     app: true,
     marketing: false
   });
-
-  const [vendorInfo] = useState({
-    email: "contact@gourmetcatering.com",
-    phone: "+1 (555) 123-4567"
-  });
+  const [isSaving, setIsSaving] = useState(false);
 
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
@@ -48,7 +52,6 @@ const AccountSettings = () => {
   const [payoutStatus, setPayoutStatus] = useState(null);
   const [isLoadingPayoutStatus, setIsLoadingPayoutStatus] = useState(false);
   const [isCreatingOnboardingLink, setIsCreatingOnboardingLink] = useState(false);
-
   const hasPasswordInput =
     passwordForm.currentPassword ||
     passwordForm.newPassword ||
@@ -62,32 +65,62 @@ const AccountSettings = () => {
     }));
   };
 
-  const handleSave = () => {
-    if (hasPasswordInput) {
-      if (!passwordForm.currentPassword) {
-        toast.error("Please enter your current password.");
-        return;
-      }
-
-      if (!isStrongPassword(passwordForm.newPassword)) {
-        toast.error(PASSWORD_REQUIREMENTS_MESSAGE);
-        return;
-      }
-
-      if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
-        toast.error("New password and confirm password do not match.");
-        return;
-      }
+  const handleSave = async () => {
+    if (!hasPasswordInput) {
+      toast.success("Account changes saved successfully!", {
+        style: {
+          borderRadius: '16px',
+          background: '#0b2d49',
+          color: '#fff',
+          fontWeight: 'bold'
+        }
+      });
+      return;
     }
 
-    toast.success("Account changes saved successfully!", {
-      style: {
-        borderRadius: '16px',
-        background: '#0b2d49',
-        color: '#fff',
-        fontWeight: 'bold'
+    if (!passwordForm.currentPassword) {
+      toast.error("Please enter your current password.");
+      return;
+    }
+
+    if (!isStrongPassword(passwordForm.newPassword)) {
+      toast.error(PASSWORD_REQUIREMENTS_MESSAGE);
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmNewPassword) {
+      toast.error("New password and confirm password do not match.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const result = await dispatch(
+        changePassword({
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword,
+          confirmPassword: passwordForm.confirmNewPassword,
+        })
+      );
+
+      if (changePassword.fulfilled.match(result)) {
+        toast.success("Password changed successfully. A confirmation email has been sent.");
+        setPasswordForm({
+          currentPassword: "",
+          newPassword: "",
+          confirmNewPassword: "",
+        });
+        return;
       }
-    });
+
+      toast.error(result?.payload || "Failed to change password.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleNotificationToggle = (key, value) => {
+    setNotifications((prev) => ({ ...prev, [key]: value }));
   };
 
   const Toggle = ({ enabled, onChange }) => (
@@ -98,6 +131,10 @@ const AccountSettings = () => {
       <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-sm transition-all ${enabled ? 'left-7' : 'left-1'}`}></div>
     </button>
   );
+
+  useEffect(() => {
+    dispatch(fetchVendorApplication());
+  }, [dispatch]);
 
   const loadPayoutStatus = useCallback(async () => {
     setIsLoadingPayoutStatus(true);
@@ -164,6 +201,16 @@ const AccountSettings = () => {
     loadPayoutStatus();
   }, [loadPayoutStatus]);
 
+  const vendorInfo = {
+    email: String(vendorApplication?.email || "").trim() || "Not available",
+    phone: String(vendorApplication?.phone || "").trim() || "Not available",
+  };
+
+  const contactFieldClassName =
+    "w-full bg-gray-50/50 rounded-2xl py-4 pl-14 pr-6 border-none text-[#708aa0] font-bold cursor-not-allowed opacity-70";
+
+  const saveButtonLabel = isSaving ? "Saving..." : "Save Account Changes";
+
   const onboardingStatus = String(payoutStatus?.onboardingStatus || "NOT_STARTED").trim().toUpperCase();
   const payoutsEnabled = Boolean(payoutStatus?.payoutsEnabled);
   const vendorPayoutMode = String(payoutStatus?.vendorPayoutMode || "DEMO").trim().toUpperCase() === "RAZORPAY"
@@ -202,8 +249,8 @@ const AccountSettings = () => {
                   <input
                     type="email"
                     disabled
-                    value={vendorInfo.email}
-                    className="w-full bg-gray-50/50 rounded-2xl py-4 pl-14 pr-6 border-none text-[#708aa0] font-bold cursor-not-allowed opacity-70"
+                    value={isVendorApplicationLoading ? "Loading..." : vendorInfo.email}
+                    className={contactFieldClassName}
                   />
                 </div>
               </div>
@@ -214,8 +261,8 @@ const AccountSettings = () => {
                   <input
                     type="text"
                     disabled
-                    value={vendorInfo.phone}
-                    className="w-full bg-gray-50/50 rounded-2xl py-4 pl-14 pr-6 border-none text-[#708aa0] font-bold cursor-not-allowed opacity-70"
+                    value={isVendorApplicationLoading ? "Loading..." : vendorInfo.phone}
+                    className={contactFieldClassName}
                   />
                 </div>
               </div>
@@ -263,9 +310,10 @@ const AccountSettings = () => {
             <div className="flex justify-end pt-4">
               <button
                 onClick={handleSave}
+                disabled={isSaving}
                 className="px-8 py-4 bg-[#10b981] text-white rounded-2xl font-bold hover:bg-[#0b2d49] transition-all shadow-lg active:scale-95"
               >
-                Save Account Changes
+                {saveButtonLabel}
               </button>
             </div>
           </div>
@@ -291,7 +339,7 @@ const AccountSettings = () => {
               </div>
               <Toggle
                 enabled={notifications.email}
-                onChange={(val) => setNotifications({ ...notifications, email: val })}
+                onChange={(val) => handleNotificationToggle("email", val)}
               />
             </div>
 
@@ -307,7 +355,7 @@ const AccountSettings = () => {
               </div>
               <Toggle
                 enabled={notifications.app}
-                onChange={(val) => setNotifications({ ...notifications, app: val })}
+                onChange={(val) => handleNotificationToggle("app", val)}
               />
             </div>
 
@@ -323,7 +371,7 @@ const AccountSettings = () => {
               </div>
               <Toggle
                 enabled={notifications.marketing}
-                onChange={(val) => setNotifications({ ...notifications, marketing: val })}
+                onChange={(val) => handleNotificationToggle("marketing", val)}
               />
             </div>
           </div>
