@@ -2,10 +2,31 @@ import React, { useState } from 'react';
 import Navbar from "../../../components/Layout/public/Navbar";
 import Footer from "../../../components/Layout/public/Footer";
 import { useNavigate } from 'react-router-dom';
+import { fetchWithNgrok } from '../../../utils/apiHandler';
 
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+const ALLOWED_EMAIL_DOMAINS = new Set(['gmail.com', 'outlook.com', 'yahoo.com', 'icloud.com']);
+const NAME_REGEX = /^[A-Za-z][A-Za-z\s.'-]{1,79}$/;
+const PHONE_REGEX = /^\+?[0-9][0-9\s()-]{6,19}$/;
+const SAFE_SINGLE_LINE_REGEX = /^[A-Za-z0-9][A-Za-z0-9\s&/.'-]{1,79}$/;
+const SAFE_SERVICE_DETAIL_REGEX = /^[A-Za-z0-9][A-Za-z0-9\s&/:(),.'-]{1,79}$/;
+const ATTENDEE_OPTIONS = new Set(['<50', '50-100', '100-300', '300-500', '500+']);
+
+const sanitizeSingleLine = (value) => String(value || '')
+    .replace(/[\u0000-\u001F\u007F]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const isAllowedEmailDomain = (email) => {
+    const parts = String(email || '').trim().toLowerCase().split('@');
+    if (parts.length !== 2) return false;
+    return ALLOWED_EMAIL_DOMAINS.has(parts[1]);
+};
 
 const Pricing = () => {
     const navigate = useNavigate();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState('');
     const [formData, setFormData] = useState({
         name: '',
         email: '',
@@ -31,29 +52,115 @@ const Pricing = () => {
         }));
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
+        setSubmitError('');
+
+        const sanitizedName = sanitizeSingleLine(formData.name);
+        const sanitizedEmail = sanitizeSingleLine(formData.email).toLowerCase();
+        const sanitizedPhone = sanitizeSingleLine(formData.phone);
+        const selectedAttendees = sanitizeSingleLine(formData.attendees);
+
+        if (!Array.isArray(formData.services) || formData.services.length === 0) {
+            setSubmitError('Please select at least one service.');
+            return;
+        }
+
+        if (!NAME_REGEX.test(sanitizedName)) {
+            setSubmitError('Please enter a valid full name.');
+            return;
+        }
+
+        if (!PHONE_REGEX.test(sanitizedPhone)) {
+            setSubmitError('Please enter a valid phone number.');
+            return;
+        }
+
+        if (!isAllowedEmailDomain(sanitizedEmail)) {
+            setSubmitError('Email must be from gmail.com, outlook.com, yahoo.com, or icloud.com.');
+            return;
+        }
+
+        if (!ATTENDEE_OPTIONS.has(selectedAttendees)) {
+            setSubmitError('Please select a valid guest count range.');
+            return;
+        }
+
         // Combine eventType if 'Other' is selected
-        const finalEventType = formData.eventType === 'Other' ? formData.otherEventType : formData.eventType;
+        const selectedEventType = formData.eventType === 'Other'
+            ? sanitizeSingleLine(formData.otherEventType)
+            : sanitizeSingleLine(formData.eventType);
+
+        if (!SAFE_SINGLE_LINE_REGEX.test(selectedEventType)) {
+            setSubmitError('Please enter a valid event type.');
+            return;
+        }
 
         // Combine services (append other details if 'Other' is selected)
         let finalServices = [...formData.services];
         if (finalServices.includes('Other')) {
-            // Remove 'Other' string and add the actual details, or keep both. 
-            // Let's keep 'Other' and add detail as a separate string or modify it.
-            // Simplest for now: just log it as is, backend would handle.
-            // OR: replace 'Other' with `Other: ${formData.otherServiceDetails}`
             finalServices = finalServices.filter(s => s !== 'Other');
-            finalServices.push(`Other: ${formData.otherServiceDetails}`);
+            const otherDetails = sanitizeSingleLine(formData.otherServiceDetails);
+            if (otherDetails && !SAFE_SERVICE_DETAIL_REGEX.test(otherDetails)) {
+                setSubmitError('Please provide valid details for the Other service.');
+                return;
+            }
+            finalServices.push(otherDetails ? `Other: ${otherDetails}` : 'Other');
         }
 
-        const finalData = {
-            ...formData,
-            eventType: finalEventType,
-            services: finalServices
+        const safeServices = finalServices
+            .map((service) => sanitizeSingleLine(service))
+            .filter(Boolean)
+            .slice(0, 10);
+
+        if (safeServices.some((service) => !SAFE_SERVICE_DETAIL_REGEX.test(service))) {
+            setSubmitError('One or more selected services contain invalid characters.');
+            return;
+        }
+
+        const messageText = String(formData.message || '').trim();
+        if (messageText.length > 500) {
+            setSubmitError('Message should be 500 characters or fewer.');
+            return;
+        }
+
+        if (messageText.includes('<') || messageText.includes('>')) {
+            setSubmitError('Message contains invalid characters.');
+            return;
+        }
+
+        const payload = {
+            name: sanitizedName,
+            email: sanitizedEmail,
+            phone: sanitizedPhone,
+            eventType: selectedEventType,
+            attendees: selectedAttendees,
+            services: safeServices,
+            message: messageText,
         };
-        console.log("Form Submitted:", finalData); // specific logging for dev
-        navigate('/quote-success');
+
+        try {
+            setIsSubmitting(true);
+
+            const response = await fetchWithNgrok(`${API_BASE_URL}/api/public/events/quote-request`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data?.message || 'Failed to submit your quote request. Please try again.');
+            }
+
+            navigate('/quote-success');
+        } catch (error) {
+            setSubmitError(error?.message || 'Failed to submit your quote request. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const inputClasses = "w-full p-3 outline-none text-gray-700 placeholder:text-gray-400 text-sm";
@@ -162,6 +269,7 @@ const Pricing = () => {
                                                 name="name"
                                                 placeholder="Full Name"
                                                 required
+                                                maxLength={80}
                                                 className={inputClasses}
                                                 onChange={handleChange}
                                             />
@@ -173,6 +281,8 @@ const Pricing = () => {
                                                 name="phone"
                                                 placeholder="Phone"
                                                 required
+                                                maxLength={20}
+                                                inputMode="tel"
                                                 className={inputClasses}
                                                 onChange={handleChange}
                                             />
@@ -186,6 +296,7 @@ const Pricing = () => {
                                             name="email"
                                             placeholder="Email Address"
                                             required
+                                            maxLength={120}
                                             className={inputClasses}
                                             onChange={handleChange}
                                         />
@@ -226,6 +337,7 @@ const Pricing = () => {
                                                 name="otherEventType"
                                                 placeholder="Please specify event type"
                                                 required
+                                                maxLength={60}
                                                 className={inputClasses}
                                                 onChange={handleChange}
                                             />
@@ -256,6 +368,8 @@ const Pricing = () => {
                                                         type="text"
                                                         name="otherServiceDetails"
                                                         placeholder="Please specify other service"
+                                                        required
+                                                        maxLength={80}
                                                         className={inputClasses}
                                                         onChange={handleChange}
                                                     />
@@ -269,6 +383,7 @@ const Pricing = () => {
                                             name="message"
                                             rows="3"
                                             placeholder="Tell us more about your event needs..."
+                                            maxLength={500}
                                             className="w-full p-3 outline-none text-gray-700 text-sm resize-none"
                                             onChange={handleChange}
                                         ></textarea>
@@ -276,10 +391,15 @@ const Pricing = () => {
 
                                     <button
                                         type="submit"
-                                        className="w-full bg-[#09637E] hover:bg-[#074d61] text-white font-bold py-3.5 px-4 rounded-lg shadow-md transition-colors text-lg mt-2 flex items-center justify-center gap-2"
+                                        disabled={isSubmitting}
+                                        className="w-full bg-[#09637E] hover:bg-[#074d61] disabled:bg-[#6b8e99] disabled:cursor-not-allowed text-white font-bold py-3.5 px-4 rounded-lg shadow-md transition-colors text-lg mt-2 flex items-center justify-center gap-2"
                                     >
-                                        Get Free Quote
+                                        {isSubmitting ? 'Submitting...' : 'Get Free Quote'}
                                     </button>
+
+                                    {submitError && (
+                                        <p className="text-sm text-red-600 font-medium text-center">{submitError}</p>
+                                    )}
                                 </form>
                             </div>
                         </div>

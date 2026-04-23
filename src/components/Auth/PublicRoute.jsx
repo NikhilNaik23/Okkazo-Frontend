@@ -16,9 +16,11 @@ const PublicRoute = ({ children, restricted = false }) => {
     const userRole = useSelector(selectUserRole);
     const user = useSelector(selectUser);
     const vendorApplication = useSelector(selectVendorApplication);
+    const hasStoredAccessToken = Boolean(localStorage.getItem('accessToken'));
+    const hasActiveSession = isAuthenticated && hasStoredAccessToken;
 
     // If route is restricted and user is authenticated, redirect based on role
-    if (restricted && isAuthenticated) {
+    if (restricted && hasActiveSession) {
         const from = location.state?.from?.pathname;
         
         // If there's a saved location, go back there

@@ -660,8 +660,9 @@ const authSlice = createSlice({
                 state.error = null;
             })
             .addCase(refreshAccessToken.rejected, (state, action) => {
+                const isMissingRefreshToken = action.payload === 'No refresh token found';
                 state.isLoading = false;
-                state.error = action.payload;
+                state.error = isMissingRefreshToken ? null : action.payload;
                 state.isAuthenticated = false;
                 state.accessToken = null;
                 state.refreshToken = null;
@@ -878,10 +879,18 @@ const authSlice = createSlice({
 
 export const { logout, clearError, clearRegisterSuccess, clearVendorRegisterSuccess, clearUpdateSuccess } = authSlice.actions;
 
+const hasStoredAccessToken = () => {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+
+    return Boolean(window.localStorage.getItem('accessToken'));
+};
+
 // Selectors
 export const selectAuth = (state) => state.auth;
 export const selectUser = (state) => state.auth.user;
-export const selectIsAuthenticated = (state) => state.auth.isAuthenticated;
+export const selectIsAuthenticated = (state) => state.auth.isAuthenticated && hasStoredAccessToken();
 export const selectUserRole = (state) => state.auth.role || state.auth.user?.role || null;
 export const selectAuthProvider = (state) => state.auth.authProvider || state.auth.user?.authProvider || null;
 export const selectVendorApplication = (state) => state.auth.vendorApplication;

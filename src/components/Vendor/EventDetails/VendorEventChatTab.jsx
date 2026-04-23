@@ -778,7 +778,7 @@ const VendorEventChatTab = () => {
                                                         </div>
                                                     ) : (
                                                         <>
-                                                            <p className="text-sm font-medium leading-relaxed">{msg?.text}</p>
+                                                            <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap wrap-anywhere">{msg?.text}</p>
                                                             {renderAttachments(msg?.attachments)}
                                                             {(msg?.editedAt || msg?.isEdited) && (
                                                                 <span className="text-[9px] opacity-40 float-right mt-1 ml-2 italic">edited</span>
@@ -803,7 +803,7 @@ const VendorEventChatTab = () => {
                                                 </div>
                                                 <div className="bg-gray-100 text-gray-800 p-4 pr-7 rounded-2xl rounded-tl-sm shadow-sm relative group/bubble">
                                                     {renderMessageActions(msg, false)}
-                                                    <p className="text-sm font-medium leading-relaxed">{msg?.text}</p>
+                                                    <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap wrap-anywhere">{msg?.text}</p>
                                                     {renderAttachments(msg?.attachments)}
                                                 </div>
                                             </div>

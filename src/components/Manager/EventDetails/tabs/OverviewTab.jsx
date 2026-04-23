@@ -37,6 +37,18 @@ const normalizeSelectionLabel = (value) => {
         .join(' ');
 };
 
+const normalizePromotionKey = (value) => {
+    const normalized = String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ');
+
+    // Planning historically stores this as "advance analysis".
+    if (normalized === 'advance analysis') return 'advanced analytics';
+    return normalized;
+};
+
 const formatInr = (value) => {
     const n = Number(value || 0);
     if (!Number.isFinite(n) || n <= 0) return '₹0.00';
@@ -140,7 +152,7 @@ const OverviewTab = ({
     }, [event?.selectedPromotions]);
 
     const selectedPromotionSet = useMemo(() => {
-        return new Set(selectedPromotions.map((value) => String(value || '').trim().toLowerCase()));
+        return new Set(selectedPromotions.map((value) => normalizePromotionKey(value)));
     }, [selectedPromotions]);
 
     const shouldShowPromotions = useMemo(() => {
@@ -151,7 +163,8 @@ const OverviewTab = ({
     }, [event?.type, event?.listingType]);
 
     const isPromotionActionStatusAllowed = useMemo(() => {
-        return String(event?.status || '').trim().toUpperCase() === 'CONFIRMED';
+        const status = String(event?.status || '').trim().toUpperCase();
+        return !['CANCELLED', 'CANCELED', 'CLOSED', 'REJECTED'].includes(status);
     }, [event?.status]);
 
     const client = event?.client || null;
@@ -321,8 +334,8 @@ const OverviewTab = ({
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Promotion Actions</p>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                                                 {PROMOTION_BUTTONS.map((label) => {
-                                                    const actionKey = String(label).toLowerCase();
-                                                    const isOpted = selectedPromotionSet.has(String(label).toLowerCase());
+                                                    const actionKey = normalizePromotionKey(label);
+                                                    const isOpted = selectedPromotionSet.has(actionKey);
                                                     const isEnabled = isOpted && isPromotionActionStatusAllowed;
                                                     const isLoading = String(promotionActionLoadingKey || '').toLowerCase() === actionKey;
                                     return (

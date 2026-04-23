@@ -30,10 +30,10 @@ const QuoteSuccess = () => {
                             Request Received!
                         </h1>
                         <p className="text-xl text-[#088395] mb-8 font-medium">
-                            An event manager will contact you soon.
+                            We have sent your estimated price range by email.
                         </p>
                         <p className="text-gray-600 mb-8 leading-relaxed">
-                            Thank you for considering Okkazo. We've received your details and our team is already reviewing your event requirements.
+                            Thank you for considering Okkazo. Our team is reviewing your requirements and will follow up with you shortly.
                         </p>
 
                         <Link to="/">

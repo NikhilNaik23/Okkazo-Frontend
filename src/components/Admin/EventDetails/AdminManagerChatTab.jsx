@@ -256,7 +256,7 @@ const AdminManagerChatTab = ({ eventId, manager }) => {
 
                 <div className={`max-w-[70%] space-y-2 ${isMe ? 'items-end' : ''}`}>
                   <div className={`${isMe ? 'bg-[#0b2d49] text-white rounded-2xl rounded-tr-none' : 'bg-white text-[#5a5b44] rounded-2xl rounded-tl-none border border-[#e9eff1]'} p-4 shadow-sm`}>
-                    <p className="text-sm leading-relaxed font-medium">{msg?.text || ''}</p>
+                    <p className="text-sm leading-relaxed font-medium whitespace-pre-wrap wrap-anywhere">{msg?.text || ''}</p>
                   </div>
                   <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} pr-1 pl-1`}>
                     <span className="text-[10px] font-bold text-[#94a3b8] uppercase">{timestamp}</span>

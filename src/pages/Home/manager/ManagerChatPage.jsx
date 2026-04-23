@@ -115,6 +115,7 @@ const ManagerChatPage = () => {
     groupKeyByAuthId,
     totalUnreadCount,
     setActiveConversationAuthId,
+    refreshUnreadCounts,
   } = useStaffUnread();
 
   const fileInputRef = useRef(null);
@@ -702,6 +703,7 @@ const ManagerChatPage = () => {
 
         setMessages(Array.isArray(list) ? list : []);
         await markConversationRead({ conversationId: nextConversationId, dispatch, refreshAction: refreshAccessToken });
+        await refreshUnreadCounts();
       } catch (error) {
         if (!cancelled) toast.error(error?.message || 'Failed to load conversation');
       }
@@ -712,7 +714,7 @@ const ManagerChatPage = () => {
     return () => {
       cancelled = true;
     };
-  }, [activeChannel, accessToken, dispatch]);
+  }, [activeChannel, accessToken, dispatch, refreshUnreadCounts]);
 
   useEffect(() => {
     if (!accessToken) return undefined;
@@ -771,6 +773,9 @@ const ManagerChatPage = () => {
       const sender = String(message?.senderAuthId || '').trim();
       if (sender && sender !== currentUserId) {
         socket.emit('messages:read', { conversationId });
+        markConversationRead({ conversationId, dispatch, refreshAction: refreshAccessToken })
+          .then(() => refreshUnreadCounts())
+          .catch(() => {});
       }
     });
 
@@ -977,6 +982,21 @@ const ManagerChatPage = () => {
 
         if (!stopped) {
           setMessages(Array.isArray(list) ? list : []);
+
+          const hasUnreadIncoming = (Array.isArray(list) ? list : []).some((m) => {
+            const sender = String(m?.senderAuthId || m?.senderId || '').trim();
+            if (!sender || sender === String(currentUserId || '').trim()) return false;
+            const readBy = Array.isArray(m?.readBy)
+              ? m.readBy.map((v) => String(v || '').trim())
+              : [];
+            return !readBy.includes(String(currentUserId || '').trim());
+          });
+
+          if (hasUnreadIncoming) {
+            markConversationRead({ conversationId, dispatch, refreshAction: refreshAccessToken })
+              .then(() => refreshUnreadCounts())
+              .catch(() => {});
+          }
         }
       } catch {
         // ignore
@@ -989,7 +1009,7 @@ const ManagerChatPage = () => {
       stopped = true;
       clearInterval(id);
     };
-  }, [conversationId, socketConnected, socketJoined, dispatch]);
+  }, [conversationId, socketConnected, socketJoined, currentUserId, dispatch, refreshUnreadCounts]);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -1269,7 +1289,7 @@ const ManagerChatPage = () => {
                                 </div>
                               ) : (
                                 <>
-                                  <p className="text-[15px] font-medium leading-relaxed">{message?.text || ''}</p>
+                                  <p className="text-[15px] font-medium leading-relaxed whitespace-pre-wrap wrap-anywhere">{message?.text || ''}</p>
                                   {(message?.editedAt || message?.isEdited) && <span className="text-[10px] opacity-40 float-right mt-1.5 ml-3 italic">edited</span>}
                                 </>
                               )}
@@ -1289,7 +1309,7 @@ const ManagerChatPage = () => {
                               {String(currentContact?.name || '?').slice(0, 2).toUpperCase()}
                             </div>
                             <div className="bg-white border border-gray-100/50 text-gray-800 p-5 rounded-2xl rounded-tl-sm shadow-sm">
-                              <p className="text-[15px] font-medium leading-relaxed">{message?.text || ''}</p>
+                              <p className="text-[15px] font-medium leading-relaxed whitespace-pre-wrap wrap-anywhere">{message?.text || ''}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5 ml-14">
