@@ -326,7 +326,7 @@ const ManagerChat = () => {
                                                                 </div>
                                                             ) : (
                                                                 <>
-                                                                    <p className="text-[15px] font-medium leading-relaxed">{msg.text}</p>
+                                                                    <p className="text-[15px] font-medium leading-relaxed whitespace-pre-wrap wrap-anywhere">{msg.text}</p>
                                                                     {msg.isEdited && <span className="text-[10px] opacity-40 float-right mt-1.5 ml-3 italic">edited</span>}
                                                                 </>
                                                             )}
@@ -348,7 +348,7 @@ const ManagerChat = () => {
                                                         </div>
                                                         <div className="bg-white border border-gray-100/50 text-gray-800 p-5 pr-8 rounded-2xl rounded-tl-sm shadow-sm relative group/bubble">
                                                             {renderMessageActions(msg, false)}
-                                                            <p className="text-[15px] font-medium leading-relaxed">{msg.text}</p>
+                                                            <p className="text-[15px] font-medium leading-relaxed whitespace-pre-wrap wrap-anywhere">{msg.text}</p>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-1.5 ml-14">

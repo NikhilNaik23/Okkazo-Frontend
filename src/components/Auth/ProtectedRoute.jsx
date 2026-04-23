@@ -4,6 +4,7 @@ import { useSelector, useDispatch } from "react-redux";
 import {
   fetchCurrentUser,
   fetchVendorApplication,
+  logout,
   selectIsAuthenticated,
   selectUserRole,
   selectUser,
@@ -30,8 +31,16 @@ const ProtectedRoute = ({
   const userRole = useSelector(selectUserRole);
   const user = useSelector(selectUser);
   const vendorApplication = useSelector(selectVendorApplication);
+  const hasStoredAccessToken = Boolean(localStorage.getItem("accessToken"));
 
   const [isChecking, setIsChecking] = useState(true);
+
+  useEffect(() => {
+    // Fail closed when storage token is gone (manual clear, stale tab state, etc.).
+    if (isAuthenticated && !hasStoredAccessToken) {
+      dispatch(logout());
+    }
+  }, [dispatch, isAuthenticated, hasStoredAccessToken]);
 
   useEffect(() => {
     const finishCheck = () => {
@@ -39,7 +48,7 @@ const ProtectedRoute = ({
     };
 
     // Always resolve checking state to avoid indefinite guard spinner.
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !hasStoredAccessToken) {
       finishCheck();
       return;
     }
@@ -71,7 +80,7 @@ const ProtectedRoute = ({
       // Data already loaded
       finishCheck();
     }
-  }, [dispatch, isAuthenticated, userRole, user, vendorApplication]);
+  }, [dispatch, isAuthenticated, hasStoredAccessToken, userRole, user, vendorApplication]);
 
   // Show loading spinner while checking authentication
   if (isChecking) {
@@ -88,7 +97,7 @@ const ProtectedRoute = ({
   }
 
   // Not authenticated - redirect to login
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !hasStoredAccessToken) {
     return <Navigate to={redirectTo} state={{ from: location }} replace />;
   }
 

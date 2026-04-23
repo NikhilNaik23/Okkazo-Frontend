@@ -1595,14 +1595,11 @@ const ManagerEventDetails = () => {
 
     const handlePromotionAction = async (label) => {
         const actionKey = String(label || '').trim().toLowerCase();
+        const isEmailBlastAction = actionKey === 'email blast';
+        const isSocialSynergyAction = actionKey === 'social synergy';
 
         if (actionKey === 'advanced analytics') {
             toast('No manager action is needed for Advanced Analytics right now.', { icon: 'ℹ️' });
-            return;
-        }
-
-        if (actionKey === 'social synergy') {
-            toast('Social Synergy posting is not available yet.', { icon: 'ℹ️' });
             return;
         }
 
@@ -1611,7 +1608,7 @@ const ManagerEventDetails = () => {
             return;
         }
 
-        if (actionKey !== 'email blast') {
+        if (!isEmailBlastAction && !isSocialSynergyAction) {
             toast('Unsupported promotion action.', { icon: '⚠️' });
             return;
         }
@@ -1621,9 +1618,10 @@ const ManagerEventDetails = () => {
             return;
         }
 
+        const actionSlug = isSocialSynergyAction ? 'social-synergy' : 'email-blast';
         const endpoint = eventType === 'planning'
-            ? `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(id))}/promotion-actions/email-blast`
-            : `${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}/promotion-actions/email-blast`;
+            ? `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(id))}/promotion-actions/${actionSlug}`
+            : `${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}/promotion-actions/${actionSlug}`;
 
         try {
             setPromotionActionLoadingKey(actionKey);
@@ -1639,12 +1637,28 @@ const ManagerEventDetails = () => {
 
             const json = await safeJson(res);
             if (!res.ok || !json?.success) {
-                throw new Error(json?.message || 'Failed to trigger email blast');
+                throw new Error(json?.message || (isSocialSynergyAction
+                    ? 'Failed to trigger social synergy'
+                    : 'Failed to trigger email blast'));
             }
 
-            toast.success('Email Blast triggered. Event details will be sent to all platform users.');
+            if (isSocialSynergyAction) {
+                const simulated = Boolean(json?.data?.simulated);
+                const permalink = String(json?.data?.instagramPermalink || '').trim();
+                if (simulated) {
+                    toast.success('Social Synergy preview generated (Instagram dry run mode).');
+                } else if (permalink) {
+                    toast.success('Social Synergy posted to Instagram successfully.');
+                } else {
+                    toast.success('Social Synergy request completed and posted to Instagram.');
+                }
+            } else {
+                toast.success('Email Blast triggered. Event details will be sent to all platform users.');
+            }
         } catch (error) {
-            toast.error(error?.message || 'Failed to trigger email blast');
+            toast.error(error?.message || (isSocialSynergyAction
+                ? 'Failed to trigger social synergy'
+                : 'Failed to trigger email blast'));
         } finally {
             setPromotionActionLoadingKey('');
         }

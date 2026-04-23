@@ -137,19 +137,25 @@ export const StaffUnreadProvider = ({ children }) => {
   }, [refreshUnreadCounts]);
 
   const value = useMemo(() => {
-    const totalUnreadCount = Object.values(unreadByAuthId).reduce(
+    const activeAuthId = String(activeConversationAuthId || '').trim();
+    const derivedUnreadByAuthId = {
+      ...unreadByAuthId,
+      ...(activeAuthId ? { [activeAuthId]: 0 } : {}),
+    };
+
+    const totalUnreadCount = Object.values(derivedUnreadByAuthId).reduce(
       (sum, value) => sum + (Number(value) || 0),
       0
     );
 
     return {
-      unreadByAuthId,
+      unreadByAuthId: derivedUnreadByAuthId,
       groupKeyByAuthId,
       totalUnreadCount,
       setActiveConversationAuthId,
       refreshUnreadCounts,
     };
-  }, [groupKeyByAuthId, refreshUnreadCounts, unreadByAuthId]);
+  }, [activeConversationAuthId, groupKeyByAuthId, refreshUnreadCounts, unreadByAuthId]);
 
   return <StaffUnreadContext.Provider value={value}>{children}</StaffUnreadContext.Provider>;
 };
