@@ -255,6 +255,26 @@ const mapBackendVenueServiceToCard = ({ vendor, service, index = 0, eventLat, ev
     const scaledMin = Math.round(baseUnitPrice * safeMinMultiplier);
     const scaledMax = Math.round(baseUnitPrice * safeMaxMultiplier);
 
+    const backendReviewSummary = service?.reviewSummary && typeof service.reviewSummary === 'object'
+        ? service.reviewSummary
+        : (vendor?.reviewSummary && typeof vendor.reviewSummary === 'object' ? vendor.reviewSummary : null);
+    const reviewEntries = Array.isArray(service?.reviewEntries)
+        ? service.reviewEntries
+        : (Array.isArray(vendor?.reviewEntries) ? vendor.reviewEntries : []);
+    const summaryAverageRating = Number(backendReviewSummary?.averageRating);
+    const fallbackRating = service?.rating != null
+        ? Number(service.rating)
+        : (vendor?.rating != null ? Number(vendor.rating) : 0);
+    const resolvedRatingNumber = Number.isFinite(summaryAverageRating) && summaryAverageRating > 0
+        ? summaryAverageRating
+        : (Number.isFinite(fallbackRating) ? fallbackRating : 0);
+
+    const summaryTotalReviews = Number(backendReviewSummary?.totalReviews);
+    const fallbackReviewCount = Number(service?.reviewCount ?? service?.reviews ?? vendor?.reviewCount ?? vendor?.reviews ?? reviewEntries.length);
+    const resolvedReviewCount = Number.isFinite(summaryTotalReviews) && summaryTotalReviews >= 0
+        ? summaryTotalReviews
+        : (Number.isFinite(fallbackReviewCount) && fallbackReviewCount >= 0 ? fallbackReviewCount : 0);
+
     return {
         id: serviceId || `${vendor?.vendorAuthId || 'venue'}-${index}`,
         serviceId: serviceId ? String(serviceId) : null,
@@ -262,8 +282,15 @@ const mapBackendVenueServiceToCard = ({ vendor, service, index = 0, eventLat, ev
         vendorBusinessName: vendor?.businessName || null,
         category: 'Venue',
         categoryId: vendor?.categoryId || 'venues',
-        rating: service?.rating != null ? String(service.rating) : (vendor?.rating != null ? String(vendor.rating) : '0'),
-        reviews: Number(vendor?.reviews || 0),
+        rating: String(Number(resolvedRatingNumber.toFixed(1))),
+        reviews: resolvedReviewCount,
+        reviewCount: resolvedReviewCount,
+        reviewSummary: backendReviewSummary || {
+            averageRating: Number(resolvedRatingNumber.toFixed(1)),
+            totalReviews: resolvedReviewCount,
+            ratingsBreakdown: null,
+        },
+        reviewEntries,
         description: service?.description || vendor?.description || null,
         image,
         banner: image,
@@ -317,7 +344,24 @@ const extractLatLng = (value) => {
 
 const mapBackendVendorToCard = (vendor, category, index = 0, eventLat, eventLng, minMultiplier = 1, maxMultiplier = 1) => {
     const name = vendor?.businessName || 'Vendor';
-    const rating = vendor?.rating != null ? String(vendor.rating) : '0';
+    const backendReviewSummary = vendor?.reviewSummary && typeof vendor.reviewSummary === 'object'
+        ? vendor.reviewSummary
+        : null;
+    const reviewEntries = Array.isArray(vendor?.reviewEntries) ? vendor.reviewEntries : [];
+
+    const summaryAverageRating = Number(backendReviewSummary?.averageRating);
+    const fallbackRating = Number(vendor?.rating);
+    const resolvedRatingNumber = Number.isFinite(summaryAverageRating) && summaryAverageRating > 0
+        ? summaryAverageRating
+        : (Number.isFinite(fallbackRating) ? fallbackRating : 0);
+
+    const summaryTotalReviews = Number(backendReviewSummary?.totalReviews);
+    const fallbackReviewCount = Number(vendor?.reviewCount ?? vendor?.reviews ?? reviewEntries.length);
+    const resolvedReviewCount = Number.isFinite(summaryTotalReviews) && summaryTotalReviews >= 0
+        ? summaryTotalReviews
+        : (Number.isFinite(fallbackReviewCount) && fallbackReviewCount >= 0 ? fallbackReviewCount : 0);
+
+    const rating = String(Number(resolvedRatingNumber.toFixed(1)));
     const location = vendor?.location?.name || 'Location TBD';
 
     const services = Array.isArray(vendor?.services) ? vendor.services : [];
@@ -392,7 +436,14 @@ const mapBackendVendorToCard = (vendor, category, index = 0, eventLat, eventLng,
         vendorAuthId: vendor?.vendorAuthId || null,
         name,
         rating,
-        reviews: Number(vendor?.reviews || 0),
+        reviews: resolvedReviewCount,
+        reviewCount: resolvedReviewCount,
+        reviewSummary: backendReviewSummary || {
+            averageRating: Number(resolvedRatingNumber.toFixed(1)),
+            totalReviews: resolvedReviewCount,
+            ratingsBreakdown: null,
+        },
+        reviewEntries,
         baseUnitPrice: basePriceMin,
         basePriceMin,
         basePriceMax: normalizedBaseMax,
