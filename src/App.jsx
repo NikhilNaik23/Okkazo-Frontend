@@ -22,6 +22,8 @@ import VerifyEmail from "./pages/Home/public/VerifyEmail";
 import ResendVerification from "./pages/Home/public/ResendVerification";
 import Pricing from "./pages/Home/public/Pricing";
 import QuoteSuccess from "./pages/Home/public/QuoteSuccess";
+import NotFound from "./pages/Home/public/NotFound";
+import ServerUnavailable from "./pages/Home/public/ServerUnavailable";
 
 // Admin Pages
 import AdminLayout from "./components/Layout/admin/AdminLayout";
@@ -85,6 +87,7 @@ const App = () => {
   const user = useSelector(selectUser);
   const accessToken = useSelector((state) => state.auth.accessToken) || localStorage.getItem('accessToken');
   const [isInitializing, setIsInitializing] = React.useState(true);
+  const [isServerDown, setIsServerDown] = React.useState(false);
   const presenceSocketRef = React.useRef(null);
 
   // Try to refresh token on app load if we have a refresh token
@@ -122,32 +125,35 @@ const App = () => {
         const userRole = localStorage.getItem('userRole');
         const hasStoredSession = Boolean(refreshToken || accessToken);
 
-        if (hasStoredSession) {
-          const isGatewayHealthy = await checkGatewayHealth();
-
-          if (!isGatewayHealthy) {
+        const isGatewayHealthy = await checkGatewayHealth();
+        
+        if (!isGatewayHealthy) {
+          setIsServerDown(true);
+          if (hasStoredSession) {
             dispatch(logout());
-            return;
           }
+          return;
         }
 
-        if (refreshToken && !accessToken) {
-          // We have refresh token but no access token - try to refresh
-          const result = await dispatch(refreshAccessToken());
-          if (refreshAccessToken.fulfilled.match(result)) {
-            // Successfully got new access token, fetch appropriate data based on role
+        if (hasStoredSession) {
+          if (refreshToken && !accessToken) {
+            // We have refresh token but no access token - try to refresh
+            const result = await dispatch(refreshAccessToken());
+            if (refreshAccessToken.fulfilled.match(result)) {
+              // Successfully got new access token, fetch appropriate data based on role
+              if (userRole === 'VENDOR') {
+                dispatch(fetchVendorApplication());
+              } else {
+                dispatch(fetchCurrentUser());
+              }
+            }
+          } else if (accessToken) {
+            // We have access token - fetch data based on role
             if (userRole === 'VENDOR') {
               dispatch(fetchVendorApplication());
             } else {
               dispatch(fetchCurrentUser());
             }
-          }
-        } else if (accessToken) {
-          // We have access token - fetch data based on role
-          if (userRole === 'VENDOR') {
-            dispatch(fetchVendorApplication());
-          } else {
-            dispatch(fetchCurrentUser());
           }
         }
 
@@ -208,12 +214,16 @@ const App = () => {
     };
   }, [accessToken]);
 
+  if (isServerDown) {
+    return <ServerUnavailable />;
+  }
+
   if (isInitializing) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#e9eff1]">
+      <div className="min-h-screen flex items-center justify-center bg-surface">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-[#d7a444] border-t-transparent rounded-full animate-spin"></div>
-          <p className="font-bold text-gray-400 uppercase tracking-widest text-xs">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <p className="font-bold text-secondary uppercase tracking-widest text-xs">
             Preparing session...
           </p>
         </div>
@@ -293,66 +303,6 @@ const App = () => {
               </PublicRoute>
             }
           />
-          {/* Public Routes - Redirect authenticated users to their dashboard */}
-          <Route
-            path="/"
-            element={
-              <PublicRoute restricted>
-                <Dashboard />
-              </PublicRoute>
-            }
-          />
-
-          {/* Auth Routes - Redirect if already logged in */}
-          <Route
-            path="/login"
-            element={
-              <PublicRoute restricted>
-                <Login />
-              </PublicRoute>
-            }
-          />
-          <Route
-            path="/register"
-            element={
-              <PublicRoute restricted>
-                <Register />
-              </PublicRoute>
-            }
-          />
-          <Route
-            path="/forgot-password"
-            element={
-              <PublicRoute restricted>
-                <ForgotPassword />
-              </PublicRoute>
-            }
-          />
-          <Route
-            path="/reset-password"
-            element={
-              <PublicRoute restricted>
-                <ResetPassword />
-              </PublicRoute>
-            }
-          />
-          <Route
-            path="/verify-email"
-            element={
-              <PublicRoute>
-                <VerifyEmail />
-              </PublicRoute>
-            }
-          />
-          <Route
-            path="/resend-verification"
-            element={
-              <PublicRoute restricted>
-                <ResendVerification />
-              </PublicRoute>
-            }
-          />
-
           <Route
             path="/pricing"
             element={
@@ -495,6 +445,9 @@ const App = () => {
             <Route path="notifications" element={<VendorNotifications />} />
             <Route path="dashboard/ledger" element={<Ledger />} />
           </Route>
+
+          {/* 404 Route */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </AnimatePresence>
 
