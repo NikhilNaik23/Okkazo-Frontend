@@ -4,8 +4,9 @@ import { AnimatePresence } from "framer-motion";
 import { useDispatch, useSelector } from 'react-redux';
 import { Toaster } from 'react-hot-toast';
 import { io as createSocket } from 'socket.io-client';
-import { fetchCurrentUser, fetchVendorApplication, refreshAccessToken, selectIsAuthenticated, selectUser } from './store/slices/authSlice';
+import { fetchCurrentUser, fetchVendorApplication, logout, refreshAccessToken, selectIsAuthenticated, selectUser } from './store/slices/authSlice';
 import { CHAT_SOCKET_URL } from './utils/chatConfig';
+import { fetchWithNgrok } from './utils/apiHandler';
 
 // Route Guards
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -75,6 +76,8 @@ import VendorNotifications from "./pages/vendor/Notifications";
 import Ledger from "./pages/vendor/Ledger";
 import RefundPolicyCenter from "./pages/shared/RefundPolicyCenter";
 
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
 const App = () => {
   const location = useLocation();
   const dispatch = useDispatch();
@@ -86,36 +89,80 @@ const App = () => {
 
   // Try to refresh token on app load if we have a refresh token
   useEffect(() => {
-    const initAuth = async () => {
-      const refreshToken = localStorage.getItem('refreshToken');
-      const accessToken = localStorage.getItem('accessToken');
-      const userRole = localStorage.getItem('userRole');
+    let isMounted = true;
 
-      if (refreshToken && !accessToken) {
-        // We have refresh token but no access token - try to refresh
-        const result = await dispatch(refreshAccessToken());
-        if (refreshAccessToken.fulfilled.match(result)) {
-          // Successfully got new access token, fetch appropriate data based on role
+    const checkGatewayHealth = async () => {
+      const normalizedBaseUrl = String(API_BASE_URL || '').trim().replace(/\/$/, '');
+
+      if (!normalizedBaseUrl) {
+        return false;
+      }
+
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 4000);
+
+      try {
+        const response = await fetchWithNgrok(`${normalizedBaseUrl}/gateway/health`, {
+          method: 'GET',
+          signal: controller.signal,
+        });
+
+        return response.status === 200;
+      } catch {
+        return false;
+      } finally {
+        window.clearTimeout(timeoutId);
+      }
+    };
+
+    const initAuth = async () => {
+      try {
+        const refreshToken = localStorage.getItem('refreshToken');
+        const accessToken = localStorage.getItem('accessToken');
+        const userRole = localStorage.getItem('userRole');
+        const hasStoredSession = Boolean(refreshToken || accessToken);
+
+        if (hasStoredSession) {
+          const isGatewayHealthy = await checkGatewayHealth();
+
+          if (!isGatewayHealthy) {
+            dispatch(logout());
+            return;
+          }
+        }
+
+        if (refreshToken && !accessToken) {
+          // We have refresh token but no access token - try to refresh
+          const result = await dispatch(refreshAccessToken());
+          if (refreshAccessToken.fulfilled.match(result)) {
+            // Successfully got new access token, fetch appropriate data based on role
+            if (userRole === 'VENDOR') {
+              dispatch(fetchVendorApplication());
+            } else {
+              dispatch(fetchCurrentUser());
+            }
+          }
+        } else if (accessToken) {
+          // We have access token - fetch data based on role
           if (userRole === 'VENDOR') {
             dispatch(fetchVendorApplication());
           } else {
             dispatch(fetchCurrentUser());
           }
         }
-      } else if (accessToken) {
-        // We have access token - fetch data based on role
-        if (userRole === 'VENDOR') {
-          dispatch(fetchVendorApplication());
-        } else {
-          dispatch(fetchCurrentUser());
+
+      } finally {
+        if (isMounted) {
+          setIsInitializing(false);
         }
       }
-
-
-      setIsInitializing(false);
     };
 
     initAuth();
+
+    return () => {
+      isMounted = false;
+    };
   }, [dispatch]);
 
   // Fetch user data when authenticated but no user data
@@ -160,6 +207,19 @@ const App = () => {
       }
     };
   }, [accessToken]);
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#e9eff1]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-[#d7a444] border-t-transparent rounded-full animate-spin"></div>
+          <p className="font-bold text-gray-400 uppercase tracking-widest text-xs">
+            Preparing session...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
