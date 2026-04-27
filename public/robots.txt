@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+
+Disallow: /admin
+Disallow: /manager
+Disallow: /user
+Disallow: /vendor
+Disallow: /refund-policy
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /resend-verification
+Disallow: /quote-success
+
+Sitemap: https://okkazo.vercel.app/sitemap.xml

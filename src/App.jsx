@@ -77,6 +77,7 @@ import AccountSettingsPage from "./pages/vendor/AccountSettings";
 import VendorNotifications from "./pages/vendor/Notifications";
 import Ledger from "./pages/vendor/Ledger";
 import RefundPolicyCenter from "./pages/shared/RefundPolicyCenter";
+import SeoManager from './components/SEO/SeoManager';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -215,24 +216,33 @@ const App = () => {
   }, [accessToken]);
 
   if (isServerDown) {
-    return <ServerUnavailable />;
+    return (
+      <>
+        <SeoManager isServerDown />
+        <ServerUnavailable />
+      </>
+    );
   }
 
   if (isInitializing) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-surface">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="font-bold text-secondary uppercase tracking-widest text-xs">
-            Preparing session...
-          </p>
+      <>
+        <SeoManager />
+        <div className="min-h-screen flex items-center justify-center bg-surface">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+            <p className="font-bold text-secondary uppercase tracking-widest text-xs">
+              Preparing session...
+            </p>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
     <>
+      <SeoManager />
       <Toaster
         position="top-right"
         toastOptions={{
