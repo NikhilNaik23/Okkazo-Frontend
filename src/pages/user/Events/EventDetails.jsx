@@ -55,6 +55,23 @@ const normalizeEventForTicketing = (rawEvent) => {
         ];
     }
 
+    const rawTickets = eventWithCategories?.raw?.tickets || eventWithCategories?.tickets || {};
+    const totalRemainingRaw = rawTickets?.noOfTickets ?? rawTickets?.totalTickets;
+    const hasTotalRemaining = totalRemainingRaw !== undefined
+        && totalRemainingRaw !== null
+        && Number.isFinite(Number(totalRemainingRaw));
+    const totalRemaining = hasTotalRemaining ? Math.max(0, Number(totalRemainingRaw)) : null;
+
+    const tierRemainingByName = new Map();
+    const rawTiers = Array.isArray(rawTickets?.tiers) ? rawTickets.tiers : [];
+    rawTiers.forEach((tier) => {
+        const name = String(tier?.name || tier?.tierName || "").trim().toLowerCase();
+        const qtyRaw = tier?.quantity ?? tier?.ticketCount ?? tier?.count ?? tier?.tickets;
+        const qty = Number(qtyRaw);
+        if (!name || !Number.isFinite(qty)) return;
+        tierRemainingByName.set(name, Math.max(0, qty));
+    });
+
     const rows = Array.isArray(eventWithCategories?.ticketDayWiseAllocations)
         ? eventWithCategories.ticketDayWiseAllocations
         : (Array.isArray(eventWithCategories?.raw?.tickets?.dayWiseAllocations)
@@ -76,20 +93,33 @@ const normalizeEventForTicketing = (rawEvent) => {
 
                     const countRaw = Number(tier?.ticketCount ?? tier?.noOfTickets ?? tier?.available ?? tier?.quantity ?? 0);
                     const tierCount = Number.isFinite(countRaw) && countRaw > 0 ? countRaw : 0;
+                    const remainingForTier = tierRemainingByName.get(name.toLowerCase());
+                    const mergedTierCount = Number.isFinite(remainingForTier)
+                        ? Math.min(tierCount, remainingForTier)
+                        : tierCount;
                     const priceRaw = Number(tier?.price || 0);
                     const price = Number.isFinite(priceRaw) && priceRaw >= 0 ? priceRaw : 0;
 
                     return {
                         name,
-                        ticketCount: tierCount,
+                        ticketCount: mergedTierCount,
                         price,
                     };
                 })
                 .filter(Boolean);
 
+            const breakdownTotal = tierBreakdown.reduce((sum, tier) => sum + Number(tier?.ticketCount || 0), 0);
+            let mergedDayCount = ticketCount;
+            if (hasTotalRemaining) {
+                mergedDayCount = Math.min(mergedDayCount, Number(totalRemaining || 0));
+            }
+            if (breakdownTotal > 0) {
+                mergedDayCount = Math.min(mergedDayCount, breakdownTotal);
+            }
+
             return {
                 day,
-                ticketCount,
+                ticketCount: mergedDayCount,
                 tierBreakdown,
             };
         })
