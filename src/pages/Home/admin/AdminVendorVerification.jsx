@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchVendorApplications } from "../../../store/slices/adminSlice";
@@ -7,6 +7,7 @@ import {
   Search,
   Download,
   Filter,
+    ChevronDown,
   CheckCircle,
   Clock,
   ExternalLink,
@@ -38,6 +39,142 @@ const getStatusDisplay = (status) => {
   return statusMap[status] || status;
 };
 
+const toTimestamp = (value) => {
+        const date = value ? new Date(value) : null;
+        return date && !Number.isNaN(date.getTime()) ? date.getTime() : 0;
+};
+
+const normalizeText = (value) => String(value || '').trim().toLowerCase();
+
+const shortenLocationLabel = (value) => {
+    if (!value || value === 'All') return value;
+    const parts = String(value)
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean);
+    if (parts.length <= 3) return parts.join(', ');
+    const head = parts.slice(0, 2).join(', ');
+    const tail = parts.slice(-2).join(', ');
+    return `${head} ... ${tail}`;
+};
+
+const FilterSelect = ({
+    label,
+    value,
+    options,
+    onChange,
+    searchable = false,
+    getOptionLabel,
+    placeholder = 'Search...'
+}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const dropdownRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const resolveLabel = (val) => {
+        if (getOptionLabel) return getOptionLabel(val);
+        const match = options.find((option) => (typeof option === 'string' ? option : option.value) === val);
+        if (match && typeof match !== 'string') return match.label;
+        return String(val || '');
+    };
+
+    const filteredOptions = options.filter((option) => {
+        if (!searchable) return true;
+        const query = normalizeText(searchTerm);
+        if (!query) return true;
+
+        const optionValue = typeof option === 'string' ? option : option.value;
+        const optionLabel = typeof option === 'string' ? option : option.label;
+        const displayLabel = getOptionLabel ? getOptionLabel(optionLabel) : optionLabel;
+        const haystack = `${optionValue} ${displayLabel}`;
+
+        return normalizeText(haystack).includes(query);
+    });
+
+    return (
+        <div className="relative" ref={dropdownRef}>
+            <span className="block text-[10px] font-black uppercase tracking-widest text-[#708aa0]">
+                {label}
+            </span>
+            <button
+                type="button"
+                onClick={() => setIsOpen((prev) => !prev)}
+                className="mt-2 w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl border border-[#e9eff1] bg-[#f8fafc] text-xs font-semibold text-[#0b2d49] focus:outline-none focus:ring-2 focus:ring-[#d7a444]/10"
+                aria-expanded={isOpen}
+                aria-haspopup="listbox"
+            >
+                <span className="truncate" title={String(value || '')}>
+                    {resolveLabel(value)}
+                </span>
+                <ChevronDown size={14} className={`text-[#708aa0] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isOpen && (
+                <div className="absolute z-50 mt-2 w-full min-w-64 rounded-2xl border border-[#e9eff1] bg-white shadow-xl overflow-hidden">
+                    {searchable && (
+                        <div className="relative p-3 border-b border-[#f0f4f6]">
+                            <Search size={14} className="absolute left-6 top-1/2 -translate-y-1/2 text-[#708aa0]" />
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(event) => setSearchTerm(event.target.value)}
+                                placeholder={placeholder}
+                                className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#f8fafc] text-xs font-semibold text-[#0b2d49] focus:outline-none focus:ring-2 focus:ring-[#d7a444]/10"
+                                autoFocus
+                            />
+                        </div>
+                    )}
+
+                    <div className="max-h-64 overflow-y-auto custom-scrollbar p-2">
+                        {filteredOptions.length > 0 ? (
+                            filteredOptions.map((option) => {
+                                const optionValue = typeof option === 'string' ? option : option.value;
+                                const optionLabel = typeof option === 'string' ? option : option.label;
+                                const displayLabel = getOptionLabel ? getOptionLabel(optionLabel) : optionLabel;
+                                const isSelected = optionValue === value;
+
+                                return (
+                                    <button
+                                        key={optionValue}
+                                        type="button"
+                                        onClick={() => {
+                                            onChange(optionValue);
+                                            setIsOpen(false);
+                                            setSearchTerm('');
+                                        }}
+                                        className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${isSelected
+                                                ? 'bg-[#0b2d49] text-white'
+                                                : 'text-[#0b2d49] hover:bg-[#f8fafc]'
+                                            }`}
+                                        title={String(optionLabel || '')}
+                                    >
+                                        <span className="block truncate">{displayLabel}</span>
+                                    </button>
+                                );
+                            })
+                        ) : (
+                            <div className="px-3 py-6 text-center text-xs font-semibold text-[#708aa0]">
+                                No matches found
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const AdminVendorVerification = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch();
@@ -45,6 +182,10 @@ const AdminVendorVerification = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [showApplicationsModal, setShowApplicationsModal] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
+    const [showFilters, setShowFilters] = useState(false);
+    const [categoryFilter, setCategoryFilter] = useState('All');
+    const [locationFilter, setLocationFilter] = useState('All');
+    const [sortBy, setSortBy] = useState('Newest');
 
     const { vendorApplications, loading, error } = useSelector((state) => state.admin);
 
@@ -52,18 +193,52 @@ const AdminVendorVerification = () => {
         dispatch(fetchVendorApplications());
     }, [dispatch]);
 
+    const approvedVendors = useMemo(() => {
+        return (vendorApplications || []).filter((vendor) => vendor.status === "APPROVED");
+    }, [vendorApplications]);
+
+    const categoryOptions = useMemo(() => {
+        const values = approvedVendors
+            .map((vendor) => String(vendor.serviceCategory || '').trim())
+            .filter(Boolean);
+        return ['All', ...Array.from(new Set(values)).sort((a, b) => a.localeCompare(b))];
+    }, [approvedVendors]);
+
+    const locationOptions = useMemo(() => {
+        const values = approvedVendors
+            .map((vendor) => String(vendor.location || '').trim())
+            .filter(Boolean);
+        return ['All', ...Array.from(new Set(values)).sort((a, b) => a.localeCompare(b))];
+    }, [approvedVendors]);
+
     // Filter approved vendors for main grid
-    const filteredVendors = vendorApplications.filter(vendor => {
-        const query = searchQuery.toLowerCase();
-        const matchesQuery = (
-            vendor.businessName?.toLowerCase().includes(query) ||
-            vendor.applicationId?.toLowerCase().includes(query) ||
-            vendor.description?.toLowerCase().includes(query) ||
-            vendor.location?.toLowerCase().includes(query) ||
-            vendor.serviceCategory?.toLowerCase().includes(query)
-        );
-        return matchesQuery && vendor.status === "APPROVED";
-    });
+    const filteredVendors = useMemo(() => {
+        const query = normalizeText(searchQuery);
+
+        const matches = approvedVendors.filter((vendor) => {
+            const matchesQuery = !query || (
+                normalizeText(vendor.businessName).includes(query)
+                || normalizeText(vendor.applicationId).includes(query)
+                || normalizeText(vendor.description).includes(query)
+                || normalizeText(vendor.location).includes(query)
+                || normalizeText(vendor.serviceCategory).includes(query)
+            );
+
+            const matchesCategory = categoryFilter === 'All'
+                || String(vendor.serviceCategory || '').trim() === categoryFilter;
+
+            const matchesLocation = locationFilter === 'All'
+                || String(vendor.location || '').trim() === locationFilter;
+
+            return matchesQuery && matchesCategory && matchesLocation;
+        });
+
+        return matches.sort((a, b) => {
+            if (sortBy === 'Oldest') return toTimestamp(a.submittedAt) - toTimestamp(b.submittedAt);
+            if (sortBy === 'A-Z') return String(a.businessName || '').localeCompare(String(b.businessName || ''));
+            return toTimestamp(b.submittedAt) - toTimestamp(a.submittedAt);
+        });
+    }, [approvedVendors, searchQuery, categoryFilter, locationFilter, sortBy]);
 
     const totalPages = Math.max(1, Math.ceil(filteredVendors.length / ITEMS_PER_PAGE));
     const safePage = Math.min(currentPage, totalPages);
@@ -74,7 +249,7 @@ const AdminVendorVerification = () => {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery]);
+    }, [searchQuery, categoryFilter, locationFilter, sortBy]);
 
     useEffect(() => {
         if (currentPage > totalPages) {
@@ -87,6 +262,12 @@ const AdminVendorVerification = () => {
         v.status === "PENDING_REVIEW" || 
         v.status === "UNDER_VERIFICATION"
     );
+
+    const activeFiltersCount = [
+        categoryFilter !== 'All',
+        locationFilter !== 'All',
+        sortBy !== 'Newest'
+    ].filter(Boolean).length;
 
     return (
     <div className="flex flex-col h-full relative overflow-hidden bg-[#f8fafc]">
@@ -128,12 +309,72 @@ const AdminVendorVerification = () => {
                             <span className="ml-1 px-1.5 py-0.5 bg-[#d7a444] text-white rounded-md text-[8px]">{pendingApplications.length}</span>
                         )}
                     </button>
-                    <button className="flex items-center gap-2 px-5 py-2.5 bg-white border border-[#e9eff1] text-[#0b2d49] rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:border-[#0b2d49] transition-all whitespace-nowrap active:scale-95">
+                    <button
+                        onClick={() => setShowFilters((prev) => !prev)}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-white border border-[#e9eff1] text-[#0b2d49] rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm hover:border-[#0b2d49] transition-all whitespace-nowrap active:scale-95"
+                        aria-expanded={showFilters}
+                        aria-controls="vendor-filters-panel"
+                    >
                         <Filter size={14} />
                         Filter
+                        {activeFiltersCount > 0 && (
+                            <span className="ml-1 px-1.5 py-0.5 bg-[#0b2d49] text-white rounded-md text-[8px]">
+                                {activeFiltersCount}
+                            </span>
+                        )}
                     </button>
                 </div>
             </div>
+
+            {showFilters && (
+                <div
+                    id="vendor-filters-panel"
+                    className="mt-3 bg-white border border-[#e9eff1] rounded-2xl p-4 shadow-sm"
+                >
+                    <div className="flex flex-col xl:flex-row gap-4 xl:items-end">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 flex-1">
+                            <FilterSelect
+                                label="Category"
+                                value={categoryFilter}
+                                options={categoryOptions}
+                                onChange={setCategoryFilter}
+                            />
+
+                            <FilterSelect
+                                label="Location"
+                                value={locationFilter}
+                                options={locationOptions}
+                                onChange={setLocationFilter}
+                                searchable={true}
+                                getOptionLabel={shortenLocationLabel}
+                                placeholder="Search locations..."
+                            />
+
+                            <FilterSelect
+                                label="Sort by"
+                                value={sortBy}
+                                options={[
+                                    { value: 'Newest', label: 'Newest first' },
+                                    { value: 'Oldest', label: 'Oldest first' },
+                                    { value: 'A-Z', label: 'Name A-Z' }
+                                ]}
+                                onChange={setSortBy}
+                            />
+                        </div>
+
+                        <button
+                            onClick={() => {
+                                setCategoryFilter('All');
+                                setLocationFilter('All');
+                                setSortBy('Newest');
+                            }}
+                            className="px-5 py-2.5 rounded-xl border border-[#e9eff1] text-[10px] font-black uppercase tracking-widest text-[#0b2d49] bg-white hover:border-[#0b2d49] transition-all whitespace-nowrap"
+                        >
+                            Clear Filters
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
 
         {/* Content Grid */}
