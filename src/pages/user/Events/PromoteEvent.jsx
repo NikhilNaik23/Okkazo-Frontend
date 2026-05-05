@@ -27,6 +27,23 @@ import {
 import { getInclusiveIstDayRange } from '../../../utils/istDateTime';
 import { normalizeDayTierAllocations, validateDayTierAllocations } from '../../../utils/dayTierAllocation';
 
+const DRAFT_STORAGE_KEY = 'promoteEventDraft_v3';
+
+const buildDraftForStorage = (data) => {
+    if (!data || typeof data !== 'object') return initialPromoteEventState;
+
+    const { banner, bannerFile, authDocuments, ...rest } = data;
+
+    return {
+        ...initialPromoteEventState,
+        ...rest,
+        // Media files and previews can exceed localStorage quotas.
+        banner: null,
+        bannerFile: null,
+        authDocuments: [],
+    };
+};
+
 const PromoteEvent = () => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -66,10 +83,12 @@ const PromoteEvent = () => {
 
         // Normal wizard entry: restore draft if present
         try {
-            const saved = localStorage.getItem('promoteEventDraft_v3');
+            const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
             if (saved) {
                 const parsed = JSON.parse(saved);
-                if (parsed && typeof parsed === 'object') return parsed;
+                if (parsed && typeof parsed === 'object') {
+                    return { ...initialPromoteEventState, ...parsed };
+                }
             }
         } catch (e) {
             console.error('Draft load failed', e);
@@ -165,7 +184,19 @@ const PromoteEvent = () => {
 
     useEffect(() => {
         if (payContext?.eventId) return;
-        localStorage.setItem('promoteEventDraft_v3', JSON.stringify(formData));
+        try {
+            const draft = buildDraftForStorage(formData);
+            localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+        } catch (e) {
+            console.warn('Draft save failed', e);
+            try {
+                const draft = buildDraftForStorage(formData);
+                localStorage.removeItem(DRAFT_STORAGE_KEY);
+                localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+            } catch (retryError) {
+                console.warn('Draft save retry failed', retryError);
+            }
+        }
     }, [formData, payContext]);
 
     useEffect(() => {
@@ -371,7 +402,7 @@ const PromoteEvent = () => {
 
         setIsPaymentStep(false);
         setIsSuccessStep(true);
-        localStorage.removeItem('promoteEventDraft_v3');
+        localStorage.removeItem(DRAFT_STORAGE_KEY);
     };
 
     // Render Logic
