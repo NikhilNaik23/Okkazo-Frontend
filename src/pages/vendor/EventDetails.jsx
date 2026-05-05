@@ -5,7 +5,6 @@ import {
     BsArrowLeft,
     BsWallet2,
     BsChatDots,
-    BsListCheck,
     BsReceipt,
     BsShieldCheck,
     BsInfoCircle
@@ -101,6 +100,68 @@ const formatEventDateRangeLabel = (startAt, endAt) => {
     return `${startLabel} - ${endLabel}`;
 };
 
+const formatEventTimeLabel = ({ eventTime, scheduleStartAt, scheduleEndAt }) => {
+    const rawTime = String(eventTime || '').trim();
+    if (rawTime) {
+        const match = rawTime.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+        if (match) {
+            const hh = Number(match[1]);
+            const mm = match[2];
+            const ampm = hh >= 12 ? 'PM' : 'AM';
+            const hour12 = ((hh + 11) % 12) + 1;
+            return `${hour12}:${mm} ${ampm}`;
+        }
+        return rawTime;
+    }
+
+    const start = scheduleStartAt ? new Date(scheduleStartAt) : null;
+    const end = scheduleEndAt ? new Date(scheduleEndAt) : null;
+
+    if (start && !Number.isNaN(start.getTime())) {
+        const startText = start.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).toUpperCase();
+        if (end && !Number.isNaN(end.getTime())) {
+            const endText = end.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).toUpperCase();
+            return `${startText} - ${endText}`;
+        }
+        return startText;
+    }
+
+    return 'TBD';
+};
+
+const parseGoogleMapsLatLng = (rawUrl) => {
+    if (!rawUrl) return null;
+    try {
+        const url = new URL(String(rawUrl));
+        const atMatch = url.pathname.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+        if (atMatch) return { lat: Number(atMatch[1]), lng: Number(atMatch[2]) };
+
+        const qParam = url.searchParams.get('q') || url.searchParams.get('query');
+        if (qParam) {
+            const qMatch = qParam.match(/(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
+            if (qMatch) return { lat: Number(qMatch[1]), lng: Number(qMatch[2]) };
+        }
+    } catch {
+        return null;
+    }
+    return null;
+};
+
+const isVenueService = (item, serviceDoc) => {
+    const tokens = [
+        item?.service,
+        item?.serviceName,
+        item?.serviceCategory,
+        serviceDoc?.categoryId,
+        serviceDoc?.serviceCategory,
+        serviceDoc?.category,
+    ]
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase());
+
+    return tokens.some((value) => value.includes('venue') || value.includes('location'));
+};
+
 const EventDetails = () => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -113,7 +174,7 @@ const EventDetails = () => {
     // Determine active tab based on current path
     // path format: /vendor/event/:id/:tab
     const currentPath = location.pathname.split('/').pop();
-    const activeSubTab = ['details', 'budget', 'chat', 'todo', 'bill'].includes(currentPath) ? currentPath : 'details';
+    const activeSubTab = ['details', 'budget', 'chat', 'bill'].includes(currentPath) ? currentPath : 'details';
 
     const [activeChannel, setActiveChannel] = useState("vendors"); // Default to vendors to show broadcast
     const [chatInput, setChatInput] = useState('');
@@ -388,6 +449,9 @@ const EventDetails = () => {
         pax: 0,
         category: "Event",
         location: "—",
+        locationLat: null,
+        locationLng: null,
+        locationMapsUrl: null,
         client: {
             name: "—",
             org: "—",
@@ -408,32 +472,6 @@ const EventDetails = () => {
             client: []
         }
     });
-
-    const [todoTasks, setTodoTasks] = useState([]);
-
-    const toggleTask = (taskId) => {
-        setTodoTasks(prev => prev.map(task =>
-            task.id === taskId ? { ...task, completed: !task.completed } : task
-        ));
-        toast.success("Task status updated!");
-    };
-
-    const [newTaskTitle, setNewTaskTitle] = useState("");
-
-    const handleAddTask = () => {
-        if (!newTaskTitle.trim()) return;
-        const newTask = {
-            id: Date.now(),
-            title: newTaskTitle,
-            priority: "MEDIUM",
-            owner: "You",
-            date: "Today",
-            completed: false
-        };
-        setTodoTasks(prev => [newTask, ...prev]);
-        setNewTaskTitle("");
-        toast.success("New task added!");
-    };
 
     const [services, setServices] = useState([]);
     const [tempServices, setTempServices] = useState([]);
@@ -588,6 +626,12 @@ const EventDetails = () => {
                 return Number.isFinite(num) ? num : 0;
             }
             return 0;
+        };
+
+        const toOptionalNumber = (v) => {
+            if (v == null || v === '') return null;
+            const num = Number(v);
+            return Number.isFinite(num) ? num : null;
         };
 
         const receivedAmount = Number(
@@ -802,7 +846,84 @@ const EventDetails = () => {
             };
         });
 
+        const acceptedVenue = vendorItems.find((v) => {
+            const status = String(v?.status || '').trim().toUpperCase();
+            if (status !== 'ACCEPTED') return false;
+            const serviceId = String(v?.serviceId || '').trim();
+            const serviceDoc =
+                myServices.find((s) => String(s?._id) === String(serviceId)) ||
+                publicServicesById?.[serviceId] ||
+                null;
+            return isVenueService(v, serviceDoc);
+        });
+
+        const resolveVenueLocation = () => {
+            if (!acceptedVenue) return null;
+            const serviceId = String(acceptedVenue?.serviceId || '').trim();
+            const serviceDoc =
+                myServices.find((s) => String(s?._id) === String(serviceId)) ||
+                publicServicesById?.[serviceId] ||
+                null;
+
+            const locationName = String(
+                serviceDoc?.details?.location ||
+                serviceDoc?.location ||
+                acceptedVenue?.serviceLocation ||
+                acceptedVenue?.location ||
+                ''
+            ).trim();
+
+            let lat = toOptionalNumber(
+                serviceDoc?.details?.locationLat ??
+                serviceDoc?.details?.lat ??
+                acceptedVenue?.locationLat ??
+                acceptedVenue?.lat ??
+                acceptedVenue?.latitude
+            );
+            let lng = toOptionalNumber(
+                serviceDoc?.details?.locationLng ??
+                serviceDoc?.details?.lng ??
+                acceptedVenue?.locationLng ??
+                acceptedVenue?.lng ??
+                acceptedVenue?.longitude
+            );
+
+            const mapsUrl = String(
+                serviceDoc?.details?.locationMapsUrl ||
+                serviceDoc?.details?.mapsUrl ||
+                acceptedVenue?.locationMapsUrl ||
+                acceptedVenue?.mapsUrl ||
+                ''
+            ).trim();
+
+            if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && mapsUrl) {
+                const coords = parseGoogleMapsLatLng(mapsUrl);
+                if (coords && Number.isFinite(coords.lat) && Number.isFinite(coords.lng)) {
+                    lat = coords.lat;
+                    lng = coords.lng;
+                }
+            }
+
+            const fallbackLabel = Number.isFinite(lat) && Number.isFinite(lng)
+                ? `${lat.toFixed(4)}, ${lng.toFixed(4)}`
+                : '';
+
+            return {
+                name: locationName || fallbackLabel,
+                lat,
+                lng,
+                mapsUrl: mapsUrl || null,
+            };
+        };
+
+        const venueLocation = resolveVenueLocation();
+
         setEvent((prev) => {
+            const timeLabel = formatEventTimeLabel({
+                eventTime: planning.eventTime,
+                scheduleStartAt: planning.schedule?.startAt,
+                scheduleEndAt: planning.schedule?.endAt,
+            });
             const nextEvent = {
                 ...prev,
                 id: selected.eventId || prev.id,
@@ -812,13 +933,16 @@ const EventDetails = () => {
                 date: isPublicEvent
                     ? (publicDateRangeLabel || prev.date)
                     : (formatEventDateLabel(planning.eventDate || planning.schedule?.startAt) || prev.date),
-                time: planning.eventTime ? `${planning.eventTime} - TBD` : prev.time,
+                time: timeLabel !== 'TBD' ? timeLabel : prev.time,
                 pax: paxCount > 0 ? paxCount : prev.pax,
                 isPublic: isPublicEvent,
                 publicDayCount,
                 publicTicketDayAllocations,
                 category: planning.eventType || planning.category || prev.category,
-                location: planning.location?.name || prev.location,
+                location: venueLocation?.name || planning.location?.name || prev.location,
+                locationLat: venueLocation?.lat ?? prev.locationLat,
+                locationLng: venueLocation?.lng ?? prev.locationLng,
+                locationMapsUrl: venueLocation?.mapsUrl ?? prev.locationMapsUrl,
                 description: planning.eventDescription || prev.description,
                 amountReceived: receivedAmount,
                 ledger: normalizedLedger,
@@ -980,12 +1104,6 @@ const EventDetails = () => {
         handleSend,
         handleDeleteMessage,
         handleEditMessage,
-        // Todo
-        todoTasks,
-        toggleTask,
-        newTaskTitle,
-        setNewTaskTitle,
-        handleAddTask
     };
 
     const normalizedEventStatus = String(event?.status || '').trim().toUpperCase().replace(/_/g, ' ');
@@ -1094,7 +1212,6 @@ const EventDetails = () => {
                                 {[
                                     { id: "details", label: "Details", icon: <BsInfoCircle /> },
                                     { id: "budget", label: "Budget", icon: <BsWallet2 /> },
-                                    { id: "todo", label: "To-do", icon: <BsListCheck /> },
                                     { id: "bill", label: "Bill Generator", icon: <BsReceipt /> },
                                 ].map((tab) => (
                                     <NavLink

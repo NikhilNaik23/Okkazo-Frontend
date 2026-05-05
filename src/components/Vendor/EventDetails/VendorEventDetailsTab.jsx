@@ -148,6 +148,20 @@ const VendorEventDetailsTab = () => {
     const paxLabel = event?.isPublic ? 'Total Tickets' : 'Expected Pax';
     const paxUnit = event?.isPublic ? 'Tickets' : 'Guests';
     const paxValue = Number(event?.pax || 0) > 0 ? `${event.pax} ${paxUnit}` : 'TBD';
+    const mapLat = Number(event?.locationLat);
+    const mapLng = Number(event?.locationLng);
+    const hasCoords = Number.isFinite(mapLat) && Number.isFinite(mapLng);
+    const mapUrl = hasCoords
+        ? `https://www.google.com/maps/search/?api=1&query=${mapLat},${mapLng}`
+        : (event?.locationMapsUrl
+            || (event?.location
+                ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`
+                : null));
+
+    const handleOpenMap = () => {
+        if (!mapUrl) return;
+        window.open(mapUrl, '_blank', 'noopener,noreferrer');
+    };
 
     const statCards = [
         { icon: BsCalendarEvent, label: 'Date', value: event?.date || 'TBD' },
@@ -675,15 +689,21 @@ const VendorEventDetailsTab = () => {
                         </p>
                     </div>
                     {/* Simulated Map Container with Premium styling */}
-                    <div className="relative h-48 w-full bg-[#f8fafb] rounded-2xl border border-gray-100 overflow-hidden group cursor-pointer">
+                    <button
+                        type="button"
+                        onClick={handleOpenMap}
+                        disabled={!mapUrl}
+                        aria-label={mapUrl ? 'Open venue location in maps' : 'Venue location map unavailable'}
+                        className={`relative h-48 w-full bg-[#f8fafb] rounded-2xl border border-gray-100 overflow-hidden group transition-all ${mapUrl ? 'cursor-pointer' : 'cursor-default opacity-70'}`}
+                    >
                         <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] mix-blend-multiply"></div>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-white/40 backdrop-blur-[2px] group-hover:bg-white/10 transition-colors duration-500">
-                            <div className="w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center mb-3 group-hover:scale-110 group-hover:shadow-[#d7a444]/20 group-hover:text-[#d7a444] transition-all duration-300">
+                        <div className={`absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-white/40 backdrop-blur-[2px] transition-colors duration-500 ${mapUrl ? 'group-hover:bg-white/10' : ''}`}>
+                            <div className={`w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center mb-3 transition-all duration-300 ${mapUrl ? 'group-hover:scale-110 group-hover:shadow-[#d7a444]/20 group-hover:text-[#d7a444]' : ''}`}>
                                 <BsGeoAlt size={16} />
                             </div>
                             <p className="text-[10px] font-black text-[#0b2d49] uppercase tracking-widest">Interactive Map</p>
                         </div>
-                    </div>
+                    </button>
                 </div>
             </div>
         </div>

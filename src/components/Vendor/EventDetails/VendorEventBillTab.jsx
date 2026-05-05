@@ -2,8 +2,8 @@ import React, { useState, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import {
     BsReceipt, BsPrinter, BsDownload, BsPencilSquare,
-    BsPercent, BsTag, BsHash, BsPerson,
-    BsEnvelope, BsPhone, BsBuilding
+    BsTag, BsHash, BsPerson,
+    BsEnvelope, BsPhone
 } from 'react-icons/bs';
 import { toast } from "react-hot-toast";
 import html2canvas from 'html2canvas';
@@ -25,8 +25,6 @@ const VendorEventBillTab = () => {
     );
     const [clientCompany, setClientCompany] = useState('');
     const [discount, setDiscount] = useState(0);
-    const [cgstRate, setCgstRate] = useState(9);
-    const [sgstRate, setSgstRate] = useState(9);
 
     /* ---------- VALIDATION ---------- */
     const [emailError, setEmailError] = useState('');
@@ -72,10 +70,7 @@ const VendorEventBillTab = () => {
     /* ---------- CALCULATIONS ---------- */
 
     const subtotal = initialSubtotal || 0;
-    const cgstAmount = (subtotal * cgstRate) / 100;
-    const sgstAmount = (subtotal * sgstRate) / 100;
-    const grossTotal = subtotal + cgstAmount + sgstAmount;
-    const totalPayable = Math.max(0, grossTotal - discount);
+    const totalPayable = Math.max(0, subtotal - discount);
 
     /* ---------- PDF ---------- */
 
@@ -301,17 +296,9 @@ const VendorEventBillTab = () => {
                         </div>
 
                         <div className="w-[320px] space-y-3">
-                            <div className="flex justify-between text-sm font-semibold px-2">
+                            <div className="flex justify-between text-sm font-semibold border-b border-gray-100 pb-3 px-2">
                                 <span className="text-[#708aa0]">Subtotal</span>
                                 <span className="text-[#0b2d49]">₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                            <div className="flex justify-between text-sm font-semibold px-2">
-                                <span className="text-[#708aa0]">CGST ({cgstRate}%)</span>
-                                <span className="text-[#0b2d49]">₹{cgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                            <div className="flex justify-between text-sm font-semibold border-b border-gray-100 pb-3 px-2">
-                                <span className="text-[#708aa0]">SGST ({sgstRate}%)</span>
-                                <span className="text-[#0b2d49]">₹{sgstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             </div>
 
                             {discount > 0 && (
@@ -451,7 +438,7 @@ const VendorEventBillTab = () => {
 
                     {/* Finance Settings */}
                     <div className="space-y-4">
-                        <p className="text-[10px] uppercase tracking-widest text-[#0b2d49] font-black border-l-2 border-[#d7a444] pl-2">Taxes & Discount</p>
+                        <p className="text-[10px] uppercase tracking-widest text-[#0b2d49] font-black border-l-2 border-[#d7a444] pl-2">Discount</p>
 
                         <div className="space-y-1.5">
                             <label className="text-[10px] uppercase tracking-widest text-[#708aa0] font-bold pl-1">Discount Amount (₹)</label>
@@ -469,36 +456,6 @@ const VendorEventBillTab = () => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase tracking-widest text-[#708aa0] font-bold pl-1">CGST (%)</label>
-                                <div className="relative">
-                                    <BsPercent className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.1"
-                                        value={cgstRate}
-                                        onChange={(e) => setCgstRate(Math.max(0, parseFloat(e.target.value) || 0))}
-                                        className="w-full pl-8 pr-3 py-3 bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-[#0b2d49]/30 rounded-xl font-bold text-[#0b2d49] transition-all outline-none"
-                                    />
-                                </div>
-                            </div>
-                            <div className="space-y-1.5">
-                                <label className="text-[10px] uppercase tracking-widest text-[#708aa0] font-bold pl-1">SGST (%)</label>
-                                <div className="relative">
-                                    <BsPercent className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={12} />
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        step="0.1"
-                                        value={sgstRate}
-                                        onChange={(e) => setSgstRate(Math.max(0, parseFloat(e.target.value) || 0))}
-                                        className="w-full pl-8 pr-3 py-3 bg-slate-50 border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-[#0b2d49]/30 rounded-xl font-bold text-[#0b2d49] transition-all outline-none"
-                                    />
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
