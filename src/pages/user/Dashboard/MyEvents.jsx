@@ -51,6 +51,44 @@ const resolveBannerUrl = (value) => {
     return null;
 };
 
+const normalizeStatusToken = (value) =>
+    String(value || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ');
+
+const extractTicketStatusTokens = (ticket) => {
+    const t = ticket && typeof ticket === 'object' ? ticket : {};
+    return [
+        t.status,
+        t.ticketStatus,
+        t.eventStatus,
+        t.refundStatus,
+        t.refundState,
+        t.refundRequestStatus,
+        t?.refund?.status,
+        t?.refundRequest?.status,
+        t?.payment?.status,
+        t?.event?.status,
+        t?.event?.eventStatus,
+    ]
+        .map(normalizeStatusToken)
+        .filter(Boolean);
+};
+
+const shouldHideTicket = (ticket) => {
+    const tokens = extractTicketStatusTokens(ticket);
+    if (!tokens.length) return false;
+
+    return tokens.some((token) => {
+        if (token.includes('CANCEL')) return true;
+        if (token.includes('CLOSED')) return true;
+        if (token.includes('REFUND')) return true;
+        return false;
+    });
+};
+
 const mapApiTicketToCard = (ticket, idx) => {
     const startAt = ticket?.schedule?.startAt ? new Date(ticket.schedule.startAt) : null;
     const validDate = startAt && !Number.isNaN(startAt.getTime()) ? startAt : null;
@@ -425,7 +463,8 @@ const MyEvents = () => {
                 const ticketsData = await safeJson(ticketsResponse);
                 if (ticketsResponse.ok && ticketsData?.success) {
                     const items = Array.isArray(ticketsData?.data?.tickets) ? ticketsData.data.tickets : [];
-                    setMyTickets(items.map((ticket, idx) => mapApiTicketToCard(ticket, idx)));
+                    const visible = items.filter((ticket) => !shouldHideTicket(ticket));
+                    setMyTickets(visible.map((ticket, idx) => mapApiTicketToCard(ticket, idx)));
                 } else {
                     setMyTickets([]);
                 }

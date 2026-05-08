@@ -15,6 +15,7 @@ const promotePipelineStages = [
     { id: 'live', label: 'Live' },
     { id: 'completed', label: 'Completed' },
     { id: 'cancelled', label: 'Cancelled' },
+    { id: 'closed', label: 'Closed' },
 ];
 
 const PROMOTION_BUTTONS = [
@@ -100,6 +101,7 @@ const OverviewTab = ({
                 if (status === 'CONFIRMED') return 'confirmed';
                 if (status === 'LIVE') return 'live';
                 if (status === 'COMPLETED' || status === 'COMPLETE') return 'completed';
+                if (status === 'CLOSED') return 'closed';
                 if (status === 'CANCELLED' || status === 'CANCELED') return 'cancelled';
                 return 'promoting';
             }
@@ -112,7 +114,8 @@ const OverviewTab = ({
             if (status === 'IN REVIEW') return 'vendor_confirm';
             if (status === 'LIVE') return 'live';
             if (status === 'COMPLETED') return 'completed';
-            if (status === 'CANCELLED' || status === 'CANCELED' || status === 'CLOSED') return 'cancelled';
+            if (status === 'CLOSED') return 'closed';
+            if (status === 'CANCELLED' || status === 'CANCELED') return 'cancelled';
 
             return 'planning';
         })();

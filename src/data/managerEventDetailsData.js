@@ -35,6 +35,7 @@ export const pipelineStages = [
     { id: 'live', label: 'Live', done: false },
     { id: 'completed', label: 'Completed', done: false },
     { id: 'cancelled', label: 'Cancelled', done: false },
+    { id: 'closed', label: 'Closed', done: false },
 ];
 
 export const teamMembers = [
