@@ -40,6 +40,24 @@ const formatDateParts = (value) => {
   };
 };
 
+const resolveBannerUrl = (value) => {
+  if (!value) return null;
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+
+  if (typeof value === "object") {
+    const candidates = [value.url, value.fileUrl, value.secure_url, value.src, value.image];
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    }
+  }
+
+  return null;
+};
+
 const TrendingEvents = () => {
   const [publicEvents, setPublicEvents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,15 +92,20 @@ const TrendingEvents = () => {
     };
   }, []);
 
-  const normalizedEvents = useMemo(() => publicEvents.map((event, idx) => ({
-    id: event?.eventId || `public-${idx}`,
-    title: event?.eventTitle || "Upcoming Event",
-    tag: event?.eventType || "Event",
-    location: event?.locationName || "TBA",
-    dateValue: event?.eventDate || null,
-    date: formatDateParts(event?.eventDate),
-    image: pickPreviewImage(idx),
-  })), [publicEvents]);
+  const normalizedEvents = useMemo(() => publicEvents.map((event, idx) => {
+    const bannerValue = event?.eventBanner ?? event?.image ?? event?.banner ?? event?.bannerUrl;
+    const resolvedBanner = resolveBannerUrl(bannerValue);
+
+    return {
+      id: event?.eventId || `public-${idx}`,
+      title: event?.eventTitle || "Upcoming Event",
+      tag: event?.eventType || "Event",
+      location: event?.locationName || "TBA",
+      dateValue: event?.eventDate || null,
+      date: formatDateParts(event?.eventDate),
+      image: resolvedBanner || pickPreviewImage(idx),
+    };
+  }), [publicEvents]);
 
   const orderedEvents = useMemo(() => (
     [...normalizedEvents].sort((a, b) => toEventTimeMs(a.dateValue) - toEventTimeMs(b.dateValue))
