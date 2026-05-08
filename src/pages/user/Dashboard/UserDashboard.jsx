@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import HeroSlider from "../../../components/User/Dashboard/HeroSlider";
 import EventRow from "../../../components/User/Dashboard/EventRow";
+import { selectUser } from "../../../store/slices/authSlice";
 import {
     fetchDashboardData,
     selectDashboardErrors,
@@ -34,6 +35,15 @@ const FALLBACK_IMAGES = [
 ];
 
 const normalizeField = (value) => String(value || "").trim().toLowerCase();
+
+const normalizeInterestToken = (value) => (
+    String(value || "")
+        .toLowerCase()
+        .replace(/&/g, "and")
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim()
+        .replace(/\s+/g, " ")
+);
 
 const resolveBannerUrl = (value) => {
     if (!value) return null;
@@ -284,6 +294,20 @@ const inFieldGroup = (eventField, groupKeys) => {
     return groupKeys.includes(normalized);
 };
 
+const matchesInterest = (event, normalizedInterests) => {
+    if (!normalizedInterests.length) return false;
+    const fieldValue = event?.field || event?.tag || "";
+    const normalizedField = normalizeInterestToken(fieldValue);
+    if (!normalizedField) return false;
+
+    return normalizedInterests.some((interest) => {
+        if (!interest) return false;
+        return normalizedField === interest
+            || normalizedField.includes(interest)
+            || interest.includes(normalizedField);
+    });
+};
+
 // --- Main Dashboard ---
 
 const UserDashboard = () => {
@@ -292,6 +316,7 @@ const UserDashboard = () => {
     const searchQuery = searchParams.get("search")?.toLowerCase() || "";
     const marketplaceEvents = useSelector(selectDashboardMarketplaceEvents);
     const dashboardInterestFields = useSelector(selectDashboardInterestFields);
+    const authUser = useSelector(selectUser);
     const dashboardErrors = useSelector(selectDashboardErrors);
     const loading = useSelector(selectDashboardIsLoading);
 
@@ -322,10 +347,25 @@ const UserDashboard = () => {
         [marketplaceEvents]
     );
 
-    const interestFields = useMemo(
-        () => (Array.isArray(dashboardInterestFields) ? dashboardInterestFields.filter((f) => isKnownField(f)) : []),
-        [dashboardInterestFields]
+    const profileInterestFields = useMemo(
+        () => (Array.isArray(authUser?.interests) ? authUser.interests.filter((f) => isKnownField(f)) : []),
+        [authUser?.interests]
     );
+
+    const interestFields = useMemo(() => {
+        const combined = [
+            ...profileInterestFields,
+            ...(Array.isArray(dashboardInterestFields) ? dashboardInterestFields : []),
+        ];
+        const seen = new Set();
+        return combined.filter((field) => {
+            if (!isKnownField(field)) return false;
+            const key = normalizeField(field);
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+    }, [profileInterestFields, dashboardInterestFields]);
 
     const sourceEvents = liveEvents;
 
@@ -382,12 +422,14 @@ const UserDashboard = () => {
 
     const recommendedEvents = useMemo(() => {
         if (interestFields.length) {
-            const normalizedInterests = interestFields.map(normalizeField);
-            const matching = filteredAllEvents.filter((event) => normalizedInterests.includes(normalizeField(event?.field || event?.tag)));
-            if (matching.length) return matching.slice(0, 8);
+            const normalizedInterests = interestFields.map(normalizeInterestToken).filter(Boolean);
+            if (normalizedInterests.length) {
+                const matching = sortedByTrending.filter((event) => matchesInterest(event, normalizedInterests));
+                if (matching.length) return matching.slice(0, 8);
+            }
         }
         return sortedByTrending.slice(0, 8);
-    }, [filteredAllEvents, sortedByTrending, interestFields]);
+    }, [sortedByTrending, interestFields]);
 
     const heroEvents = useMemo(() => {
         if (searchQuery) return [];

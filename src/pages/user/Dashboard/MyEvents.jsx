@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { BsCalendarEvent, BsGeoAlt, BsQrCode, BsCheckCircleFill, BsThreeDotsVertical, BsPlusLg, BsArrowRight, BsClock, BsTicketPerforated, BsChevronDown } from "react-icons/bs";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
-import { toast, Toaster } from "react-hot-toast";
+import { toast } from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { useDispatch } from "react-redux";
@@ -759,8 +759,6 @@ const MyEvents = () => {
 
     return (
         <div className="bg-[#EBF4F6] min-h-screen font-sans text-[#09637E] selection:bg-[#7AB2B2] selection:text-white pt-28">
-            <Toaster position="top-center" />
-
             {/* Top Navigation / Tabs Container */}
             <div className="bg-[#EBF4F6]/50 backdrop-blur-md border-b border-[#09637E]/10 mb-12">
                 <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-center">

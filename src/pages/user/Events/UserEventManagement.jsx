@@ -11,7 +11,7 @@ import {
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { BsArrowLeft, BsChatDots, BsCheckCircleFill, BsClock, BsSend, BsFileEarmarkZip, BsDownload, BsCircle, BsTicketPerforated, BsPaperclip, BsThreeDotsVertical, BsStar, BsStarFill, BsExclamationTriangle, BsX } from "react-icons/bs";
-import { toast, Toaster } from "react-hot-toast";
+import { toast } from "react-hot-toast";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchPromoteByEventId } from "../../../store/slices/promoteSlice";
 import { io as createSocket } from 'socket.io-client';
@@ -2511,8 +2511,6 @@ const UserEventManagement = () => {
 
     return (
         <div className="min-h-screen bg-surface pt-28 font-sans text-primary selection:bg-accent selection:text-white">
-            <Toaster position="top-center" />
-
             <main className="max-w-350 mx-auto px-8 pb-20">
 
                 {/* Header Section */}

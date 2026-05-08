@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { BsArrowLeft, BsCheckCircleFill, BsQrCode, BsCalendarEvent } from "react-icons/bs";
-import { toast, Toaster } from "react-hot-toast";
+import { toast } from "react-hot-toast";
 import PaymentMethod from "../../../components/Forms/Checkout/PaymentMethod";
 import CheckoutOrderSummary from "../../../components/Forms/Checkout/CheckoutOrderSummary";
 import { fetchWithAuth } from "../../../utils/apiHandler";
@@ -420,8 +420,6 @@ const EventCheckout = () => {
 
     return (
         <div className="min-h-screen bg-[#EBF4F6] font-sans text-[#09637E] selection:bg-[#088395] selection:text-white overflow-x-hidden relative">
-            <Toaster position="top-center" toastOptions={{ className: 'font-bold font-serif-premium' }} />
-
             {/* Background Decorations */}
             <div className="fixed inset-0 pointer-events-none z-0">
                 <div className="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-[#09637E]/5 rounded-full blur-[120px]" />

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { BsArrowLeft, BsCheckCircleFill, BsBookmarkHeart, BsBookmarkHeartFill } from "react-icons/bs";
-import { toast, Toaster } from "react-hot-toast";
+import { toast } from "react-hot-toast";
 import { useDispatch } from "react-redux";
 import EventInfoGrid from "../../../components/User/Events/EventInfoGrid";
 import TicketSelector from "../../../components/User/Events/TicketSelector";
@@ -513,8 +513,6 @@ const EventDetails = () => {
 
     return (
         <div className="min-h-screen bg-[#EBF4F6] flex flex-col font-sans text-[#0b2d49] pt-28">
-            <Toaster position="top-center" />
-
             <main className="flex-1 max-w-7xl mx-auto w-full px-6 pt-12 pb-20">
                 {/* Back Link */}
                 <Link to="/user/dashboard" className="inline-flex items-center gap-2 text-[#09637E]/60 hover:text-[#09637E] font-bold text-xs uppercase tracking-widest mb-8 transition-colors group">

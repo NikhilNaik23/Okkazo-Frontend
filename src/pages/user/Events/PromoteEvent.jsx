@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { toast, Toaster } from "react-hot-toast";
+import { toast } from "react-hot-toast";
 import { BsArrowRight } from "react-icons/bs";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from 'react-redux';
@@ -410,8 +410,6 @@ const PromoteEvent = () => {
 
     return (
         <div className="flex min-h-screen bg-[#EBF4F6] font-sans text-[#09637E] overflow-hidden relative">
-            <Toaster position="top-right" toastOptions={{ style: { background: '#09637E', color: '#EBF4F6', border: '1px solid #7AB2B2' } }} />
-
             {/* Sidebar / Vertical Transition */}
             <div className="relative z-20">
                 <VerticalStepTransition
