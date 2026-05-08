@@ -97,7 +97,7 @@ const buildPromoteRoadmap = (promote) => {
     const isConfirmed = eventStatus === 'CONFIRMED';
     const isLive = eventStatus === 'LIVE';
     const isCompleted = eventStatus === 'COMPLETED' || eventStatus === 'COMPLETE';
-    const isFinal = isLive || isCompleted;
+    const isFinal = isLive || isCompleted || isClosed;
 
     const trackingStatus = isClosed
         ? 'Closed'
@@ -156,27 +156,27 @@ const buildPromoteRoadmap = (promote) => {
             },
             {
                 step: 4,
-                label: isClosed
-                    ? 'Closed'
-                    : isRefundCompleted
+                label: isRefundCompleted
                     ? 'Refunded'
                     : isRefundPending
                         ? 'Refund Processing'
-                        : (isRejected ? 'Closed' : isCompleted ? 'Completed' : 'Success / Live'),
-                status: isClosed
-                    ? 'completed'
-                    : isRefundCompleted
+                        : (isRejected ? 'Closed' : (isCompleted || isClosed) ? 'Completed' : 'Success / Live'),
+                status: isRefundCompleted
                     ? 'completed'
                     : isRefundPending
                         ? 'in_progress'
-                        : (isRejected ? 'pending' : isFinal ? 'completed' : 'pending'),
-                date: isClosed
-                    ? toDateLabelValue(promote?.updatedAt)
-                    : isRefundCompleted
+                        : (isRejected ? 'pending' : (isFinal || isClosed) ? 'completed' : 'pending'),
+                date: isRefundCompleted
                     ? toDateLabelValue(promote?.refundRequest?.refundedAt || promote?.updatedAt)
                     : isRefundPending
                         ? toDateLabelValue(promote?.refundRequest?.managerReviewedAt || promote?.refundRequest?.requestedAt)
-                        : (isRejected ? toDateLabelValue(promote?.adminDecision?.decidedAt) : isFinal ? toDateLabelValue(promote?.updatedAt) : '—'),
+                        : (isRejected ? toDateLabelValue(promote?.adminDecision?.decidedAt) : (isFinal || isClosed) ? toDateLabelValue(promote?.updatedAt) : '—'),
+            },
+            {
+                step: 5,
+                label: 'Closed',
+                status: isClosed ? 'in_progress' : 'pending',
+                date: isClosed ? toDateLabelValue(promote?.updatedAt) : '—',
             },
         ],
     };
@@ -1233,7 +1233,7 @@ const EventCommandCenter = () => {
                                 {/* Line */}
                                 <div className="absolute top-1/2 left-0 w-full h-0.5 bg-[#09637E]/10 -translate-y-1/2 z-0" />
 
-                                <div className="grid grid-cols-4 relative z-10">
+                                <div className="grid grid-cols-5 relative z-10">
                                     {campaign.roadmap.map((step, idx) => (
                                         <div key={idx} className="flex flex-col items-center text-center group">
                                             <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-6 transition-all duration-500 ${step.status === 'completed' ? 'bg-[#09637E] text-white scale-110 shadow-lg' :
