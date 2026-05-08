@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { BsCalendarEvent, BsGeoAlt, BsQrCode, BsCheckCircleFill, BsThreeDotsVertical, BsPlusLg, BsArrowRight, BsClock, BsTicketPerforated, BsChevronDown } from "react-icons/bs";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
@@ -329,6 +329,25 @@ const mapPlanningToCardEvent = (planning, idx) => {
     };
 };
 
+const formatHighlightBadge = (value) => {
+    if (!value) return 'Upcoming Event';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return 'Upcoming Event';
+    const day = d.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase();
+    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).toUpperCase();
+    return `${day} • ${time}`;
+};
+
+const pickRandomSample = (items, limit) => {
+    if (items.length <= limit) return items;
+    const copy = [...items];
+    for (let i = copy.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy.slice(0, limit);
+};
+
 const MyEvents = () => {
     const dispatch = useDispatch();
     const [activeTab, setActiveTab] = useState("organized");
@@ -608,6 +627,54 @@ const MyEvents = () => {
         s.title.toLowerCase().includes(searchQuery) ||
         (s.location && s.location.toLowerCase().includes(searchQuery))
     );
+    const highlightEvents = useMemo(() => {
+        if (searchQuery) return [];
+
+        if (upcomingTickets.length > 0) {
+            const sortedTickets = [...upcomingTickets].sort((a, b) => {
+                const aTime = a?.scheduleStartAt ? new Date(a.scheduleStartAt).getTime() : Number.POSITIVE_INFINITY;
+                const bTime = b?.scheduleStartAt ? new Date(b.scheduleStartAt).getTime() : Number.POSITIVE_INFINITY;
+                return aTime - bTime;
+            });
+            const sample = pickRandomSample(sortedTickets, 5);
+            return sample.map((ticket) => ({
+                label: formatHighlightBadge(ticket?.scheduleStartAt),
+                title: ticket?.title || 'Upcoming Ticket',
+                subtitle: `${ticket?.location || 'TBA'} • ${ticket?.tierText || 'Ticket'}`,
+                actionLabel: 'View Ticket',
+                onAction: () => navigate(`/user/ticket/${ticket.id}`),
+            }));
+        }
+
+        if (filteredOrganized.length > 0) {
+            const sample = pickRandomSample(filteredOrganized, 5);
+            return sample.map((event) => ({
+                label: event?.date || 'Upcoming Event',
+                title: event?.title || 'Upcoming Event',
+                subtitle: `${event?.location || 'TBA'} • ${event?.status || 'In progress'}`,
+                actionLabel: 'Manage',
+                onAction: () => handleManageClick(event?.id, event?.status),
+            }));
+        }
+
+        return [];
+    }, [searchQuery, upcomingTickets, filteredOrganized, navigate, handleManageClick]);
+
+    const [highlightIndex, setHighlightIndex] = useState(0);
+
+    useEffect(() => {
+        setHighlightIndex(0);
+    }, [highlightEvents.length]);
+
+    useEffect(() => {
+        if (highlightEvents.length <= 1) return undefined;
+        const id = setInterval(() => {
+            setHighlightIndex((current) => (current + 1) % highlightEvents.length);
+        }, 10000);
+        return () => clearInterval(id);
+    }, [highlightEvents.length]);
+
+    const highlightEvent = highlightEvents[highlightIndex] || null;
 
 
     const [activeMenuId, setActiveMenuId] = useState(null);
@@ -1034,17 +1101,20 @@ const MyEvents = () => {
                                     </div>
                                 )}
 
-                                {searchQuery === "" && (
-                                    <div className="mt-12 p-8 bg-gradient-to-r from-[#7AB2B2] to-[#088395] rounded-[40px] flex items-center justify-between relative overflow-hidden group shadow-lg">
+                                {highlightEvent && (
+                                    <div className="mt-12 p-8 bg-gradient-to-r from-[#7AB2B2] to-[#088395] rounded-[40px] flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden group shadow-lg">
                                         <div className="absolute inset-0 bg-white/10 opacity-30 mix-blend-overlay" />
                                         <div className="relative z-10 p-4">
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-white/80 mb-2">Tonight • 8:00 PM</p>
-                                            <h3 className="text-4xl font-serif-premium italic text-white mb-2">Neon Lights Concert</h3>
-                                            <p className="text-xs text-white/90 font-medium">Downtown Arena • 2 Tickets</p>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-white/80 mb-2">{highlightEvent.label}</p>
+                                            <h3 className="text-4xl font-serif-premium italic text-white mb-2">{highlightEvent.title}</h3>
+                                            <p className="text-xs text-white/90 font-medium">{highlightEvent.subtitle}</p>
                                         </div>
                                         <div className="relative z-10">
-                                            <button className="bg-[#EBF4F6] text-[#09637E] px-8 py-3 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-white transition-all">
-                                                View
+                                            <button
+                                                onClick={highlightEvent.onAction}
+                                                className="bg-[#EBF4F6] text-[#09637E] px-8 py-3 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-white transition-all"
+                                            >
+                                                {highlightEvent.actionLabel}
                                             </button>
                                         </div>
                                     </div>
