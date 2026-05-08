@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { MdPlace } from "react-icons/md";
 import { Link } from "react-router-dom";
+import { fetchWithNgrok } from "../../../utils/apiHandler";
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 const EVENTS_PER_SLIDE = 3;
@@ -49,7 +50,7 @@ const TrendingEvents = () => {
     const fetchPublicEvents = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(
+        const response = await fetchWithNgrok(
           `${API_BASE_URL}/api/public/events/marketplace/events?limit=${MAX_PUBLIC_EVENTS}`,
           { method: "GET" }
         );
