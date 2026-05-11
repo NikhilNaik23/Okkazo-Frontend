@@ -59,6 +59,9 @@ const summarizeServiceLabel = (vendorItems = []) => {
   return services.length > 0 ? services.join(', ') : 'Service';
 };
 
+const CLOSED_REQUEST_STATUSES = new Set(['CANCELLED', 'CANCELED', 'CLOSED']);
+const isClosedRequestStatus = (value) => CLOSED_REQUEST_STATUSES.has(String(value || '').trim().toUpperCase());
+
 const EventRequestsModal = ({ isOpen, onClose, requests }) => {
   const navigate = useNavigate();
 
@@ -161,11 +164,13 @@ const BookedEvents = () => {
       const { day, month } = formatDayMonth(row?.eventDate);
       const hasRejected = (row?.vendorItems || []).some((v) => v?.status === 'REJECTED');
       const isPending = (row?.vendorItems || []).some((v) => v?.status === 'YET_TO_SELECT');
+      const planningStatus = String(row?.planningStatus || '').trim();
 
       return {
         id: row?.eventId,
         title: row?.eventTitle || 'Event',
         status: hasRejected ? 'REJECTED' : (isPending ? 'PENDING' : 'CONFIRMED'),
+        planningStatus,
         date: day,
         month,
         category: row?.eventType || row?.category || 'Event',
@@ -238,7 +243,7 @@ const BookedEvents = () => {
   }, [uiRequests, currentUserId, dispatch]);
 
   const stats = {
-    pending: uiRequests.filter(e => e.status === "PENDING").length,
+    pending: uiRequests.filter(e => e.status === "PENDING" && !isClosedRequestStatus(e.planningStatus)).length,
     confirmed: uiRequests.filter(e => e.status === "CONFIRMED").length
   };
 
@@ -249,7 +254,9 @@ const BookedEvents = () => {
     return isConfirmed && matchesSearch;
   });
 
-  const pendingRequests = uiRequests.filter(e => e.status === "PENDING");
+  const pendingRequests = uiRequests.filter(
+    (e) => e.status === "PENDING" && !isClosedRequestStatus(e.planningStatus)
+  );
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">

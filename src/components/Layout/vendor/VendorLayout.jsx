@@ -69,7 +69,13 @@ const VendorLayout = () => {
 
   const pendingRequestsCount = useMemo(() => {
     const rows = Array.isArray(vendorRequests) ? vendorRequests : [];
-    return rows.filter((row) => (row?.vendorItems || []).some((v) => v?.status === 'YET_TO_SELECT')).length;
+    return rows.filter((row) => {
+      const planningStatus = String(row?.planningStatus || '').trim().toUpperCase();
+      if (planningStatus === 'CANCELLED' || planningStatus === 'CANCELED' || planningStatus === 'CLOSED') {
+        return false;
+      }
+      return (row?.vendorItems || []).some((v) => v?.status === 'YET_TO_SELECT');
+    }).length;
   }, [vendorRequests]);
 
   useEffect(() => {
