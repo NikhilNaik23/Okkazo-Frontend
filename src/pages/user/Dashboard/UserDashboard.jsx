@@ -477,11 +477,10 @@ const UserDashboard = () => {
                 {!showSkeleton && hasResults ? (
                     <>
                         {topTenEvents.length > 0 && <EventRow title={searchQuery ? "Top Matches" : "Top 10 Trending Events Near You"} events={topTenEvents} isTopTen={!searchQuery} />}
+                        {recommendedEvents.length > 0 && <EventRow title={searchQuery ? "More Results" : "Recommended for You"} events={recommendedEvents} />}
                         {musicEvents.length > 0 && <EventRow title="Music & Entertainment" events={musicEvents} />}
                         {businessEvents.length > 0 && <EventRow title="Business & Technology" events={businessEvents} />}
                         {creativeEvents.length > 0 && <EventRow title="Creative Arts & Culture" events={creativeEvents} />}
-
-                        {recommendedEvents.length > 0 && <EventRow title={searchQuery ? "More Results" : "Recommended for You"} events={recommendedEvents} />}
                     </>
                 ) : !showSkeleton ? (
                     <div className="text-center py-20 opacity-50">

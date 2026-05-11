@@ -243,6 +243,7 @@ const UserEventManagement = () => {
     const [activeTab, setActiveTab] = useState("overview"); // "overview" (Command Center), "billing" (Bills & Payment), "chat" (Manager Sync)
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
     const [isSubmittingCancelRequest, setIsSubmittingCancelRequest] = useState(false);
+    const [refundPolicyAccepted, setRefundPolicyAccepted] = useState(false);
     const [chatMessage, setChatMessage] = useState("");
     const [messages, setMessages] = useState([]);
     const [conversationId, setConversationId] = useState(null);
@@ -252,6 +253,12 @@ const UserEventManagement = () => {
     const [managerOnline, setManagerOnline] = useState(false);
     const socketRef = useRef(null);
     const fileInputRef = useRef(null);
+
+    useEffect(() => {
+        if (!isCancelModalOpen) {
+            setRefundPolicyAccepted(false);
+        }
+    }, [isCancelModalOpen]);
 
     const messagesViewportRef = useRef(null);
     const messagesEndRef = useRef(null);
@@ -2113,6 +2120,11 @@ const UserEventManagement = () => {
         const normalizedEventId = String(event?.id || eventId || '').trim();
         if (!normalizedEventId || !['PLANNING', 'PROMOTE'].includes(eventKind)) {
             toast.error('Cancellation refund requests are not available for this event type.');
+            return;
+        }
+
+        if (!refundPolicyAccepted) {
+            toast.error('Please accept the refund policy to continue.');
             return;
         }
 
@@ -3981,6 +3993,26 @@ const UserEventManagement = () => {
                                 }
                             </p>
 
+                            <label className="flex items-start gap-3 text-sm text-primary/80 cursor-pointer select-none mt-4">
+                                <input
+                                    type="checkbox"
+                                    checked={refundPolicyAccepted}
+                                    onChange={(event) => setRefundPolicyAccepted(event.target.checked)}
+                                    className="mt-0.5 h-4 w-4 rounded border-primary/30 text-primary focus:ring-primary/30 flex-shrink-0"
+                                />
+                                <span>
+                                    I accept the{' '}
+                                    <Link
+                                        to="/refund-policy"
+                                        target="_blank"
+                                        onClick={(event) => event.stopPropagation()}
+                                        className="font-bold underline text-primary hover:text-primary/80 transition-colors"
+                                    >
+                                        Okkazo Refund Policy
+                                    </Link>.
+                                </span>
+                            </label>
+
                             <div className="flex flex-col sm:flex-row gap-3">
                                 <button
                                     onClick={() => setIsCancelModalOpen(false)}
@@ -3991,7 +4023,7 @@ const UserEventManagement = () => {
                                 </button>
                                 <button
                                     onClick={handleSubmitCancellationRefundRequest}
-                                    disabled={isSubmittingCancelRequest}
+                                    disabled={isSubmittingCancelRequest || !refundPolicyAccepted}
                                     className="flex-1 px-6 py-3.5 rounded-xl font-black text-[10px] uppercase tracking-widest bg-rose-600 text-white hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 disabled:opacity-60"
                                 >
                                     {isSubmittingCancelRequest ? 'Submitting...' : (isCancelled ? 'Submit Request' : 'Confirm Cancel')}
