@@ -39,6 +39,19 @@ const toDateOrNull = (value) => {
 	return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const CANCELLED_STATUSES = new Set([
+	"CANCELLED",
+	"CANCELED",
+	"REFUNDED",
+	"COMPLETED",
+	"COMPLETE",
+	"CLOSED",
+]);
+
+const isCancelledStatus = (value) => CANCELLED_STATUSES.has(normalizeUpper(value));
+
+const isCancelledEvent = (event) => isCancelledStatus(event?.status);
+
 const isSameDay = (a, b) => {
 	if (!a || !b) return false;
 	return (
@@ -384,6 +397,7 @@ const ManagerHomePage = () => {
 
 	const todaysEvents = useMemo(() => {
 		return combinedEvents
+			.filter((event) => !isCancelledEvent(event))
 			.filter((event) => isDayWithinEventRange(currentTime, event))
 			.sort((a, b) => {
 				const at = a.startAt?.getTime() || 0;
@@ -394,6 +408,7 @@ const ManagerHomePage = () => {
 
 	const upcomingEvents = useMemo(() => {
 		return combinedEvents
+			.filter((event) => !isCancelledEvent(event))
 			.filter((event) => {
 				const startMs = event?.startAt?.getTime?.() || 0;
 				return startMs > nowMs;
@@ -475,6 +490,7 @@ const ManagerHomePage = () => {
 		const map = {};
 
 		combinedEvents.forEach((event) => {
+			if (isCancelledEvent(event)) return;
 			const startDay = getDayStart(event?.startAt);
 			if (!startDay) return;
 
