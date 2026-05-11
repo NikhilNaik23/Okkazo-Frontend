@@ -1052,16 +1052,20 @@ const ManagerEventDetails = () => {
 
     const isPromoteCompletionStatus = ['COMPLETE', 'COMPLETED', 'CLOSED'].includes(normalizedStatus);
     const isPromoteClosedStatus = normalizedStatus === 'CLOSED';
+    const isPlanningClosedStatus = isPlanningEvent && normalizedStatus === 'CLOSED';
     const canManagerCompletePromote = eventType === 'promote' && generatedRevenuePayout.cancellationLocked;
     const promoteLiabilitySettled = canManagerCompletePromote && (
         generatedRevenuePayout.liabilityRecovered
         || generatedRevenuePayout.liabilityRecoveryStatus === 'NOT_REQUIRED'
         || generatedRevenuePayout.liabilityInr <= 0
     );
-    const canMarkAsClose = eventType === 'promote'
-        && canManagerCompletePromote
-        && promoteLiabilitySettled
-        && !isPromoteClosedStatus;
+    const canMarkPlanningAsClose = isPlanningEvent && !isPlanningClosedStatus;
+    const canMarkAsClose = isPlanningEvent
+        ? canMarkPlanningAsClose
+        : (eventType === 'promote'
+            && canManagerCompletePromote
+            && promoteLiabilitySettled
+            && !isPromoteClosedStatus);
     const canMarkAsComplete = isPlanningEvent
         ? canMarkPlanningAsComplete
         : canManagerCompletePromote && promoteLiabilitySettled && !isPromoteCompletionStatus;
@@ -1548,28 +1552,53 @@ const ManagerEventDetails = () => {
             return;
         }
 
-        if (eventType !== 'promote') {
-            toast('Mark as close is available only for promote events.', { icon: 'ℹ️' });
-            return;
-        }
-
-        if (isPromoteClosedStatus) {
-            toast.success('This event is already closed.');
-            return;
-        }
-
-        if (!canManagerCompletePromote) {
-            toast.error('Cancelled/refund promote events can be closed only after liability handling starts.');
-            return;
-        }
-
-        if (!promoteLiabilitySettled) {
-            toast.error('Creator liability must be paid (or become zero/not required) before closing this promote event.');
-            return;
-        }
-
         try {
             setMarkingClose(true);
+            if (eventType === 'planning') {
+                if (isPlanningClosedStatus) {
+                    toast.success('This event is already closed.');
+                    return;
+                }
+
+                const res = await fetchWithAuth(
+                    `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(id))}/status`,
+                    {
+                        method: 'PATCH',
+                        body: JSON.stringify({ status: 'CLOSED' }),
+                    },
+                    { dispatch, refreshAction: refreshAccessToken }
+                );
+
+                const json = await safeJson(res);
+                if (!res.ok || !json?.success) {
+                    throw new Error(json?.message || 'Failed to close event');
+                }
+
+                setRawEvent(json.data);
+                toast.success('Event closed successfully.');
+                return;
+            }
+
+            if (eventType !== 'promote') {
+                toast('Mark as close is available only for promote events.', { icon: 'ℹ️' });
+                return;
+            }
+
+            if (isPromoteClosedStatus) {
+                toast.success('This event is already closed.');
+                return;
+            }
+
+            if (!canManagerCompletePromote) {
+                toast.error('Cancelled/refund promote events can be closed only after liability handling starts.');
+                return;
+            }
+
+            if (!promoteLiabilitySettled) {
+                toast.error('Creator liability must be paid (or become zero/not required) before closing this promote event.');
+                return;
+            }
+
             const res = await fetchWithAuth(
                 `${API_BASE_URL}/api/events/promote/${encodeURIComponent(String(id))}/status`,
                 {
@@ -1740,7 +1769,7 @@ const ManagerEventDetails = () => {
                             <div className="flex flex-col gap-2">
                                 {canUseRestrictedManagerActions ? (
                                     <>
-                                        {eventType === 'promote' ? (
+                                        {(eventType === 'promote' || eventType === 'planning') ? (
                                             <button
                                                 onClick={handleMarkAsClose}
                                                 disabled={!event || markingClose || !canMarkAsClose}
@@ -1748,16 +1777,20 @@ const ManagerEventDetails = () => {
                                                     ? 'Event details are loading.'
                                                     : markingClose
                                                         ? 'Closing event...'
-                                                        : isPromoteClosedStatus
-                                                            ? 'Event is already closed.'
-                                                            : !canManagerCompletePromote
-                                                                ? 'Available after cancellation/refund flow starts.'
-                                                                : !promoteLiabilitySettled
-                                                                    ? 'Creator liability must be paid (or become zero/not required) first.'
-                                                                    : 'Close this cancelled promote event.'}
+                                                        : isPlanningEvent
+                                                            ? (isPlanningClosedStatus
+                                                                ? 'Event is already closed.'
+                                                                : 'Close this planning event.')
+                                                            : isPromoteClosedStatus
+                                                                ? 'Event is already closed.'
+                                                                : !canManagerCompletePromote
+                                                                    ? 'Available after cancellation/refund flow starts.'
+                                                                    : !promoteLiabilitySettled
+                                                                        ? 'Creator liability must be paid (or become zero/not required) first.'
+                                                                        : 'Close this cancelled promote event.'}
                                                 className="px-6 py-2.5 bg-slate-700 text-white hover:bg-slate-800 rounded-xl font-bold transition-colors shadow-lg shadow-black/10 flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                                             >
-                                                <CheckCircle className="w-4 h-4" /> {markingClose ? 'Closing…' : 'Mark as Close'}
+                                                <CheckCircle className="w-4 h-4" /> {markingClose ? 'Closing…' : 'Mark as Closed'}
                                             </button>
                                         ) : null}
                                     <button
