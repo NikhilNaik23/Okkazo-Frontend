@@ -1053,13 +1053,16 @@ const ManagerEventDetails = () => {
     const isPromoteCompletionStatus = ['COMPLETE', 'COMPLETED', 'CLOSED'].includes(normalizedStatus);
     const isPromoteClosedStatus = normalizedStatus === 'CLOSED';
     const isPlanningClosedStatus = isPlanningEvent && normalizedStatus === 'CLOSED';
+    const planningCloseAllowedStatuses = new Set(['CANCELLED', 'CANCELED', 'COMPLETED']);
     const canManagerCompletePromote = eventType === 'promote' && generatedRevenuePayout.cancellationLocked;
     const promoteLiabilitySettled = canManagerCompletePromote && (
         generatedRevenuePayout.liabilityRecovered
         || generatedRevenuePayout.liabilityRecoveryStatus === 'NOT_REQUIRED'
         || generatedRevenuePayout.liabilityInr <= 0
     );
-    const canMarkPlanningAsClose = isPlanningEvent && !isPlanningClosedStatus;
+    const canMarkPlanningAsClose = isPlanningEvent
+        && planningCloseAllowedStatuses.has(normalizedStatus)
+        && !isPlanningClosedStatus;
     const canMarkAsClose = isPlanningEvent
         ? canMarkPlanningAsClose
         : (eventType === 'promote'
@@ -1560,6 +1563,11 @@ const ManagerEventDetails = () => {
                     return;
                 }
 
+                if (!planningCloseAllowedStatuses.has(normalizedStatus)) {
+                    toast.error('Only cancelled or completed events can be closed.');
+                    return;
+                }
+
                 const res = await fetchWithAuth(
                     `${API_BASE_URL}/api/events/planning/${encodeURIComponent(String(id))}/status`,
                     {
@@ -1780,7 +1788,9 @@ const ManagerEventDetails = () => {
                                                         : isPlanningEvent
                                                             ? (isPlanningClosedStatus
                                                                 ? 'Event is already closed.'
-                                                                : 'Close this planning event.')
+                                                                : (!planningCloseAllowedStatuses.has(normalizedStatus)
+                                                                    ? 'Available after the event is cancelled or completed.'
+                                                                    : 'Close this planning event.'))
                                                             : isPromoteClosedStatus
                                                                 ? 'Event is already closed.'
                                                                 : !canManagerCompletePromote
