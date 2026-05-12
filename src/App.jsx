@@ -247,6 +247,7 @@ const App = () => {
         limit={1}
         toastOptions={{
           duration: 4000,
+          id: "global-toast",
         }}
         containerStyle={{
           top: 20,
