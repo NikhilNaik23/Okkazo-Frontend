@@ -244,6 +244,7 @@ const App = () => {
       <SeoManager />
       <Toaster
         position="top-right"
+        limit={1}
         toastOptions={{
           duration: 4000,
         }}
