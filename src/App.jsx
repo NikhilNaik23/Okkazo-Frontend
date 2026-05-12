@@ -2,7 +2,7 @@ import React, { useEffect } from 'react'
 import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { useDispatch, useSelector } from 'react-redux';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast, useToasterStore } from 'react-hot-toast';
 import { io as createSocket } from 'socket.io-client';
 import { fetchCurrentUser, fetchVendorApplication, logout, refreshAccessToken, selectIsAuthenticated, selectUser } from './store/slices/authSlice';
 import { CHAT_SOCKET_URL } from './utils/chatConfig';
@@ -79,6 +79,22 @@ import RefundPolicyCenter from "./pages/shared/RefundPolicyCenter";
 import SeoManager from './components/SEO/SeoManager';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
+const ToastLimiter = () => {
+  const { toasts } = useToasterStore();
+
+  useEffect(() => {
+    if (toasts.length <= 1) {
+      return;
+    }
+
+    const sorted = [...toasts].sort((a, b) => b.createdAt - a.createdAt);
+    const [, ...rest] = sorted;
+    rest.forEach((t) => toast.dismiss(t.id));
+  }, [toasts]);
+
+  return null;
+};
 
 const App = () => {
   const location = useLocation();
@@ -242,6 +258,7 @@ const App = () => {
   return (
     <>
       <SeoManager />
+      <ToastLimiter />
       <Toaster
         position="top-right"
         limit={1}
