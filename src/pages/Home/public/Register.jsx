@@ -21,7 +21,11 @@ import {
     PASSWORD_PATTERN,
     PASSWORD_REQUIREMENTS_MESSAGE,
 } from "../../../utils/passwordValidation";
-import { isDisposableEmail } from "../../../utils/emailValidation";
+import {
+    allowedEmailDomainsMessage,
+    isAllowedEmailDomain,
+    isDisposableEmail,
+} from "../../../utils/emailValidation";
 
 const Register = () => {
     const navigate = useNavigate();
@@ -97,6 +101,11 @@ const Register = () => {
 
         if (formData.password !== formData.confirmPassword) {
             toast.error("Passwords do not match.");
+            return;
+        }
+
+        if (!isAllowedEmailDomain(formData.email)) {
+            toast.error(allowedEmailDomainsMessage);
             return;
         }
 

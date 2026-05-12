@@ -26,7 +26,11 @@ import {
     selectServiceCategories,
     selectServiceCategoriesLoading
 } from "../../store/slices/authSlice";
-import { isDisposableEmail } from "../../utils/emailValidation";
+import {
+    allowedEmailDomainsMessage,
+    isAllowedEmailDomain,
+    isDisposableEmail,
+} from "../../utils/emailValidation";
 
 // Components
 import Modal from "../../components/Global/Modal";
@@ -281,6 +285,11 @@ const VendorRegistration = () => {
         e.preventDefault();
         if (!isFormValid()) {
             toast.error("Please fill in all required fields.");
+            return;
+        }
+
+        if (!isAllowedEmailDomain(formData.email)) {
+            toast.error(allowedEmailDomainsMessage);
             return;
         }
 
