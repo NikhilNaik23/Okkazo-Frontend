@@ -59,7 +59,7 @@ const InternalEventCard = ({
           </div>
           <span className="text-[#e9eff1]">•</span>
           <div className="flex items-center gap-1">
-            <MapPin size={14} className="text-[#708aa0]" />
+            {showLocation && <MapPin size={14} className="text-[#708aa0]" />}
             <span className="truncate max-w-[80px] text-[#5a5b44]">{location}</span>
           </div>
         </div>
