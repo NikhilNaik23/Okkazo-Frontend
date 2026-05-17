@@ -155,10 +155,16 @@ const getRefundAmountPaise = (request) => {
 	return Number.isFinite(n) ? n : 0;
 };
 
-const isUserTicketCancellationRow = (row) => (
-	normalizeUpper(row?.type) === "TICKET SALE"
-	&& normalizeUpper(row?.status) === "REFUNDED"
-);
+const getLedgerRefundCategory = (row) => {
+	if (normalizeUpper(row?.status) !== "REFUNDED") return null;
+
+	const type = normalizeUpper(row?.type);
+	if (type === "PLANNING REFUND" || type === "PLANNING_REFUND") return "Planning";
+	if (type === "REFUND" || type === "TICKET SALE") return "User Ticket Cancellation";
+	return "User Ticket Cancellation";
+};
+
+const isRefundedLedgerRow = (row) => Boolean(getLedgerRefundCategory(row));
 
 const formatMoney = (value) => {
 	const n = Number(value || 0);
@@ -772,6 +778,7 @@ const ManagerHomePage = () => {
 
 			return {
 				id: String(request?.eventId || request?._id || request?.id || `${type}-${requestedAt || index}`).trim(),
+				eventId: String(request?.eventId || "").trim(),
 				type,
 				title: getRefundTitle(request),
 				status: humanizeStatus(getRefundStatus(request)),
@@ -784,30 +791,45 @@ const ManagerHomePage = () => {
 		});
 	}, [refundRequests]);
 
-	const revopsTicketCancellationRows = useMemo(() => {
+	const revopsLedgerRefundRows = useMemo(() => {
 		return (revopsLedgerRows || [])
-			.filter(isUserTicketCancellationRow)
-			.map((row) => ({
-				id: String(row?.transactionId || row?.eventId || row?.createdAt || "ticket-refund").trim(),
-				type: "User Ticket Cancellation",
-				title: String(row?.eventId || "Ticket cancellation").trim() || "Ticket cancellation",
-				status: humanizeStatus(row?.status),
-				requestedAt: row?.refundedAt || row?.createdAt,
-				amountPaise: Math.abs(Number(row?.amount || 0)),
-				needsAction: false,
-				done: true,
-				autoProcessed: true,
-			}));
+			.filter(isRefundedLedgerRow)
+			.map((row) => {
+				const category = getLedgerRefundCategory(row) || "User Ticket Cancellation";
+				return {
+					id: String(row?.transactionId || row?.eventId || row?.createdAt || "ticket-refund").trim(),
+					eventId: String(row?.eventId || "").trim(),
+					type: category,
+					title: String(row?.eventId ? `${category} - ${row.eventId}` : row?.transactionId || category).trim() || category,
+					status: humanizeStatus(row?.status),
+					requestedAt: row?.refundedAt || row?.createdAt,
+					amountPaise: Math.abs(Number(row?.amount || 0)),
+					needsAction: false,
+					done: true,
+					autoProcessed: category !== "Planning",
+					source: "ledger",
+				};
+			});
 	}, [revopsLedgerRows]);
 
-	const revopsAllRequestRows = useMemo(() => (
-		[...revopsRefundRequestRows, ...revopsTicketCancellationRows]
+	const revopsAllRequestRows = useMemo(() => {
+		const ledgerCompletedKeys = new Set(
+			revopsLedgerRefundRows
+				.map((row) => (row.eventId ? `${row.type}:${row.eventId}` : ""))
+				.filter(Boolean)
+		);
+		const requestRows = revopsRefundRequestRows.filter((row) => {
+			if (!row.done || !row.eventId) return true;
+			return !ledgerCompletedKeys.has(`${row.type}:${row.eventId}`);
+		});
+
+		return [...requestRows, ...revopsLedgerRefundRows]
 			.sort((a, b) => {
 				const at = toDateOrNull(a?.requestedAt)?.getTime() || 0;
 				const bt = toDateOrNull(b?.requestedAt)?.getTime() || 0;
 				return bt - at;
-			})
-	), [revopsRefundRequestRows, revopsTicketCancellationRows]);
+			});
+	}, [revopsRefundRequestRows, revopsLedgerRefundRows]);
 
 	const revopsTodayRequestRows = useMemo(() => (
 		revopsAllRequestRows.filter((row) => isWithin(row?.requestedAt, todayBounds.start, todayBounds.end))
