@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { AreaChart, Area, XAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import {
 	MdTrendingUp,
 	MdChatBubbleOutline,
@@ -18,9 +18,15 @@ import {
 	fetchManagerPlanningEvents,
 	fetchManagerPromoteEvents,
 } from "../../../store/slices/managerEventsSlice";
+import { fetchManagerPlanningRefundRequests } from "../../../store/slices/managerRefundsSlice";
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 const PIE_COLORS = ["#14b8a6", "#f59e0b", "#f43f5e", "#6366f1", "#0ea5e9", "#22c55e"];
+const REFUND_COLORS = {
+	Planning: "#14b8a6",
+	Promote: "#f59e0b",
+	"User Ticket Cancellation": "#6366f1",
+};
 const MotionDiv = motion.div;
 
 const safeJson = async (response) => {
@@ -32,6 +38,17 @@ const safeJson = async (response) => {
 };
 
 const normalizeUpper = (value) => String(value || "").trim().toUpperCase().replace(/[_-]/g, " ");
+const normalizeAssignedRole = (value) => String(value || "").trim().toUpperCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+
+const REVOPS_ASSIGNED_ROLES = new Set([
+	"REVENUE OPERATIONS SPECIALIST",
+	"REVENUE OPERATION SPECIALIST",
+	"REVENUE OPERATIONS SPECIALISTS",
+	"REVENUE OPERATION SPECIALISTS",
+]);
+
+const REFUND_DONE_STATUSES = new Set(["REFUNDED", "REJECTED", "CANCELLED", "CANCELED", "COMPLETED", "COMPLETE", "CLOSED"]);
+const PLANNING_REFUND_ACTION_STATUSES = new Set(["PENDING REVIEW", "PENDING_REVIEW", "APPROVED", "PROCESSING"]);
 
 const toDateOrNull = (value) => {
 	if (!value) return null;
@@ -60,6 +77,88 @@ const isSameDay = (a, b) => {
 		a.getDate() === b.getDate()
 	);
 };
+
+const getDayBounds = (value) => {
+	const date = toDateOrNull(value) || new Date();
+	const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+	const end = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+	return { start, end };
+};
+
+const isWithin = (dateValue, start, end) => {
+	const date = toDateOrNull(dateValue);
+	if (!date || !start || !end) return false;
+	const ts = date.getTime();
+	return ts >= start.getTime() && ts <= end.getTime();
+};
+
+const formatInrFromPaise = (value) => {
+	const n = Number(value || 0);
+	if (!Number.isFinite(n) || n === 0) return "INR 0";
+	const amount = Math.round(Math.abs(n) / 100).toLocaleString("en-IN");
+	return `${n < 0 ? "-" : ""}INR ${amount}`;
+};
+
+const formatInrValue = (value) => {
+	const n = Number(value || 0);
+	if (!Number.isFinite(n) || n === 0) return "INR 0";
+	const amount = Math.round(Math.abs(n)).toLocaleString("en-IN");
+	return `${n < 0 ? "-" : ""}INR ${amount}`;
+};
+
+const humanizeStatus = (value) => {
+	const normalized = normalizeUpper(value);
+	if (!normalized) return "Pending";
+	return normalized
+		.toLowerCase()
+		.split(/\s+/)
+		.filter(Boolean)
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+		.join(" ");
+};
+
+const getRefundRequestedAt = (request) => (
+	request?.refundRequest?.requestedAt
+	|| request?.requestedAt
+	|| request?.refundRequestedAt
+	|| request?.updatedAt
+	|| request?.createdAt
+);
+
+const getRefundStatus = (request) => request?.refundRequest?.status || request?.refundStatus || request?.status;
+
+const isRefundDone = (request) => REFUND_DONE_STATUSES.has(normalizeUpper(getRefundStatus(request)));
+
+const isPlanningRefundNeedsAction = (request) => {
+	if (normalizeUpper(request?.refundEventType) !== "PLANNING") return false;
+	const status = normalizeUpper(getRefundStatus(request));
+	if (!status) return true;
+	if (REFUND_DONE_STATUSES.has(status)) return false;
+	return PLANNING_REFUND_ACTION_STATUSES.has(status) || !REFUND_DONE_STATUSES.has(status);
+};
+
+const getRefundTitle = (request) => (
+	String(request?.eventTitle || request?.title || request?.eventName || request?.eventId || "Refund request").trim()
+	|| "Refund request"
+);
+
+const getRefundAmountPaise = (request) => {
+	const amount =
+		request?.refundRequest?.amountPaise
+		?? request?.refundRequest?.refundAmountPaise
+		?? request?.refundRequest?.result?.refundAmountPaise
+		?? request?.refundRequest?.result?.userRefundAmountPaise
+		?? request?.refundAmountPaise
+		?? request?.amountPaise
+		?? 0;
+	const n = Number(amount || 0);
+	return Number.isFinite(n) ? n : 0;
+};
+
+const isUserTicketCancellationRow = (row) => (
+	normalizeUpper(row?.type) === "TICKET SALE"
+	&& normalizeUpper(row?.status) === "REFUNDED"
+);
 
 const formatMoney = (value) => {
 	const n = Number(value || 0);
@@ -217,6 +316,11 @@ const ManagerHomePage = () => {
 	const navigate = useNavigate();
 	const user = useSelector(selectUser);
 	const { planningEvents, promoteEvents, loading, error } = useSelector((state) => state.managerEvents);
+	const {
+		requests: refundRequests = [],
+		loading: refundLoading,
+		error: refundError,
+	} = useSelector((state) => state.managerRefunds || {});
 
 	const [currentTime, setCurrentTime] = useState(new Date());
 	const [calendarCursor, setCalendarCursor] = useState(() => {
@@ -225,6 +329,11 @@ const ManagerHomePage = () => {
 	});
 	const [vendorSelectionsByEventId, setVendorSelectionsByEventId] = useState({});
 	const [vendorSelectionLoading, setVendorSelectionLoading] = useState(false);
+	const [revopsLedgerRows, setRevopsLedgerRows] = useState([]);
+	const [revopsLedgerLoading, setRevopsLedgerLoading] = useState(false);
+	const [revopsLedgerError, setRevopsLedgerError] = useState("");
+
+	const isRevenueOperationsSpecialist = REVOPS_ASSIGNED_ROLES.has(normalizeAssignedRole(user?.assignedRole || user?.roleTitle || user?.role));
 
 	useEffect(() => {
 		const timer = setInterval(() => setCurrentTime(new Date()), 30000);
@@ -232,6 +341,94 @@ const ManagerHomePage = () => {
 	}, []);
 
 	useEffect(() => {
+		if (!isRevenueOperationsSpecialist) return undefined;
+
+		const POLL_MS = 30000;
+		const poll = () => {
+			dispatch(fetchManagerPlanningRefundRequests({ limit: 250 }));
+		};
+
+		poll();
+		const intervalId = setInterval(poll, POLL_MS);
+		return () => clearInterval(intervalId);
+	}, [dispatch, isRevenueOperationsSpecialist]);
+
+	useEffect(() => {
+		if (!isRevenueOperationsSpecialist) return undefined;
+
+		let cancelled = false;
+		const POLL_MS = 30000;
+
+		const loadLedgerRows = async () => {
+			const now = new Date();
+			const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29, 0, 0, 0, 0);
+			const to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+			const rows = [];
+			let page = 1;
+			let totalPages = 1;
+
+			setRevopsLedgerLoading(true);
+			setRevopsLedgerError("");
+
+			try {
+				while (page <= totalPages && page <= 20) {
+					const params = new URLSearchParams({
+						page: String(page),
+						limit: "100",
+						from: from.toISOString(),
+						to: to.toISOString(),
+						sortBy: "createdAt",
+						sortDir: "asc",
+					});
+
+					// eslint-disable-next-line no-await-in-loop
+					const response = await fetchWithAuth(
+						`${API_BASE_URL}/api/orders/admin/ledger?${params.toString()}`,
+						{ method: "GET" },
+						{ dispatch, refreshAction: refreshAccessToken }
+					);
+					// eslint-disable-next-line no-await-in-loop
+					const json = await safeJson(response);
+
+					if (!response.ok) {
+						throw new Error(json?.message || "Failed to fetch ledger transactions");
+					}
+
+					const pageRows = Array.isArray(json?.transactions)
+						? json.transactions
+						: Array.isArray(json?.data?.transactions)
+							? json.data.transactions
+							: [];
+
+					rows.push(...pageRows);
+					totalPages = Math.max(1, Number(json?.pagination?.totalPages || json?.data?.pagination?.totalPages || totalPages));
+					if (pageRows.length === 0) break;
+					page += 1;
+				}
+
+				if (!cancelled) {
+					setRevopsLedgerRows(rows);
+					setRevopsLedgerLoading(false);
+				}
+			} catch (err) {
+				if (!cancelled) {
+					setRevopsLedgerError(err?.message || "Failed to fetch ledger transactions");
+					setRevopsLedgerLoading(false);
+				}
+			}
+		};
+
+		loadLedgerRows();
+		const intervalId = setInterval(loadLedgerRows, POLL_MS);
+		return () => {
+			cancelled = true;
+			clearInterval(intervalId);
+		};
+	}, [dispatch, isRevenueOperationsSpecialist]);
+
+	useEffect(() => {
+		if (isRevenueOperationsSpecialist) return undefined;
+
 		const POLL_MS = 30000;
 
 		const poll = () => {
@@ -243,7 +440,7 @@ const ManagerHomePage = () => {
 		poll();
 		const intervalId = setInterval(poll, POLL_MS);
 		return () => clearInterval(intervalId);
-	}, [dispatch]);
+	}, [dispatch, isRevenueOperationsSpecialist]);
 
 	const planningEventIds = useMemo(() => {
 		return Array.from(new Set(
@@ -254,8 +451,8 @@ const ManagerHomePage = () => {
 	}, [planningEvents]);
 
 	useEffect(() => {
-		if (!planningEventIds.length) {
-			return;
+		if (isRevenueOperationsSpecialist || !planningEventIds.length) {
+			return undefined;
 		}
 
 		let cancelled = false;
@@ -295,7 +492,7 @@ const ManagerHomePage = () => {
 		return () => {
 			cancelled = true;
 		};
-	}, [planningEventIds, dispatch]);
+	}, [planningEventIds, dispatch, isRevenueOperationsSpecialist]);
 
 	const managerName = String(user?.name || user?.fullName || "Manager").trim() || "Manager";
 	const managerInitials = getInitials(managerName);
@@ -564,6 +761,173 @@ const ManagerHomePage = () => {
 			.slice(0, 4);
 	}, [combinedEvents]);
 
+	const todayBounds = useMemo(() => getDayBounds(currentTime), [currentTime]);
+
+	const revopsRefundRequestRows = useMemo(() => {
+		return (refundRequests || []).map((request, index) => {
+			const type = normalizeUpper(request?.refundEventType) === "PROMOTE" ? "Promote" : "Planning";
+			const requestedAt = getRefundRequestedAt(request);
+			const needsAction = type === "Planning" && isPlanningRefundNeedsAction(request);
+			const done = isRefundDone(request);
+
+			return {
+				id: String(request?.eventId || request?._id || request?.id || `${type}-${requestedAt || index}`).trim(),
+				type,
+				title: getRefundTitle(request),
+				status: humanizeStatus(getRefundStatus(request)),
+				requestedAt,
+				amountPaise: getRefundAmountPaise(request),
+				needsAction,
+				done,
+				autoProcessed: type === "Promote",
+			};
+		});
+	}, [refundRequests]);
+
+	const revopsTicketCancellationRows = useMemo(() => {
+		return (revopsLedgerRows || [])
+			.filter(isUserTicketCancellationRow)
+			.map((row) => ({
+				id: String(row?.transactionId || row?.eventId || row?.createdAt || "ticket-refund").trim(),
+				type: "User Ticket Cancellation",
+				title: String(row?.eventId || "Ticket cancellation").trim() || "Ticket cancellation",
+				status: humanizeStatus(row?.status),
+				requestedAt: row?.refundedAt || row?.createdAt,
+				amountPaise: Math.abs(Number(row?.amount || 0)),
+				needsAction: false,
+				done: true,
+				autoProcessed: true,
+			}));
+	}, [revopsLedgerRows]);
+
+	const revopsAllRequestRows = useMemo(() => (
+		[...revopsRefundRequestRows, ...revopsTicketCancellationRows]
+			.sort((a, b) => {
+				const at = toDateOrNull(a?.requestedAt)?.getTime() || 0;
+				const bt = toDateOrNull(b?.requestedAt)?.getTime() || 0;
+				return bt - at;
+			})
+	), [revopsRefundRequestRows, revopsTicketCancellationRows]);
+
+	const revopsTodayRequestRows = useMemo(() => (
+		revopsAllRequestRows.filter((row) => isWithin(row?.requestedAt, todayBounds.start, todayBounds.end))
+	), [revopsAllRequestRows, todayBounds]);
+
+	const revopsPlanningNeedsActionCount = useMemo(() => (
+		revopsRefundRequestRows.filter((row) => row.type === "Planning" && row.needsAction).length
+	), [revopsRefundRequestRows]);
+
+	const revopsAutoProcessedTodayCount = useMemo(() => (
+		revopsTodayRequestRows.filter((row) => row.autoProcessed).length
+	), [revopsTodayRequestRows]);
+
+	const revopsCompletedTodayCount = useMemo(() => (
+		revopsTodayRequestRows.filter((row) => row.done || row.autoProcessed).length
+	), [revopsTodayRequestRows]);
+
+	const revopsRevenueChartData = useMemo(() => {
+		const buckets = [];
+		const revenueByDay = new Map();
+
+		const keyForDate = (date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+
+		for (let i = 29; i >= 0; i -= 1) {
+			const date = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate() - i);
+			const key = keyForDate(date);
+			buckets.push({
+				key,
+				name: date.toLocaleDateString("en-IN", { month: "short", day: "numeric" }),
+			});
+			revenueByDay.set(key, 0);
+		}
+
+		(revopsLedgerRows || []).forEach((row) => {
+			const date = toDateOrNull(row?.paidAt || row?.createdAt);
+			if (!date) return;
+			const key = keyForDate(date);
+			if (!revenueByDay.has(key)) return;
+			revenueByDay.set(key, Number(revenueByDay.get(key) || 0) + Number(row?.amount || 0));
+		});
+
+		return buckets.map((bucket) => ({
+			name: bucket.name,
+			revenue: Number(((revenueByDay.get(bucket.key) || 0) / 100).toFixed(2)),
+		}));
+	}, [currentTime, revopsLedgerRows]);
+
+	const hasRevopsRevenueTimeline = useMemo(() => (
+		revopsRevenueChartData.some((row) => Number(row?.revenue || 0) !== 0)
+	), [revopsRevenueChartData]);
+
+	const revopsRefundBreakdownData = useMemo(() => {
+		const breakdown = new Map([
+			["Planning", { name: "Planning", value: 0, amountPaise: 0 }],
+			["Promote", { name: "Promote", value: 0, amountPaise: 0 }],
+			["User Ticket Cancellation", { name: "User Ticket Cancellation", value: 0, amountPaise: 0 }],
+		]);
+
+		revopsAllRequestRows.forEach((row) => {
+			const current = breakdown.get(row.type);
+			if (!current) return;
+			current.value += 1;
+			current.amountPaise += Math.abs(Number(row?.amountPaise || 0));
+		});
+
+		return Array.from(breakdown.values()).filter((row) => row.value > 0);
+	}, [revopsAllRequestRows]);
+
+	const revopsStatsData = [
+		{
+			id: "revops-new-requests",
+			label: "New Requests",
+			value: String(revopsTodayRequestRows.length),
+			subtext: "Today refund and cancellation requests",
+			subtextColor: "text-emerald-500",
+			topIcon: (
+				<div className="p-2 rounded-lg bg-emerald-50 text-emerald-600">
+					<div className="w-5 h-5 border-2 border-current rounded-sm" />
+				</div>
+			),
+			subtextIcon: <MdTrendingUp />,
+		},
+		{
+			id: "revops-auto-processed",
+			label: "Auto Processed",
+			value: String(revopsAutoProcessedTodayCount),
+			subtext: "Promote and ticket cancellation",
+			subtextColor: "text-blue-500",
+			topIcon: (
+				<div className="p-2 rounded-lg bg-blue-50 text-blue-600">
+					<MdSensors className="text-xl" />
+				</div>
+			),
+		},
+		{
+			id: "revops-need-action",
+			label: "Today's Live",
+			value: String(revopsPlanningNeedsActionCount),
+			subtext: "Planning refunds need confirmation",
+			subtextColor: "text-amber-500",
+			topIcon: (
+				<div className="p-2 rounded-lg bg-amber-50 text-amber-600">
+					<MdGavel className="text-xl" />
+				</div>
+			),
+		},
+		{
+			id: "revops-completed",
+			label: "Done / Completed",
+			value: String(revopsCompletedTodayCount),
+			subtext: "Completed today",
+			subtextColor: "text-green-500",
+			topIcon: (
+				<div className="p-2 rounded-lg bg-green-50 text-green-600">
+					<MdChatBubbleOutline className="text-xl" />
+				</div>
+			),
+		},
+	];
+
 	const statsData = [
 		{
 			id: "new-requests",
@@ -639,6 +1003,328 @@ const ManagerHomePage = () => {
 			transition: { staggerChildren: 0.08 },
 		},
 	};
+
+	if (isRevenueOperationsSpecialist) {
+		return (
+			<div className="px-6 py-8 space-y-8 max-w-480 mx-auto min-h-screen">
+				<MotionDiv
+					initial={{ opacity: 0, y: -20 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.4 }}
+					className="flex flex-col sm:flex-row sm:items-center justify-between"
+				>
+					<div>
+						<h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Dashboard Overview</h2>
+						<p className="text-gray-500 font-medium mt-1">{formattedDate} - {formattedTime}</p>
+					</div>
+
+					<div className="flex items-center gap-3 bg-white px-4 py-2 rounded-full border border-gray-200 shadow-sm mt-4 sm:mt-0">
+						<div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold text-xs">
+							{managerInitials}
+						</div>
+						<span className="text-sm font-bold text-gray-700">{managerName}</span>
+					</div>
+				</MotionDiv>
+
+				{(refundError || revopsLedgerError) && (
+					<div className="rounded-xl border border-rose-200 bg-rose-50 text-rose-700 px-4 py-3 text-sm font-medium">
+						{String(refundError || revopsLedgerError)}
+					</div>
+				)}
+
+				<MotionDiv
+					variants={containerVariants}
+					initial="hidden"
+					animate="visible"
+					className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+				>
+					{revopsStatsData.map((stat) => (
+						<MotionDiv
+							key={stat.id}
+							variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0 } }}
+							whileHover={{ y: -4 }}
+							className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col justify-between h-32 relative overflow-hidden group"
+						>
+							<div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+								{stat.topIcon}
+							</div>
+							<div className="flex justify-between items-start z-10">
+								<span className="text-gray-500 text-xs font-bold uppercase tracking-wide">{stat.label}</span>
+								{stat.topIcon}
+							</div>
+							<div className="z-10 mt-auto">
+								<h3 className="text-3xl font-extrabold text-gray-800 tracking-tight">{stat.value}</h3>
+								<div className={`flex items-center gap-1.5 text-xs mt-1 font-medium ${stat.subtextColor}`}>
+									{stat.subtextIcon && <span className="text-sm">{stat.subtextIcon}</span>}
+									<span>{stat.subtext}</span>
+								</div>
+							</div>
+						</MotionDiv>
+					))}
+				</MotionDiv>
+
+				<div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+					<div className="xl:col-span-2 space-y-8">
+						<MotionDiv
+							initial={{ opacity: 0, y: 10 }}
+							animate={{ opacity: 1, y: 0 }}
+							transition={{ delay: 0.1 }}
+							className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+						>
+							<div className="px-6 py-4 border-b border-gray-50 flex justify-between items-center bg-gray-50/60">
+								<h3 className="font-bold text-gray-800 text-lg flex items-center gap-2">
+									<MdCalendarMonth className="text-teal-500" /> Today&apos;s Requests
+								</h3>
+								<span className="bg-teal-100 text-teal-700 text-xs font-bold px-2.5 py-1 rounded-full">
+									{revopsTodayRequestRows.length} total
+								</span>
+							</div>
+
+							<div className="divide-y divide-gray-50">
+								{revopsTodayRequestRows.length === 0 && (
+									<div className="p-6 text-sm text-gray-500">No refund or cancellation requests for today.</div>
+								)}
+
+								{revopsTodayRequestRows.map((row) => {
+									const stateLabel = row.needsAction
+										? "Need to be done"
+										: row.autoProcessed
+											? "Automatically processed"
+											: "Done / Completed";
+									const stateClass = row.needsAction
+										? "bg-amber-50 text-amber-700"
+										: row.autoProcessed
+											? "bg-blue-50 text-blue-700"
+											: "bg-emerald-50 text-emerald-700";
+
+									return (
+										<div key={`${row.type}-${row.id}`} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+											<div className="min-w-0 space-y-1">
+												<div className="flex flex-wrap items-center gap-2">
+													<p className="font-bold text-gray-800 text-sm truncate">{row.title}</p>
+													<span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-gray-100 text-gray-600 uppercase">
+														{row.type}
+													</span>
+													<span className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase ${stateClass}`}>
+														{stateLabel}
+													</span>
+												</div>
+												<p className="text-xs text-gray-500">
+													{formatDateTimeShort(row.requestedAt)} - {row.status}
+												</p>
+											</div>
+
+											<div className="shrink-0 text-right">
+												<p className="text-sm font-extrabold text-gray-900">{formatInrFromPaise(row.amountPaise)}</p>
+												<p className="text-[11px] font-bold uppercase tracking-wide text-gray-400">View only</p>
+											</div>
+										</div>
+									);
+								})}
+							</div>
+						</MotionDiv>
+
+						<MotionDiv
+							initial={{ opacity: 0, y: 10 }}
+							animate={{ opacity: 1, y: 0 }}
+							transition={{ delay: 0.16 }}
+							className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+						>
+							<div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-6">
+								<div>
+									<h3 className="text-lg font-bold text-gray-900">Revenue Analytics</h3>
+									<p className="text-sm text-gray-500">Daily financial performance for last 30 days</p>
+								</div>
+								<span className="self-start px-3 py-1 rounded-lg border border-gray-200 text-xs font-bold text-gray-700">
+									Last 30 Days
+								</span>
+							</div>
+
+							<div className="h-85 w-full">
+								{hasRevopsRevenueTimeline ? (
+									<ResponsiveContainer width="100%" height="100%">
+										<AreaChart data={revopsRevenueChartData} margin={{ top: 10, right: 18, left: 0, bottom: 0 }}>
+											<defs>
+												<linearGradient id="revopsRevenueGradient" x1="0" y1="0" x2="0" y2="1">
+													<stop offset="5%" stopColor="#d99a2b" stopOpacity={0.18} />
+													<stop offset="95%" stopColor="#d99a2b" stopOpacity={0} />
+												</linearGradient>
+											</defs>
+											<CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5edf2" />
+											<XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "#6b87a0", fontSize: 11 }} minTickGap={22} />
+											<YAxis
+												axisLine={false}
+												tickLine={false}
+												tick={{ fill: "#6b87a0", fontSize: 11 }}
+												tickFormatter={(value) => formatInrValue(value).replace("INR ", "")}
+											/>
+											<Tooltip
+												formatter={(value) => [formatInrValue(value), "Revenue"]}
+												contentStyle={{
+													borderRadius: "12px",
+													border: "none",
+													boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+												}}
+											/>
+											<Area type="monotone" dataKey="revenue" stroke="#d99a2b" strokeWidth={3} fillOpacity={1} fill="url(#revopsRevenueGradient)" />
+										</AreaChart>
+									</ResponsiveContainer>
+								) : (
+									<div className="h-full flex items-center justify-center text-sm text-gray-500">
+										No revenue analytics data yet.
+									</div>
+								)}
+							</div>
+						</MotionDiv>
+
+						<MotionDiv
+							initial={{ opacity: 0, y: 10 }}
+							animate={{ opacity: 1, y: 0 }}
+							transition={{ delay: 0.2 }}
+							className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
+						>
+							<h3 className="text-lg font-bold text-gray-900 mb-1">Refund Analysis</h3>
+							<p className="text-sm text-gray-500 mb-5">Breakdown by planning, promote, and user ticket cancellation refunds.</p>
+
+							<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+								<div className="h-72 w-full relative">
+									{revopsRefundBreakdownData.length > 0 ? (
+										<ResponsiveContainer width="100%" height="100%">
+											<PieChart>
+												<Pie
+													data={revopsRefundBreakdownData}
+													cx="50%"
+													cy="50%"
+													innerRadius={66}
+													outerRadius={96}
+													paddingAngle={4}
+													dataKey="value"
+													isAnimationActive={false}
+												>
+													{revopsRefundBreakdownData.map((entry) => (
+														<Cell key={`refund-${entry.name}`} fill={REFUND_COLORS[entry.name] || "#94a3b8"} />
+													))}
+												</Pie>
+												<Tooltip
+													formatter={(value, name, item) => [
+														`${value} request${Number(value) === 1 ? "" : "s"} - ${formatInrFromPaise(item?.payload?.amountPaise)}`,
+														name,
+													]}
+													contentStyle={{
+														borderRadius: "12px",
+														border: "none",
+														boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+													}}
+												/>
+											</PieChart>
+										</ResponsiveContainer>
+									) : (
+										<div className="h-full flex items-center justify-center text-sm text-gray-500">
+											No refund data yet.
+										</div>
+									)}
+
+									{revopsRefundBreakdownData.length > 0 && (
+										<div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+											<div className="text-center">
+												<span className="block text-3xl font-bold text-gray-800">{revopsAllRequestRows.length}</span>
+												<span className="text-xs text-gray-400 font-bold uppercase tracking-wider">Requests</span>
+											</div>
+										</div>
+									)}
+								</div>
+
+								<div className="space-y-3">
+									{revopsRefundBreakdownData.length === 0 && (
+										<div className="text-sm text-gray-500">Refund categories will appear here once data is available.</div>
+									)}
+
+									{revopsRefundBreakdownData.map((row) => (
+										<div key={`refund-row-${row.name}`} className="flex items-center justify-between gap-4 rounded-xl border border-gray-100 p-3">
+											<div className="flex items-center gap-3 min-w-0">
+												<span
+													className="w-3 h-3 rounded-full shrink-0"
+													style={{ backgroundColor: REFUND_COLORS[row.name] || "#94a3b8" }}
+												/>
+												<div className="min-w-0">
+													<p className="text-sm font-bold text-gray-800 truncate">{row.name}</p>
+													<p className="text-xs text-gray-500">{row.value} request{row.value === 1 ? "" : "s"}</p>
+												</div>
+											</div>
+											<p className="text-sm font-extrabold text-gray-900">{formatInrFromPaise(row.amountPaise)}</p>
+										</div>
+									))}
+								</div>
+							</div>
+						</MotionDiv>
+					</div>
+
+					<div className="space-y-6">
+						<MotionDiv
+							initial={{ opacity: 0, x: 20 }}
+							animate={{ opacity: 1, x: 0 }}
+							transition={{ delay: 0.22 }}
+							className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm"
+						>
+							<h3 className="font-bold text-gray-800 mb-5">Processing Snapshot</h3>
+							<div className="space-y-3">
+								<div className="rounded-xl border border-amber-100 bg-amber-50/50 p-4">
+									<p className="text-xs font-bold uppercase tracking-wide text-amber-700">Need to be done</p>
+									<p className="text-3xl font-extrabold text-gray-900 mt-1">{revopsPlanningNeedsActionCount}</p>
+									<p className="text-xs text-gray-500 mt-1">Planning refunds waiting for RevOps confirmation.</p>
+								</div>
+								<div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+									<p className="text-xs font-bold uppercase tracking-wide text-blue-700">Automatically processed today</p>
+									<p className="text-3xl font-extrabold text-gray-900 mt-1">{revopsAutoProcessedTodayCount}</p>
+									<p className="text-xs text-gray-500 mt-1">Promote refunds and user ticket cancellations.</p>
+								</div>
+								<div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
+									<p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Done / completed today</p>
+									<p className="text-3xl font-extrabold text-gray-900 mt-1">{revopsCompletedTodayCount}</p>
+									<p className="text-xs text-gray-500 mt-1">Completed items from today&apos;s request stream.</p>
+								</div>
+							</div>
+						</MotionDiv>
+
+						<MotionDiv
+							initial={{ opacity: 0, x: 20 }}
+							animate={{ opacity: 1, x: 0 }}
+							transition={{ delay: 0.28 }}
+							className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm"
+						>
+							<div className="flex justify-between items-center mb-5">
+								<h3 className="font-bold text-gray-800">Recent Requests</h3>
+								<span className="text-xs font-bold px-2 py-1 rounded-full bg-teal-100 text-teal-700">
+									{revopsAllRequestRows.length}
+								</span>
+							</div>
+
+							<div className="space-y-3">
+								{revopsAllRequestRows.slice(0, 5).length === 0 && (
+									<div className="text-sm text-gray-500">No recent refund activity yet.</div>
+								)}
+
+								{revopsAllRequestRows.slice(0, 5).map((row) => (
+									<div key={`recent-revops-${row.type}-${row.id}`} className="relative pl-5 py-1.5 before:absolute before:left-0 before:top-3 before:w-1.5 before:h-1.5 before:bg-gray-300 before:rounded-full">
+										<p className="text-sm text-gray-800 leading-snug font-semibold">
+											{row.type}: {row.title.length > 46 ? `${row.title.slice(0, 46)}...` : row.title}
+										</p>
+										<span className="text-xs text-gray-400 font-medium flex items-center gap-1 mt-1">
+											<Clock className="w-3 h-3" /> {toRelativeTime(row.requestedAt, currentTime)}
+										</span>
+									</div>
+								))}
+							</div>
+						</MotionDiv>
+					</div>
+				</div>
+
+				{(refundLoading || revopsLedgerLoading) && (
+					<div className="text-xs text-gray-400 font-medium">Refreshing RevOps dashboard data...</div>
+				)}
+			</div>
+		);
+	}
 
 	const showDashboardSkeleton = loading
 		&& (planningEvents || []).length === 0
