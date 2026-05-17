@@ -158,6 +158,9 @@ const AdminComplaints = () => {
                       <div className="min-w-0">
                         <p className="font-black text-slate-900 truncate">{complaint.subject}</p>
                         <p className="mt-1 text-sm font-bold text-slate-500 truncate">{complaint.vendorName}</p>
+                        {complaint.vendorEmail && (
+                          <p className="mt-0.5 text-xs font-bold text-slate-400 truncate">{complaint.vendorEmail}</p>
+                        )}
                       </div>
                       <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${complaint.status === 'closed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                         {complaint.status}
@@ -191,7 +194,9 @@ const AdminComplaints = () => {
                     </div>
                     <h2 className="mt-3 text-2xl font-black text-slate-900 break-words">{selectedComplaint.subject}</h2>
                     <p className="mt-2 text-sm font-bold text-slate-500">
-                      {selectedComplaint.vendorName} &middot; {formatDateTime(selectedComplaint.createdAt)}
+                      {selectedComplaint.vendorName}
+                      {selectedComplaint.vendorEmail ? ` (${selectedComplaint.vendorEmail})` : ''}
+                      {' '} &middot; {formatDateTime(selectedComplaint.createdAt)}
                     </p>
                   </div>
 
@@ -209,10 +214,14 @@ const AdminComplaints = () => {
                 </div>
 
                 <div className="p-6 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                     <div className="rounded-lg border border-slate-200 p-4">
                       <p className="text-xs font-black uppercase tracking-widest text-slate-400">Vendor Name</p>
                       <p className="mt-2 font-black text-slate-900 break-words">{selectedComplaint.vendorName}</p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 p-4">
+                      <p className="text-xs font-black uppercase tracking-widest text-slate-400">Email</p>
+                      <p className="mt-2 font-black text-slate-900 break-words">{selectedComplaint.vendorEmail || 'Not available'}</p>
                     </div>
                     <div className="rounded-lg border border-slate-200 p-4">
                       <p className="text-xs font-black uppercase tracking-widest text-slate-400">Created</p>
