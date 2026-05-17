@@ -259,6 +259,11 @@ const EventDetails = () => {
       navigate(`/admin/team-access?search=${encodeURIComponent(search)}`);
   };
 
+  const handleChatWithManager = () => {
+      setShowManagerOptions(false);
+      setActiveTab("Chat");
+  };
+
   const handleApprove = () => {
       if (selectedEventRequestType === 'PLANNING') return;
         toast.dismiss();
@@ -1495,11 +1500,7 @@ const EventDetails = () => {
                                            {showManagerOptions && (
                                                <div className="absolute right-0 mt-2 w-48 bg-white border border-[#e9eff1] rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
                                                    <button 
-                                                       onClick={() => {
-                                                           setShowManagerOptions(false);
-                                                           toast.dismiss();
-                                                           toast("Opening chat...", { icon: '💬' });
-                                                       }}
+                                                       onClick={handleChatWithManager}
                                                        className="w-full text-left px-4 py-2.5 text-sm font-medium text-[#5a5b44] hover:bg-[#f8fafc] hover:text-[#0b2d49] transition-colors flex items-center gap-2"
                                                    >
                                                        <MessageCircle size={16} className="text-sky-500" />
