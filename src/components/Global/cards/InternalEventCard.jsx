@@ -52,7 +52,15 @@ const InternalEventCard = ({
         </div>
 
         {/* Organizer Info */}
-        <div className="flex items-center gap-2 mb-3 text-[#5a5b44] text-xs font-medium border-b border-[#e9eff1] pb-3">
+        {!showLocation && (
+          <div className="flex items-center gap-2 mb-3 text-[#5a5b44] text-xs font-medium border-b border-[#e9eff1] pb-3">
+            <div className="flex items-center gap-1 min-w-0">
+              <User size={14} className="text-[#d7a444] shrink-0" />
+              <span className="text-[#0b2d49] truncate">{organizer}</span>
+            </div>
+          </div>
+        )}
+        <div className={`${showLocation ? 'flex' : 'hidden'} items-center gap-2 mb-3 text-[#5a5b44] text-xs font-medium border-b border-[#e9eff1] pb-3`}>
           <div className="flex items-center gap-1">
             <User size={14} className="text-[#d7a444]" />
             <span className="text-[#0b2d49] truncate max-w-[100px]">{organizer}</span>
@@ -60,7 +68,7 @@ const InternalEventCard = ({
           <span className="text-[#e9eff1]">•</span>
           <div className="flex items-center gap-1">
             {showLocation && <MapPin size={14} className="text-[#708aa0]" />}
-            <span className="truncate max-w-[80px] text-[#5a5b44]">{location}</span>
+            {showLocation && <span className="truncate max-w-[80px] text-[#5a5b44]">{location}</span>}
           </div>
         </div>
 

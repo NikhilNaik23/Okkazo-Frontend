@@ -347,6 +347,7 @@ const AdminEvents = () => {
                                     eventDate={event.date}
                                     submittedDate={event.submitted}
                                     status={event.status}
+                                    showLocation={false}
                                     onVerify={() => navigate(`${event.id}`)}
                                     onDetails={() => navigate(`${event.id}`)}
                                 />
