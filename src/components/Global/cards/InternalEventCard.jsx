@@ -9,6 +9,7 @@ const InternalEventCard = ({
   eventDate = 'Aug 12, 2024',
   submittedDate = 'Oct 24, 09:45 AM',
   status = 'Pending Review',
+  showLocation = true,
   onVerify,
   onDetails
 }) => {
