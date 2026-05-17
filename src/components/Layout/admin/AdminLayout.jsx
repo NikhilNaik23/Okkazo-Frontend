@@ -18,6 +18,7 @@ import EventDetails from "../../../pages/Home/admin/EventDetails";
 import TransactionDetails from "../../../pages/Home/admin/TransactionDetails";
 import AdminNotifications from "../../../pages/Home/admin/AdminNotifications";
 import AdminChat from "../../../pages/Home/admin/AdminChat";
+import AdminComplaints from "../../../pages/Home/admin/AdminComplaints";
 import AdminNotificationsPanel from "../../Admin/Notifications/AdminNotificationsPanel";
 import AdminUserManagement from "../../../pages/Home/admin/AdminUserManagement";
 import ProtectedRoute from "../../Auth/ProtectedRoute";
@@ -78,6 +79,7 @@ const AdminLayout = () => {
                                 />
                 <Route path="ledger/:id" element={<TransactionDetails />} />
                                 <Route path="notifications" element={<AdminNotifications />} />
+                <Route path="complaints" element={<AdminComplaints />} />
                 <Route path="users" element={<AdminUserManagement />} />
                 <Route path="team-access" element={<AdminTeamAccess />} />
                 <Route path="team-access/add" element={<AdminManager />} />

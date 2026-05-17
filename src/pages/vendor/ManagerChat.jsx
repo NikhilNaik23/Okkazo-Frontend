@@ -1,475 +1,327 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-    Search, Volume2, Users, Briefcase, MoreVertical,
-    CheckCheck, Plus, Paperclip, Send, Smile, Clock, Check, ChevronDown, ChevronRight
-} from 'lucide-react';
-import { toast } from "react-hot-toast";
-import EmojiPicker from 'emoji-picker-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, Clock, ImagePlus, Paperclip, Send, X } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchWithAuth } from '../../utils/apiHandler';
+import { refreshAccessToken, selectVendorApplication } from '../../store/slices/authSlice';
+
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
+
+const formatDateTime = (value) => {
+  if (!value) return 'Not available';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not available';
+  return date.toLocaleString([], {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const normalizeError = (data, fallback) => (
+  data?.error?.message || data?.message || fallback
+);
 
 const ManagerChat = () => {
-    const currentUserId = 'v1';
+  const dispatch = useDispatch();
+  const vendorApplication = useSelector(selectVendorApplication);
+  const fileInputRef = useRef(null);
 
-    const [activeChannel, setActiveChannel] = useState('manager');
-    const [chatInput, setChatInput] = useState('');
-    const [searchTerm, setSearchTerm] = useState('');
-    const [messages, setMessages] = useState([]);
-        
-    // UI states
-    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-    
-    // Interaction states
-    const [activeMessageMenu, setActiveMessageMenu] = useState(null);
-    const [editingMessageId, setEditingMessageId] = useState(null);
-    const [editInput, setEditInput] = useState('');
-    const [contextMenu, setContextMenu] = useState({ x: 0, y: 0, show: false, msgId: null });
+  const [subject, setSubject] = useState('');
+  const [content, setContent] = useState('');
+  const [images, setImages] = useState([]);
+  const [complaints, setComplaints] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all');
 
-    const fileInputRef = useRef(null);
-    const emojiPickerRef = useRef(null);
-    const contextMenuRef = useRef(null);
-    const messageMenuRef = useRef(null);
+  const imagePreviews = useMemo(
+    () => images.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    [images]
+  );
 
-    const messagesViewportRef = useRef(null);
-    const messagesEndRef = useRef(null);
-    const stickToBottomRef = useRef(true);
-    const initialScrollDoneRef = useRef(false);
-
-    const handleMessagesScroll = () => {
-        const el = messagesViewportRef.current;
-        if (!el) return;
-        const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-        stickToBottomRef.current = distance < 140;
+  useEffect(() => {
+    return () => {
+      imagePreviews.forEach((item) => URL.revokeObjectURL(item.url));
     };
+  }, [imagePreviews]);
 
-    const scrollToBottom = (behavior = 'auto') => {
-        const el = messagesViewportRef.current;
-        if (!el) return;
-        el.scrollTo({ top: el.scrollHeight, behavior });
-    };
+  const loadComplaints = async () => {
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: '50', skip: '0' });
+      if (statusFilter !== 'all') params.set('status', statusFilter);
 
-    useEffect(() => {
-        stickToBottomRef.current = true;
-        initialScrollDoneRef.current = false;
-    }, [activeChannel]);
+      const response = await fetchWithAuth(
+        `${API_BASE_URL}/api/vendor/complaints/me?${params.toString()}`,
+        { method: 'GET' },
+        { dispatch, refreshAction: refreshAccessToken }
+      );
+      const data = await response.json();
 
-    useEffect(() => {
-        if (!messages.length) return;
-        if (!stickToBottomRef.current) return;
-        const behavior = initialScrollDoneRef.current ? 'smooth' : 'auto';
-        requestAnimationFrame(() => scrollToBottom(behavior));
-        initialScrollDoneRef.current = true;
-    }, [activeChannel, messages.length]);
+      if (!response.ok || !data?.success) {
+        throw new Error(normalizeError(data, 'Failed to load complaints'));
+      }
 
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
-                setShowEmojiPicker(false);
-            }
-            if (contextMenu.show && contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
-                setContextMenu(prev => ({ ...prev, show: false }));
-            }
-            if (activeMessageMenu && messageMenuRef.current && !messageMenuRef.current.contains(event.target)) {
-                setActiveMessageMenu(null);
-            }
-        };
+      setComplaints(Array.isArray(data?.data?.complaints) ? data.data.complaints : []);
+    } catch (error) {
+      toast.error(error?.message || 'Failed to load complaints');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [showEmojiPicker, contextMenu.show, activeMessageMenu]);
+  useEffect(() => {
+    loadComplaints();
+  }, [statusFilter]);
 
-    const handleContextMenu = (e, msgId) => {
-        e.preventDefault();
-        setContextMenu({
-            x: e.pageX,
-            y: e.pageY,
-            show: true,
-            msgId: msgId
-        });
-    };
+  const handleFiles = (fileList) => {
+    const nextFiles = Array.from(fileList || []);
+    const validImages = nextFiles.filter((file) => file.type === 'image/jpeg' || file.type === 'image/png');
 
-    const baseContacts = [
+    if (validImages.length !== nextFiles.length) {
+      toast.error('Only JPEG and PNG images are allowed');
+    }
+
+    setImages((prev) => {
+      const combined = [...prev, ...validImages].slice(0, 5);
+      if (prev.length + validImages.length > 5) toast.error('Maximum 5 images are allowed');
+      return combined;
+    });
+  };
+
+  const removeImage = (index) => {
+    setImages((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const resetForm = () => {
+    setSubject('');
+    setContent('');
+    setImages([]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const safeSubject = subject.trim();
+    const safeContent = content.trim();
+
+    if (safeSubject.length < 3) {
+      toast.error('Subject must be at least 3 characters');
+      return;
+    }
+
+    if (safeContent.length < 10) {
+      toast.error('Content must be at least 10 characters');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append('subject', safeSubject);
+      formData.append('content', safeContent);
+      images.forEach((file) => formData.append('images', file));
+
+      const response = await fetchWithAuth(
+        `${API_BASE_URL}/api/vendor/complaints`,
         {
-            id: 'manager',
-            name: 'Event Manager',
-            role: 'Main Coordinator',
-            type: 'admin',
-            online: true,
-            lastSeen: 'online'
-        }
-    ];
+          method: 'POST',
+          body: formData,
+        },
+        { dispatch, refreshAction: refreshAccessToken }
+      );
+      const data = await response.json();
 
-    const vendorContacts = [
-        ...baseContacts
-    ].filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
+      if (!response.ok || !data?.success) {
+        throw new Error(normalizeError(data, 'Failed to raise complaint'));
+      }
 
-    // Get current active chat context
-    const currentContact = vendorContacts.find(c => c.id === activeChannel);
+      toast.success('Complaint raised');
+      resetForm();
+      await loadComplaints();
+    } catch (error) {
+      toast.error(error?.message || 'Failed to raise complaint');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-    const handleSend = () => {
-        if (!chatInput.trim() || !activeChannel) return;
+  return (
+    <div className="min-h-screen bg-slate-50 overflow-y-auto">
+      <div className="mx-auto max-w-6xl px-5 py-8 space-y-6">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+          <div>
+            <p className="text-xs font-black tracking-widest uppercase text-[#d7a444]">Vendor Support</p>
+            <h1 className="mt-2 text-3xl font-black text-[#0b2d49]">Raise a Complaint</h1>
+            <p className="mt-2 text-sm font-medium text-slate-500 max-w-2xl">
+              Submit complaint details to the admin team. You will be notified when it is received and when it is closed.
+            </p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm">
+            <p className="font-black text-slate-900">{vendorApplication?.businessName || 'Vendor'}</p>
+            <p className="text-slate-500">{vendorApplication?.email || 'Signed in vendor'}</p>
+          </div>
+        </div>
 
-        const newMsg = {
-            id: Date.now(),
-            senderId: currentUserId,
-            receiverId: activeChannel,
-            text: chatInput,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: 'sent',
-            date: Date.now()
-        };
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)] gap-6 items-start">
+          <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100">
+              <h2 className="text-lg font-black text-slate-900">Complaint Details</h2>
+            </div>
 
-        setMessages([...messages, newMsg]);
-        setChatInput('');
-        toast.success("Message sent");
-    };
+            <div className="p-5 space-y-5">
+              <label className="block">
+                <span className="text-sm font-bold text-slate-700">Subject</span>
+                <input
+                  type="text"
+                  value={subject}
+                  onChange={(event) => setSubject(event.target.value)}
+                  maxLength={180}
+                  placeholder="Short title for the issue"
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-slate-900 outline-none focus:border-[#0b2d49] focus:ring-2 focus:ring-[#0b2d49]/10"
+                />
+              </label>
 
-    const handleDeleteMessage = (id) => {
-        setMessages(messages.filter(m => m.id !== id));
-        toast.success("Message deleted");
-    };
+              <label className="block">
+                <span className="text-sm font-bold text-slate-700">Content</span>
+                <textarea
+                  value={content}
+                  onChange={(event) => setContent(event.target.value)}
+                  rows={8}
+                  maxLength={5000}
+                  placeholder="Describe what happened, where it happened, and what help you need."
+                  className="mt-2 w-full resize-none rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-slate-900 outline-none focus:border-[#0b2d49] focus:ring-2 focus:ring-[#0b2d49]/10"
+                />
+              </label>
 
-    const handleEditMessage = (id, newText) => {
-        setMessages(messages.map(m => m.id === id ? { ...m, text: newText, isEdited: true } : m));
-        toast.success("Message edited");
-    };
-
-    const handleEmojiClick = (emojiData) => {
-        setChatInput(prev => prev + emojiData.emoji);
-    };
-
-    const handleAttachClick = () => {
-        fileInputRef.current?.click();
-    };
-
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            toast.info(`Attached: ${file.name}`);
-        }
-    };
-
-    const handleStartEdit = (msg) => {
-        setEditingMessageId(msg.id);
-        setEditInput(msg.text);
-        setActiveMessageMenu(null);
-    };
-
-    const submitEdit = (id) => {
-        if (editInput.trim()) {
-            handleEditMessage(id, editInput);
-            setEditingMessageId(null);
-        }
-    };
-
-    const renderMessageActions = (msg, isMe) => {
-        const isEditable = isMe; // Allow edits for demo purposes
-        
-        return (
-            <div className={`absolute top-1 right-1 z-20`}>
+              <div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-bold text-slate-700">Images</span>
+                  <span className="text-xs font-bold text-slate-400">{images.length}/5</span>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => handleFiles(event.target.files)}
+                />
                 <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMessageMenu(activeMessageMenu === msg.id ? null : msg.id);
-                    }}
-                    className={`p-1 ${isMe ? 'text-white/40 hover:text-white hover:bg-white/10' : 'text-gray-400 hover:text-gray-600 hover:bg-black/5'} rounded-full transition-all opacity-0 group-hover/bubble:opacity-100 ${activeMessageMenu === msg.id ? 'opacity-100 bg-black/5' : ''}`}
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="mt-2 w-full min-h-28 rounded-lg border border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-600 transition-colors flex flex-col items-center justify-center gap-2"
                 >
-                    <MoreVertical size={14} />
+                  <ImagePlus size={24} />
+                  <span className="text-sm font-bold">Attach complaint images</span>
                 </button>
 
-                {activeMessageMenu === msg.id && (
-                    <div
-                        ref={messageMenuRef}
-                        className={`absolute z-60 top-full ${isMe ? 'right-0' : 'left-0'} mt-1 bg-white rounded-2xl shadow-xl border border-gray-100 min-w-35 p-2 animate-in fade-in zoom-in-95 duration-200`}
-                    >
-                        {isEditable && (
-                            <button
-                                onClick={() => handleStartEdit(msg)}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50 rounded-xl transition-colors text-left"
-                            >
-                                Edit
-                            </button>
-                        )}
+                {imagePreviews.length > 0 && (
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {imagePreviews.map((item, index) => (
+                      <div key={`${item.file.name}-${index}`} className="relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                        <img src={item.url} alt={item.file.name} className="h-full w-full object-cover" />
                         <button
-                            onClick={() => handleDeleteMessage(msg.id)}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors text-left"
+                          type="button"
+                          onClick={() => removeImage(index)}
+                          className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-sm hover:bg-white"
+                          title="Remove image"
                         >
-                            Delete
+                          <X size={15} />
                         </button>
-                    </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#0b2d49] px-5 py-3 text-sm font-black text-white hover:bg-[#143b5b] disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <Send size={17} />
+                {isSubmitting ? 'Submitting...' : 'Raise Complaint'}
+              </button>
             </div>
-        );
-    };
+          </form>
 
-    const renderSidebarItem = (contact, Icon) => {
-        const isActive = activeChannel === contact.id;
-        const unreadCount = 0; 
-
-        return (
-            <button
-                key={contact.id}
-                onClick={() => setActiveChannel(contact.id)}
-                className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${isActive ? 'bg-[#0b2d49] text-[#d7a444] shadow-md shadow-[#0b2d49]/10 border-l-4 border-[#d7a444]' : 'hover:bg-gray-50 border-l-4 border-transparent'}`}
-            >
-                <div className={`relative w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isActive ? 'bg-white/10 text-[#d7a444]' : 'bg-gray-100 text-gray-500'}`}>
-                    {Icon ? <Icon size={18} /> : <span className="text-xs font-bold">{contact.name.substring(0, 2).toUpperCase()}</span>}
-                    <div className={`absolute bottom-0 right-0 w-2.5 h-2.5 border-2 border-white rounded-full ${contact.online ? 'bg-green-500' : 'bg-gray-300'}`} />
-                </div>
-
-                <div className="flex-1 text-left min-w-0">
-                    <div className="flex justify-between items-center">
-                        <p className={`text-sm font-bold truncate ${isActive ? 'text-[#d7a444]' : 'text-gray-700'}`}>{contact.name}</p>
-                        {unreadCount > 0 && <div className="w-2 h-2 bg-green-500 rounded-full shrink-0 shadow-sm animate-pulse"></div>}
-                    </div>
-                    <p className={`text-xs truncate ${isActive ? 'text-[#d7a444]/60 font-medium' : 'text-gray-400'}`}>
-                        {contact.role || contact.lastSeen}
-                    </p>
-                </div>
-            </button>
-        )
-    };
-
-    return (
-        <div className="flex h-[calc(100vh)] bg-slate-50 overflow-hidden">
-            {/* --- LEFT SIDEBAR --- */}
-            <div className="w-[320px] bg-white border-r border-gray-100 flex flex-col shrink-0 shadow-sm z-10">
-                {/* Header Context */}
-                <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-                    <h2 className="text-xl font-black text-gray-900 tracking-tight">Messages</h2>
-                </div>
-
-                {/* Search */}
-                <div className="p-4 border-b border-gray-100">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                        <input
-                            type="text"
-                            placeholder="Search contacts..."
-                            className="w-full bg-gray-50 border-none rounded-xl py-2.5 pl-10 pr-4 text-sm font-medium focus:ring-2 focus:ring-[#0b2d49]/10 text-gray-700 placeholder-gray-400"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
-                </div>
-
-                <div className="flex-1 overflow-y-scroll p-4 space-y-2 custom-scrollbar">
-                    {/* Render exact contacts for Vendor */}
-                    <div className="space-y-1">
-                        {vendorContacts.map(c => renderSidebarItem(c, null))}
-                    </div>
-                </div>
+          <section className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-black text-slate-900">My Complaints</h2>
+                <p className="text-xs font-bold text-slate-400 mt-1">{isLoading ? 'Loading...' : `${complaints.length} shown`}</p>
+              </div>
+              <div className="inline-flex rounded-lg bg-slate-100 p-1">
+                {['all', 'open', 'closed'].map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => setStatusFilter(status)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-black capitalize transition-colors ${statusFilter === status ? 'bg-white text-[#0b2d49] shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {/* --- MAIN CHAT AREA --- */}
-            <div className="flex-1 flex flex-col bg-slate-50 relative">
+            <div className="divide-y divide-slate-100">
+              {!isLoading && complaints.length === 0 && (
+                <div className="p-8 text-center text-slate-500">
+                  <AlertCircle className="mx-auto mb-3 text-slate-300" size={34} />
+                  <p className="font-bold">No complaints found</p>
+                </div>
+              )}
 
-                {/* Header */}
-                <div className="bg-white px-8 py-5 border-b border-gray-100 flex justify-between items-center shadow-sm z-10">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-blue-50 text-[#0b2d49]">
-                            <Users size={24} />
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h2 className="text-lg font-black text-gray-900">
-                                    {currentContact ? currentContact.name : 'Select a chat'}
-                                </h2>
-                            </div>
-                            <p className="text-sm text-gray-500 font-medium mt-0.5">
-                                {currentContact?.role || 'Direct Message'}
-                            </p>
-                        </div>
+              {complaints.map((complaint) => (
+                <article key={complaint.complaintId} className="p-5 space-y-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <h3 className="font-black text-slate-900 break-words">{complaint.subject}</h3>
+                      <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-bold text-slate-400">
+                        <Clock size={13} />
+                        {formatDateTime(complaint.createdAt)}
+                      </p>
                     </div>
-                </div>
+                    <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-black uppercase ${complaint.status === 'closed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                      {complaint.status}
+                    </span>
+                  </div>
 
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-8 space-y-6" ref={messagesViewportRef} onScroll={handleMessagesScroll}>
+                  <p className="text-sm font-medium text-slate-600 whitespace-pre-wrap break-words">{complaint.content}</p>
 
-                    {currentContact ? (
-                        <>
-                            <div className="flex items-center justify-center my-6">
-                                <span className="bg-gray-200/50 text-gray-500 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest">Chat History</span>
-                            </div>
-
-                            <div className="max-w-5xl mx-auto space-y-8">
-                                {/* Only show messages between currentUser and currentContact */}
-                                {messages.filter(m => 
-                                    (m.senderId === currentUserId && m.receiverId === currentContact.id) ||
-                                    (m.receiverId === currentUserId && m.senderId === currentContact.id)
-                                ).map(msg => {
-                                    const isMe = msg.senderId === currentUserId;
-
-                                    return (
-                                        <div
-                                            key={msg.id}
-                                            className="group relative"
-                                            onContextMenu={(e) => handleContextMenu(e, msg.id)}
-                                        >
-                                            {isMe ? (
-                                                <div className="flex flex-col items-end gap-1.5">
-                                                    <div className="flex items-end gap-3 max-w-[75%]">
-                                                        <div className="bg-[#0b2d49] text-white p-5 pr-8 rounded-2xl rounded-tr-sm shadow-sm relative group/bubble">
-                                                            {renderMessageActions(msg, true)}
-                                                            {editingMessageId === msg.id ? (
-                                                                <div className="flex flex-col gap-3">
-                                                                    <textarea
-                                                                        className="bg-white/10 text-white rounded-xl p-3 text-[15px] outline-none border border-white/20 min-w-62.5"
-                                                                        value={editInput}
-                                                                        onChange={(e) => setEditInput(e.target.value)}
-                                                                        autoFocus
-                                                                    />
-                                                                    <div className="flex justify-end gap-3 text-sm">
-                                                                        <button onClick={() => setEditingMessageId(null)} className="font-bold opacity-70 hover:opacity-100 transition-opacity">Cancel</button>
-                                                                        <button onClick={() => submitEdit(msg.id)} className="font-bold text-[#d7a444] hover:text-[#f3c15c] transition-colors">Save</button>
-                                                                    </div>
-                                                                </div>
-                                                            ) : (
-                                                                <>
-                                                                    <p className="text-[15px] font-medium leading-relaxed whitespace-pre-wrap wrap-anywhere">{msg.text}</p>
-                                                                    {msg.isEdited && <span className="text-[10px] opacity-40 float-right mt-1.5 ml-3 italic">edited</span>}
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                        <div className="w-10 h-10 rounded-full bg-blue-50 text-[#0b2d49] flex items-center justify-center text-xs font-bold shrink-0 border border-blue-100 uppercase shadow-sm">ME</div>
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 mr-14">
-                                                        <span className="text-[11px] font-bold text-gray-400">{msg.timestamp}</span>
-                                                        {msg.status === 'sending' && <Clock size={14} className="text-gray-400" />}
-                                                        {msg.status === 'sent' && <Check size={14} className="text-gray-400" />}
-                                                        {(msg.status === 'delivered' || msg.status === 'read') && <CheckCheck size={14} className={msg.status === 'read' ? 'text-green-500' : 'text-gray-400'} />}
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col items-start gap-1.5">
-                                                    <div className="flex items-end gap-3 max-w-[75%]">
-                                                        <div className="w-10 h-10 rounded-full bg-white text-gray-600 flex items-center justify-center text-xs font-bold shrink-0 border border-gray-200 shadow-sm">
-                                                            {currentContact.name.substring(0, 2).toUpperCase()}
-                                                        </div>
-                                                        <div className="bg-white border border-gray-100/50 text-gray-800 p-5 pr-8 rounded-2xl rounded-tl-sm shadow-sm relative group/bubble">
-                                                            {renderMessageActions(msg, false)}
-                                                            <p className="text-[15px] font-medium leading-relaxed whitespace-pre-wrap wrap-anywhere">{msg.text}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-1.5 ml-14">
-                                                        <span className="text-[11px] font-bold text-gray-400">{msg.timestamp}</span>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                                <div ref={messagesEndRef} />
-                            </div>
-                        </>
-                    ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-gray-400 h-full mt-20">
-                            <Users size={64} className="mb-6 opacity-20" />
-                            <p className="font-medium text-xl text-gray-500">Select a conversation to start chatting</p>
-                        </div>
-                    )}
-                </div>
-
-                {/* Footer Input */}
-                <div className="p-6 bg-white border-t border-gray-100 shadow-[0_-4px_20px_rgba(0,0,0,0.02)] z-10">
-                    <div className="max-w-5xl mx-auto">
-                        <div className={`bg-gray-100 rounded-4xl px-3 py-2 flex items-center gap-2 border border-transparent transition-all relative shadow-inner ${currentContact ? 'focus-within:border-[#0b2d49]/10 focus-within:bg-gray-50 focus-within:shadow-md' : 'opacity-50 pointer-events-none'}`}>
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                onChange={handleFileChange}
-                                className="hidden"
-                            />
-                            <button
-                                onClick={handleAttachClick}
-                                className="p-2.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-200 transition-colors"
-                            >
-                                <Paperclip size={22} />
-                            </button>
-                            <div className="relative" ref={emojiPickerRef}>
-                                <button
-                                    onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                                    className={`p-2.5 rounded-full transition-colors ${showEmojiPicker ? 'text-[#0b2d49] bg-gray-200' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200'}`}
-                                >
-                                    <Smile size={22} />
-                                </button>
-
-                                {showEmojiPicker && (
-                                    <div className="absolute bottom-full left-0 mb-6 shadow-2xl animate-in slide-in-from-bottom-2 duration-200 z-50">
-                                        <EmojiPicker
-                                            onEmojiClick={handleEmojiClick}
-                                            autoFocusSearch={false}
-                                            theme="light"
-                                            width={340}
-                                            height={420}
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                            <input
-                                type="text"
-                                value={chatInput}
-                                onChange={(e) => setChatInput(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                                placeholder="Type your message here..."
-                                className="flex-1 bg-transparent border-none focus:ring-0 outline-none focus:outline-none text-[16px] font-medium text-gray-800 placeholder-gray-500 min-w-0"
-                            />
-                            <button
-                                onClick={handleSend}
-                                disabled={!chatInput.trim()}
-                                className="p-3.5 bg-[#0b2d49] hover:bg-[#1a3b55] text-white rounded-full transition-all disabled:opacity-50 disabled:scale-95 shadow-md flex items-center justify-center shrink-0"
-                            >
-                                <Send size={20} className="ml-0.5" />
-                            </button>
-                        </div>
+                  {Array.isArray(complaint.images) && complaint.images.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {complaint.images.map((image, index) => (
+                        <a
+                          key={`${image.publicId || image.fileUrl}-${index}`}
+                          href={image.fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-slate-600 hover:border-[#0b2d49]/30 hover:text-[#0b2d49]"
+                        >
+                          <Paperclip size={13} />
+                          Image {index + 1}
+                        </a>
+                      ))}
                     </div>
-                </div>
+                  )}
 
+                  {complaint.closedAt && (
+                    <p className="text-xs font-bold text-emerald-700">Closed on {formatDateTime(complaint.closedAt)}</p>
+                  )}
+                </article>
+              ))}
             </div>
-
-            {/* --- CONTEXT MENU --- */}
-            {contextMenu.show && (
-                <div
-                    ref={contextMenuRef}
-                    className="fixed z-100 bg-white rounded-2xl shadow-2xl border border-gray-100 min-w-40 p-2 animate-in fade-in zoom-in-95 duration-200"
-                    style={{ top: contextMenu.y, left: contextMenu.x }}
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    {(() => {
-                        const msg = messages.find(m => m.id === contextMenu.msgId);
-                        if (!msg) return null;
-                        const isMe = msg.senderId === currentUserId;
-                        const isEditable = isMe;
-
-                        return (
-                            <>
-                                {isEditable && (
-                                    <button
-                                        onClick={() => {
-                                            handleStartEdit(msg);
-                                            setContextMenu(prev => ({ ...prev, show: false }));
-                                        }}
-                                        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 rounded-xl transition-colors text-left"
-                                    >
-                                        Edit Message
-                                    </button>
-                                )}
-                                <button
-                                    onClick={() => {
-                                        handleDeleteMessage(contextMenu.msgId);
-                                        setContextMenu(prev => ({ ...prev, show: false }));
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors text-left"
-                                >
-                                    Delete Message
-                                </button>
-                            </>
-                        );
-                    })()}
-                </div>
-            )}
+          </section>
         </div>
-    );
+      </div>
+    </div>
+  );
 };
 
 export default ManagerChat;

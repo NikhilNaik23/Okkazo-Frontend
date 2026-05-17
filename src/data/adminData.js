@@ -1,4 +1,4 @@
-import { MdDashboard, MdEvent, MdStorefront, MdBarChart, MdAccountBalanceWallet, MdSecurity, MdSettings, MdPerson, MdNotifications, MdChat, MdPeople, MdManageAccounts, MdPercent } from "react-icons/md";
+import { MdDashboard, MdEvent, MdStorefront, MdBarChart, MdAccountBalanceWallet, MdSecurity, MdSettings, MdPerson, MdNotifications, MdChat, MdManageAccounts, MdPercent, MdReportProblem } from "react-icons/md";
 
 export const adminMenuSections = [
   {
@@ -7,7 +7,8 @@ export const adminMenuSections = [
       { path: "/admin/dashboard", label: "Dashboard", icon: MdDashboard },
       { path: "/admin/events", label: "Events", icon: MdEvent },
       { path: "/admin/vendors", label: "Vendors", icon: MdStorefront },
-      { path: "/admin/chat", label: "Chat", icon: MdChat }
+      { path: "/admin/chat", label: "Chat", icon: MdChat },
+      { path: "/admin/complaints", label: "Complaints", icon: MdReportProblem }
     ]
   },
   {
