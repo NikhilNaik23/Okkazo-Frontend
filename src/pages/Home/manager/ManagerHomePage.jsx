@@ -26,6 +26,7 @@ const REFUND_COLORS = {
 	Planning: "#14b8a6",
 	Promote: "#f59e0b",
 	"User Ticket Cancellation": "#6366f1",
+	"Other Refund": "#94a3b8",
 };
 const MotionDiv = motion.div;
 
@@ -155,16 +156,27 @@ const getRefundAmountPaise = (request) => {
 	return Number.isFinite(n) ? n : 0;
 };
 
-const getLedgerRefundCategory = (row) => {
+const getLedgerRefundCategory = (row, refundEventTypeByEventId = new Map()) => {
 	if (normalizeUpper(row?.status) !== "REFUNDED") return null;
 
 	const type = normalizeUpper(row?.type);
 	if (type === "PLANNING REFUND" || type === "PLANNING_REFUND") return "Planning";
-	if (type === "REFUND" || type === "TICKET SALE") return "User Ticket Cancellation";
-	return "User Ticket Cancellation";
+
+	const eventId = String(row?.eventId || "").trim();
+	const matchedEventType = eventId ? refundEventTypeByEventId.get(eventId) : null;
+	if (matchedEventType === "PROMOTE") return "Promote";
+	if (matchedEventType === "PLANNING") return "Planning";
+
+	const ticketId = String(row?.ticketId || row?.notes?.ticketId || "").trim();
+	const source = normalizeUpper(row?.refundSource || row?.notes?.source || "");
+	if (ticketId || source.includes("TICKET")) return "User Ticket Cancellation";
+
+	if (type === "TICKET SALE") return "User Ticket Cancellation";
+	if (type === "REFUND") return "Other Refund";
+	return "Other Refund";
 };
 
-const isRefundedLedgerRow = (row) => Boolean(getLedgerRefundCategory(row));
+const isRefundedLedgerRow = (row) => normalizeUpper(row?.status) === "REFUNDED";
 
 const formatMoney = (value) => {
 	const n = Number(value || 0);
@@ -791,11 +803,21 @@ const ManagerHomePage = () => {
 		});
 	}, [refundRequests]);
 
+	const revopsRefundEventTypeByEventId = useMemo(() => {
+		const map = new Map();
+		(refundRequests || []).forEach((request) => {
+			const eventId = String(request?.eventId || "").trim();
+			if (!eventId) return;
+			map.set(eventId, normalizeUpper(request?.refundEventType) === "PROMOTE" ? "PROMOTE" : "PLANNING");
+		});
+		return map;
+	}, [refundRequests]);
+
 	const revopsLedgerRefundRows = useMemo(() => {
 		return (revopsLedgerRows || [])
 			.filter(isRefundedLedgerRow)
 			.map((row) => {
-				const category = getLedgerRefundCategory(row) || "User Ticket Cancellation";
+				const category = getLedgerRefundCategory(row, revopsRefundEventTypeByEventId) || "Other Refund";
 				return {
 					id: String(row?.transactionId || row?.eventId || row?.createdAt || "ticket-refund").trim(),
 					eventId: String(row?.eventId || "").trim(),
@@ -810,7 +832,7 @@ const ManagerHomePage = () => {
 					source: "ledger",
 				};
 			});
-	}, [revopsLedgerRows]);
+	}, [revopsLedgerRows, revopsRefundEventTypeByEventId]);
 
 	const revopsAllRequestRows = useMemo(() => {
 		const ledgerCompletedKeys = new Set(
@@ -886,6 +908,7 @@ const ManagerHomePage = () => {
 			["Planning", { name: "Planning", value: 0, amountPaise: 0 }],
 			["Promote", { name: "Promote", value: 0, amountPaise: 0 }],
 			["User Ticket Cancellation", { name: "User Ticket Cancellation", value: 0, amountPaise: 0 }],
+			["Other Refund", { name: "Other Refund", value: 0, amountPaise: 0 }],
 		]);
 
 		revopsAllRequestRows.forEach((row) => {
@@ -916,7 +939,7 @@ const ManagerHomePage = () => {
 			id: "revops-auto-processed",
 			label: "Auto Processed",
 			value: String(revopsAutoProcessedTodayCount),
-			subtext: "Promote and ticket cancellation",
+			subtext: "Promote, ticket, and other refunds",
 			subtextColor: "text-blue-500",
 			topIcon: (
 				<div className="p-2 rounded-lg bg-blue-50 text-blue-600">
@@ -1206,7 +1229,7 @@ const ManagerHomePage = () => {
 							className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100"
 						>
 							<h3 className="text-lg font-bold text-gray-900 mb-1">Refund Analysis</h3>
-							<p className="text-sm text-gray-500 mb-5">Breakdown by planning, promote, and user ticket cancellation refunds.</p>
+							<p className="text-sm text-gray-500 mb-5">Breakdown by planning, promote, ticket cancellation, and unclassified refunds.</p>
 
 							<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
 								<div className="h-72 w-full relative">
@@ -1298,7 +1321,7 @@ const ManagerHomePage = () => {
 								<div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
 									<p className="text-xs font-bold uppercase tracking-wide text-blue-700">Automatically processed today</p>
 									<p className="text-3xl font-extrabold text-gray-900 mt-1">{revopsAutoProcessedTodayCount}</p>
-									<p className="text-xs text-gray-500 mt-1">Promote refunds and user ticket cancellations.</p>
+									<p className="text-xs text-gray-500 mt-1">Promote, ticket, and other automatic refunds.</p>
 								</div>
 								<div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4">
 									<p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Done / completed today</p>
