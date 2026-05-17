@@ -19,11 +19,13 @@ import {
 } from 'recharts';
 import { toast } from "react-hot-toast";
 import VendorAvailabilityCalendar from "../../components/Global/VendorAvailabilityCalendar";
+import { toIstDayString } from "../../utils/istDateTime";
 import { fetchWithAuth } from "../../utils/apiHandler";
 import { refreshAccessToken } from "../../store/slices/authSlice";
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const ANALYTICS_WINDOW_OPTIONS = [
     { value: 'last30', label: 'Last 30 Days' },
@@ -57,12 +59,11 @@ const toDate = (value) => {
 };
 
 const toDayKey = (value) => {
-    const date = toDate(value);
-    if (!date) return null;
-    const yyyy = date.getFullYear();
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const dd = String(date.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+    if (!value) return null;
+    const raw = String(value).trim();
+    if (!raw) return null;
+    if (DAY_KEY_RE.test(raw)) return raw;
+    return toIstDayString(raw);
 };
 
 const toMonthKey = (value) => {

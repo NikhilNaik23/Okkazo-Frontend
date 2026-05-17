@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchVendorApplications, approveVendorApplication, rejectVendorApplication, requestVendorDocuments, verifyDocument, rejectDocument, fetchVendorServicesByAuthId } from "../../../store/slices/adminSlice";
@@ -37,6 +37,19 @@ const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const formatDateTime = (value) => {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 // Helper function to get document status
@@ -92,6 +105,112 @@ const VendorDetails = () => {
   const vendorServicesResult = vendorAuthId ? vendorServicesByAuthId?.[vendorAuthId] : null;
   const vendorServicesLoading = vendorAuthId ? Boolean(vendorServicesLoadingByAuthId?.[vendorAuthId]) : false;
   const vendorServicesError = vendorAuthId ? vendorServicesErrorByAuthId?.[vendorAuthId] : null;
+
+  const activityLogs = useMemo(() => {
+    if (!vendor) return [];
+
+    const logs = [];
+    const reviewedBy = vendor.reviewedBy ? ` by ${vendor.reviewedBy}` : '';
+    const pushLog = (log) => {
+      const ts = log?.timestamp ? new Date(log.timestamp).getTime() : null;
+      if (!ts || Number.isNaN(ts)) return;
+      logs.push({ ...log, ts });
+    };
+
+    pushLog({
+      id: `submitted-${vendor.applicationId}`,
+      title: 'Application submitted',
+      description: `Application ID ${vendor.applicationId}`,
+      timestamp: vendor.submittedAt,
+      tone: 'info',
+      icon: FileText,
+    });
+
+    if (vendor.status === 'DOCUMENTS_REQUESTED' && vendor.reviewNotes) {
+      pushLog({
+        id: `docs-requested-${vendor.applicationId}`,
+        title: 'Documents requested',
+        description: vendor.reviewNotes,
+        timestamp: vendor.lastUpdatedAt,
+        tone: 'warning',
+        icon: AlertCircle,
+      });
+    }
+
+    const addDocLogs = (doc, label, fallbackKey) => {
+      if (!doc) return;
+      const docKey = doc.documentId || doc.fileName || fallbackKey;
+
+      if (doc.uploadedAt) {
+        pushLog({
+          id: `upload-${label}-${docKey}`,
+          title: `${label} uploaded`,
+          description: doc.fileName ? `File: ${doc.fileName}` : null,
+          timestamp: doc.uploadedAt,
+          tone: 'info',
+          icon: FileText,
+        });
+      }
+
+      if (doc.status === 'VERIFIED' && doc.verifiedAt) {
+        pushLog({
+          id: `verified-${label}-${docKey}`,
+          title: `${label} verified`,
+          description: reviewedBy ? `Verified${reviewedBy}` : null,
+          timestamp: doc.verifiedAt,
+          tone: 'success',
+          icon: CheckCircle2,
+        });
+      }
+
+      if (
+        doc.status === 'REJECTED'
+        && doc.rejectionReason
+        && vendor.status === 'DOCUMENTS_REQUESTED'
+        && vendor.lastUpdatedAt
+      ) {
+        pushLog({
+          id: `rejected-${label}-${docKey}`,
+          title: `${label} rejected`,
+          description: `Reason: ${doc.rejectionReason}`,
+          timestamp: vendor.lastUpdatedAt,
+          tone: 'error',
+          icon: XCircle,
+        });
+      }
+    };
+
+    addDocLogs(vendor.documents?.businessLicense, 'Business license', 'businessLicense');
+    addDocLogs(vendor.documents?.ownerIdentity, 'Owner identity', 'ownerIdentity');
+    (vendor.documents?.otherProofs || []).forEach((doc, index) => {
+      const label = doc?.description ? String(doc.description) : `Additional document ${index + 1}`;
+      addDocLogs(doc, label, `otherProof-${index + 1}`);
+    });
+
+    if (vendor.approvedAt) {
+      pushLog({
+        id: `approved-${vendor.applicationId}`,
+        title: 'Application approved',
+        description: reviewedBy ? `Approved${reviewedBy}` : null,
+        timestamp: vendor.approvedAt,
+        tone: 'success',
+        icon: CheckCircle2,
+      });
+    }
+
+    if (vendor.rejectedAt) {
+      pushLog({
+        id: `rejected-${vendor.applicationId}`,
+        title: 'Application rejected',
+        description: vendor.reviewNotes ? `Reason: ${vendor.reviewNotes}` : (reviewedBy ? `Rejected${reviewedBy}` : null),
+        timestamp: vendor.rejectedAt,
+        tone: 'error',
+        icon: XCircle,
+      });
+    }
+
+    return logs.sort((a, b) => b.ts - a.ts);
+  }, [vendor]);
 
   useEffect(() => {
     if (!isVerifiedVendor) return;
@@ -703,6 +822,64 @@ const VendorDetails = () => {
                   )}
              </div>
            )}
+
+            {isVerifiedVendor && activeTab === "history" && (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="bg-white rounded-[2.5rem] border border-[#e9eff1] p-10 shadow-sm">
+                  <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-2xl font-black text-[#0b2d49]">Activity Logs</h3>
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#708aa0]">
+                      <Clock size={14} className="text-[#d7a444]" />
+                      Latest updates
+                    </div>
+                  </div>
+
+                  {activityLogs.length === 0 ? (
+                    <div className="py-16 flex flex-col items-center justify-center text-center text-[#708aa0]">
+                      <Clock size={40} className="opacity-20 mb-4" />
+                      <p className="text-lg font-black text-[#0b2d49]">No activity yet</p>
+                      <p className="text-sm font-medium text-[#708aa0] mt-2">Actions on this vendor will appear here.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {activityLogs.map((log) => {
+                        const Icon = log.icon || Clock;
+                        const toneMap = {
+                          info: 'bg-[#f8fafc] text-[#0b2d49] border-[#e9eff1]'
+                            + ' shadow-[inset_0_0_0_1px_rgba(233,239,241,0.6)]',
+                          success: 'bg-green-50 text-green-600 border-green-100',
+                          warning: 'bg-amber-50 text-amber-600 border-amber-100',
+                          error: 'bg-red-50 text-red-600 border-red-100',
+                        };
+                        const toneClass = toneMap[log.tone] || toneMap.info;
+
+                        return (
+                          <div
+                            key={log.id}
+                            className="flex items-start gap-5 p-5 bg-[#f8fafc] hover:bg-white border border-[#e9eff1] rounded-2xl transition-all hover:shadow-md"
+                          >
+                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center border ${toneClass}`}>
+                              <Icon size={18} />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <h4 className="text-sm font-black text-[#0b2d49]">{log.title}</h4>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-[#708aa0]">
+                                  {formatDateTime(log.timestamp)}
+                                </span>
+                              </div>
+                              {log.description && (
+                                <p className="text-xs font-medium text-[#5a5b44] mt-1">{log.description}</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
         </div>
       </div>
 

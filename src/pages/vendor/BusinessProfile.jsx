@@ -30,6 +30,7 @@ import {
     fetchVendorEventRequests,
     selectVendorEventRequests,
 } from "../../store/slices/vendorEventsSlice";
+import { toIstDayString } from "../../utils/istDateTime";
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 const DAY_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -41,17 +42,7 @@ const toDayKey = (value) => {
     const raw = String(value).trim();
     if (!raw) return null;
     if (DAY_KEY_RE.test(raw)) return raw;
-
-    const isoDay = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (isoDay?.[1]) return isoDay[1];
-
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) return null;
-
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+    return toIstDayString(raw);
 };
 
 const okkazoIcon = L.divIcon({

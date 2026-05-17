@@ -13,6 +13,7 @@ import { toast } from 'react-hot-toast';
 import { useDispatch } from 'react-redux';
 import { fetchWithAuth } from '../../utils/apiHandler';
 import { refreshAccessToken } from '../../store/slices/authSlice';
+import { toIstDayString } from '../../utils/istDateTime';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL;
 
@@ -34,17 +35,7 @@ const toDayKey = (value) => {
 
     if (DAY_KEY_RE.test(raw)) return raw;
 
-    // Preserve the explicit day in ISO-like strings to avoid timezone date shifting.
-    const isoDay = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (isoDay?.[1]) return isoDay[1];
-
-    const d = new Date(raw);
-    if (Number.isNaN(d.getTime())) return null;
-
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+    return toIstDayString(raw);
 };
 
 const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
